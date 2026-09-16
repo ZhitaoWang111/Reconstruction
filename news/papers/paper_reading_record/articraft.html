@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Articraft 论文阅读记录</title>
+  <style>
+    :root { color-scheme: light; --bg:#eef7f1; --card:#ffffff; --ink:#183528; --muted:#5d786b; --line:#cfe3d8; --accent:#0f7b52; --soft:#def2e8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg,#eef7f1,#f8fcfa); color: var(--ink); line-height: 1.72; }
+    main { max-width: 1080px; margin: 0 auto; padding: 40px 20px 72px; }
+    header, section { background: rgba(255,255,255,.92); border: 1px solid var(--line); border-radius: 18px; padding: 26px; margin-bottom: 22px; box-shadow: 0 10px 30px rgba(28,76,54,.06); }
+    h1 { margin: 0 0 12px; font-size: clamp(28px,4vw,44px); line-height: 1.14; }
+    h2 { margin: 0 0 16px; font-size: 24px; color: var(--accent); }
+    h3 { margin: 22px 0 8px; font-size: 18px; }
+    p { margin: 8px 0; }
+    a { color: var(--accent); font-weight: 650; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 18px; }
+    .meta div { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+    .tag { display: inline-block; margin: 0 8px 8px 0; padding: 4px 10px; border-radius: 999px; background: #e5f5ee; color: #0e6d49; font-size: 13px; font-weight: 700; }
+    ul { padding-left: 20px; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; overflow: hidden; border-radius: 12px; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; vertical-align: top; text-align: left; }
+    th { background: #e4f3eb; }
+    .note { border-left: 4px solid var(--accent); padding: 8px 12px; background: #f3faf6; color: var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="tag">物体重建</span><span class="tag">关节资产生成</span><span class="tag">SimReady Object</span>
+    <h1>Articraft: An Agentic System for Scalable Articulated 3D Asset Generation</h1>
+    <p>阅读对象：<a href="../Articraft.pdf">本地 PDF</a></p>
+    <div class="meta">
+      <div><strong>作者 / 单位</strong><br>Matt Zhou, Ruining Li, Xiaoyang Lyu, Zhaomou Song, Zhening Huang, Chuanxia Zheng, Christian Rupprecht, Andrea Vedaldi, Shangzhe Wu；University of Cambridge, University of Oxford, Nanyang Technological University。</div>
+      <div><strong>发表状态</strong><br>arXiv:2605.15187v1，2026-05-14；PDF 标注为 Preprint。</div>
+      <div><strong>开源程度</strong><br>按 PDF 原文记录：论文称将公开 Articraft-10K、所有资产的代码表示、agent 推理轨迹和 agent 环境。PDF 本身未给出 license 或已发布仓库状态，因此不在这里断言当前代码/数据已经完全开源。</div>
+    </div>
+  </header>
+
+  <section>
+    <h2>1. 研究背景和动机</h2>
+    <p>这篇工作的核心问题不是静态物体重建，而是“可交互、可仿真的关节物体资产”如何规模化生成。真实世界里的柜子、抽屉、折叠椅、工具、玩具等对象，其可用性取决于部件层级、关节轴、运动范围和物理约束；只恢复外形网格不足以支撑机器人仿真、VR 交互或关节结构理解。</p>
+    <p>作者指出现有关节物体数据集规模小、类别窄、质量不均，导致学习式关节估计模型容易过拟合。传统 3D 生成、CAD 代码生成或 URDF 生成方法要么偏静态形状，要么依赖已有 mesh 库、视觉反馈和重型图形软件，难以低成本扩到大量长尾类别。</p>
+    <p class="note">因此 Articraft 的动机是把关节资产生成改写成“写程序”的问题：让 LLM 生成一个构造资产的 Python 程序，再由受限 harness 执行、检查、反馈和迭代。</p>
+  </section>
+
+  <section>
+    <h2>2. 研究方法</h2>
+    <h3>问题定义</h3>
+    <p>输入是自然语言描述，必要时也可输入参考图像；输出是完整 articulated 3D asset，包括 URDF、3D meshes、semantic parts、joint axes 和 motion ranges。论文把资产生成表示为 LLM 在每一轮基于 prompt、历史修订和反馈输出 harness 命令，修改并执行当前程序，直到停止。</p>
+
+    <h3>Agent harness</h3>
+    <ul>
+      <li>harness 暴露一个极简、受限的工作区：编辑单个程序、执行程序、请求或接收结构化反馈。</li>
+      <li>反馈主要来自编译、几何/URDF 构造、资产检查和对象自定义测试，而不是多视角渲染视觉反馈。</li>
+      <li>这种设计降低每个资产的推理和本地计算成本，使大规模生成可以并行。</li>
+    </ul>
+
+    <h3>LLM-friendly SDK</h3>
+    <p>SDK 面向 LLM 编程习惯，提供低层几何 primitive 与高层关节/结构抽象。LLM 不需要直接维护复杂 URDF 文件或完整图形软件环境，而是在 SDK 中定义 parts、geometry、joints、材料与测试。论文特别强调：domain-specific SDK 和 harness 是质量提升的关键，而不是单纯换一个更强 coding agent。</p>
+
+    <h3>数据集构造</h3>
+    <p>作者先探索 agent 能稳定生成的类别，再通过 LLM 扩展类别候选并人工过滤，最终覆盖 245 个适合类别。每类再生成 prompts，交给 Articraft 生成资产；所有资产经人工 1-5 分评级，低于 4 分或存在严重几何/关节/物理约束问题的样本被剔除。</p>
+  </section>
+
+  <section>
+    <h2>3. 实验设计和结果</h2>
+    <h3>资产生成质量评估</h3>
+    <p>论文用 46 个 PartNet-Mobility 类别、每类 5 个 prompt 构成 benchmark，并与 Articulate-Anything、PhysX-Anything、URDF-Anything+、直接使用 Codex 等方法比较。125 名非专家学生完成约 5000 次比较，按 prompt alignment 和总体质量选择前三。</p>
+    <table>
+      <thead><tr><th>比较点</th><th>主要结果</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>用户研究 Top-1</td><td>Articraft GPT-5.5 为 42%，Articraft GPT-5.4 为 26%；其他基线约 10%-15%。</td><td>专用 SDK+harness 显著优于直接让通用 coding agent 写 URDF。</td></tr>
+        <tr><td>模型/effort 消融</td><td>同一无人机 prompt 下，GPT-5.5 high 产生 78 个视觉元素，medium 51，low 39；Gemini/Claude 结构能对上但几何更简单。</td><td>reasoning effort 主要提升几何与表面细节，结构本身来自 SDK 约束和迭代。</td></tr>
+        <tr><td>生成成本</td><td>主日志中约 10,880 次生成尝试，总 API 成本约 12.39K 美元；平均约 1.14 美元/attempt、1.13 美元/retained object。</td><td>适合批量资产生成，但成本主要来自 LLM API 延迟与 token，而非 GPU。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Articraft-10K 数据集</h3>
+    <p>最终数据集收录 10,018 个通过人工筛选的关节资产，覆盖 245 类。主文汇总口径是 GPT-5.4、GPT-5.5 和 Gemini 3.1 Pro 三类生成共 10,909 个资产，10,018 个通过筛选，总保留率 91.8%。附录按后端拆分：GPT-5.4/GPT-5.5 主生成共 10,611 个、保留 9,731 个，保留率 91.7%；Gemini 3.1 Pro 生成 298 个、保留 287 个，保留率 96.3%。</p>
+
+    <h3>下游效果</h3>
+    <p>用 Articraft-10K 增强训练 Particulate 后，在 Lightwheel benchmark 上，rest-pose segmentation 的 gIoU 从 0.332 提升到 0.394、mIoU 从 0.576 到 0.607；articulated geometry 的 gIoU 从 0.305 到 0.361、PC 从 0.208 降到 0.179。</p>
+    <p>作者还展示了 Isaac Sim 机器人交互和 VR 手部交互，说明生成物体不仅可看，而且具有关节和碰撞结构。但这些展示更多是应用验证，论文没有把它们作为大规模真实机器人任务成功率评测。</p>
+
+    <h3>失败案例与边界</h3>
+    <p>失败主要来自三类。第一，局部结构测试通过但全局形状质量差，例如 screwcap bottle 的瓶身畸变，以及 skateboard、revolving door 虽无非预期重叠却视觉上不满意。第二，某些机构或形状难以用当前 SDK 紧凑表达，例如 trigger spray bottle 的喷头机构部分捕捉到了，但 trigger 形状和运动难以建干净，运动中还可能与瓶身重叠。第三，复杂类别会偶发遗漏内部结构或未 hollow out，例如 rice cooker、refrigerator with hinged doors。论文的质量结论主要基于人工偏好、人工筛选与下游关节估计提升，不能直接等同于所有资产在任意物理任务中都可靠。</p>
+  </section>
+</main>
+</body>
+</html>

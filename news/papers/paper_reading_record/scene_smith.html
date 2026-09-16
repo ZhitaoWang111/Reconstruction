@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SceneSmith 论文阅读记录</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #edf7f0;
+      --paper: #fbfffc;
+      --ink: #173126;
+      --muted: #5f756a;
+      --line: #cfe3d6;
+      --accent: #14805a;
+      --accent-soft: #dff3e8;
+      --warn: #8a5b17;
+      --warn-soft: #fff4d8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #e7f4ec 0%, var(--bg) 34%, #f7fbf8 100%);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.72;
+    }
+
+    main {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 44px 0 64px;
+    }
+
+    header {
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(251, 255, 252, 0.92);
+      box-shadow: 0 18px 45px rgba(38, 91, 65, 0.09);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 18px;
+      font-size: clamp(1.45rem, 2.2vw, 2rem);
+      line-height: 1.28;
+    }
+
+    h3 {
+      margin: 26px 0 10px;
+      color: #174332;
+      font-size: 1.08rem;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    a {
+      color: #08724d;
+      font-weight: 700;
+      text-decoration-thickness: 0.08em;
+      text-underline-offset: 0.18em;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .meta div,
+    .note,
+    .metric,
+    section {
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .meta div {
+      padding: 14px 16px;
+      border-radius: 12px;
+    }
+
+    .label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    section {
+      margin-top: 24px;
+      padding: 28px;
+      border-radius: 18px;
+      box-shadow: 0 12px 30px rgba(38, 91, 65, 0.06);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin: 18px 0 6px;
+    }
+
+    .metric {
+      padding: 16px;
+      border-radius: 14px;
+      background: #f6fcf8;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--accent);
+      font-size: 1.28rem;
+      line-height: 1.35;
+    }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 1.25rem;
+    }
+
+    li {
+      margin: 8px 0;
+    }
+
+    table {
+      width: 100%;
+      margin: 16px 0;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 12px;
+      font-size: 0.95rem;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--accent-soft);
+      color: #124231;
+    }
+
+    .note {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: var(--warn-soft);
+      color: var(--warn);
+    }
+
+    @media (max-width: 780px) {
+      main {
+        width: min(100% - 20px, 1120px);
+        padding-top: 20px;
+      }
+
+      header,
+      section {
+        padding: 20px;
+        border-radius: 14px;
+      }
+
+      .meta,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">论文阅读记录 · SimReady 场景生成</p>
+      <h1>SceneSmith: Agentic Generation of Simulation-Ready Indoor Scenes</h1>
+      <p>这篇工作把室内场景生成定义成“从自然语言到可直接进入物理仿真的机器人环境”的问题，而不只是生成视觉上合理的 3D 房间。</p>
+      <div class="meta" aria-label="paper metadata">
+        <div><span class="label">作者 / 单位</span>Nicholas Pfaff, Thomas Cohn, Sergey Zakharov, Rick Cory, Russ Tedrake；MIT 与 Toyota Research Institute。</div>
+        <div><span class="label">发表状态</span>Proceedings of the International Conference on Machine Learning 2026；PDF 标注为 Preprint, February 13, 2026。</div>
+        <div><span class="label">开源程度</span>PDF 提供项目页，但正文未明确声明代码、生成数据或模型权重的完整开源范围。</div>
+        <div><span class="label">本地论文</span><a href="../SceneSmith.pdf">../SceneSmith.pdf</a></div>
+        <div><span class="label">核心定位</span>文本条件的层次化 agent 系统，联合生成房屋/房间布局、家具、小物体、碰撞几何与物理属性。</div>
+      </div>
+    </header>
+
+    <section>
+      <h2>1. 研究背景和动机</h2>
+      <p>论文的出发点是家庭机器人训练和评测需要大规模、多样、可交互的仿真环境，但现有室内场景往往停留在稀疏家具布局或视觉真实感层面。真实家庭包含密集小物体、可开合家具、层级支撑关系和物理约束；这些恰恰是机器人抓取、移动和任务执行最容易失败的地方。</p>
+      <p>作者认为，已有方法通常把“资产生成”和“场景生成”拆开做：资产方法重视单个物体的几何和物理属性，场景方法则多假设固定资产库，只生成布局或摆放关系。SceneSmith 想把二者合在一起：用户输入自然语言环境或任务描述，系统自动生成房间级或房屋级场景，并保证每个对象尽量是可分离、可操作、带碰撞几何和物理参数的 simulation-ready asset。</p>
+      <h3>任务定义</h3>
+      <ul>
+        <li>输入：自然语言场景描述，或由机器人任务进一步扩展出的场景提示词。</li>
+        <li>输出：包含建筑结构、家具、墙面/天花物体、可操作小物体，以及对象姿态的室内场景。</li>
+        <li>SimReady 要求：资产带 visual geometry、collision geometry、质量、质心、惯量、摩擦，articulated object 还需要关节定义；场景需要减少穿模并在重力仿真下保持稳定。</li>
+        <li>目标边界：论文展示的是自动生成与仿真评测管线，不等同于证明真实机器人部署成功；策略评测也使用示例 model-based policy，而非端到端通用机器人策略。</li>
+      </ul>
+      <div class="note">阅读判断：这篇应归入 SimReady 重建/生成方向。它不是 NeRF/3DGS/VGGT 那类纯视觉重建，也不是只做单物体资产，而是面向机器人仿真的室内场景构造系统。</div>
+    </section>
+
+    <section>
+      <h2>2. 研究方法</h2>
+      <h3>层次化场景构造</h3>
+      <p>SceneSmith 把场景表示为房间集合，每个房间包含建筑几何和对象集合。生成过程是一棵树：先由 layout agent 生成房屋/房间结构，再按房间分支独立放置家具、墙面物体和天花物体，最后再针对桌面、柜子、架子、地面区域等支撑实体生成 manipuland 分支。这样做的好处是上下文规模可控，并且每个局部分支仍能继承全局 prompt 的约束。</p>
+      <h3>Designer / Critic / Orchestrator 三元 agent</h3>
+      <ul>
+        <li>Designer 负责通过工具修改场景，例如创建房间、生成资产、摆放家具、调整位姿、构造组合小物体。</li>
+        <li>Critic 只能观察和验证，给出语义合理性、物理可行性、prompt 对齐等评分与自然语言反馈，从而降低 designer 自评偏差。</li>
+        <li>Orchestrator 调度 designer 与 critic，决定接受、继续修改、终止或回滚。若 critic 分数下降，系统可以回到检查点并要求换一种方案。</li>
+        <li>Agent 通过结构化状态查询、渲染观察、碰撞/可达性检查、资产获取等工具与场景交互。每个 agent 保留当前和上一轮完整上下文，早期轮次压缩成摘要，视觉观察用滑动窗口保存。</li>
+      </ul>
+      <h3>资产生成、检索与验证</h3>
+      <p>静态物体主要走 text-to-image-to-3D：用 GPT Image 1.5 生成参考图，用 SAM3 分割前景，再用 SAM3D 重建带纹理网格；随后标准化朝向、缩放到目标尺寸，并补充碰撞几何和物理属性。可开合家具和设备则从 ArtVIP 检索，因为作者明确指出当前 text-to-3D 还不能可靠地产生适合机器人仿真的铰接结构和运动学。</p>
+      <p>资产路由器会把复合请求拆成可独立操作的原子对象，例如 fruit bowl 拆成 bowl 和多个 fruit；它还会按阶段过滤不合适对象，选择生成、铰接检索或 thin covering。生成或检索出的资产经过网格完整性检查和 VLM 语义验证，验证项包括物体类型、风格一致性、单物体性、完整性、比例合理性以及门/抽屉是否闭合。失败资产会在重试预算内重新生成或重新检索，仍失败时把原因反馈给 designer。</p>
+      <h3>物理可行性与导出</h3>
+      <p>系统使用 Drake 做 simulator-in-the-loop 构造。家具和小物体阶段之后，先用非线性优化把对象平移到最近的无碰撞位置，约束为 Drake signed distance 大于 1e-5 m，方向保持不变；随后在重力下仿真，让对象落到静态稳定状态。墙面和天花物体被 welded 到世界坐标，因此不走同样的自由体后处理。</p>
+      <p>场景原生表示为 SDFormat + Drake model directives，并可导出 MJCF、USD；导出保留 visual geometry、collision geometry、物理属性和 articulated joints。Blender 导出用于可视化，只包含视觉几何。</p>
+      <h3>机器人策略评测应用</h3>
+      <p>论文还把生成场景接到自动策略评测：给定任务描述，LLM 先生成多样场景 prompt，并保证必须物体存在且初始状态尚未完成目标；SceneSmith 生成场景后，示例 KUKA LBR iiwa14 移动底座策略执行 pick-and-place；最后 evaluator agent 结合对象列表、距离、支撑关系和多视角渲染判断任务是否成功。这个设计减少手写 success predicate，但作者也承认会牺牲一定确定性。</p>
+    </section>
+
+    <section>
+      <h2>3. 实验设计和结果</h2>
+      <h3>评测设置</h3>
+      <p>主评测使用 210 个 prompt，其中 179 个是 room-level，31 个是 house-level。Room-level prompt 覆盖 SceneEval-100、稀有房间类型、物体密度、主题风格等类别；house-level 只和 Holodeck 比较，因为基线中只有 Holodeck 支持多房间。外部基线包括 HSM、Holodeck、I-Design、LayoutVLM 两种资产库版本、SceneWeaver。消融包括 NoCritic、NotGenerated、NoAssetValidation、NoSpecializedTools、NoObserveScene、NoAgentMemory。</p>
+      <div class="grid">
+        <div class="metric"><strong>205 人</strong>用户研究有效参与者，收集 3,051 个有效 pairwise response。</div>
+        <div class="metric"><strong>71.1 ± 13.0</strong>SceneSmith room-level 平均对象数，约为外部基线 11-23 个对象的 3-6 倍。</div>
+        <div class="metric"><strong>1.2% / 95.6%</strong>room-level 碰撞率 / 静态稳定率，显著优于基线的 3-29% 碰撞与 8-61% 稳定。</div>
+      </div>
+      <h3>人工偏好结果</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>比较对象</th>
+            <th>Realism win rate</th>
+            <th>Faithfulness win rate</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Room-level 外部基线平均</td>
+            <td>92.2%</td>
+            <td>91.5%</td>
+            <td>所有外部基线比较均 p &lt; 0.001；最小优势相对 HSM。</td>
+          </tr>
+          <tr>
+            <td>vs HSM</td>
+            <td>88.5%</td>
+            <td>85.2%</td>
+            <td>HSM 是用户研究中较强的基线之一。</td>
+          </tr>
+          <tr>
+            <td>House-level vs Holodeck</td>
+            <td>80.3%</td>
+            <td>84.7%</td>
+            <td>SceneSmith 平均 214.1 个对象，Holodeck 平均 81.3 个对象。</td>
+          </tr>
+          <tr>
+            <td>关键消融</td>
+            <td>NotGenerated 63.8%；NoAssetValidation 63.0%；NoObserveScene 61.5%</td>
+            <td>NotGenerated 67.0%；NoAssetValidation 62.2%；NoObserveScene 53.2%</td>
+            <td>说明生成式资产、资产验证和视觉观察对感知质量更关键。</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>自动指标与物理指标</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th>SceneSmith</th>
+            <th>对比结论</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CNT / ATR / OOR / OAR</td>
+            <td>82.9 / 74.4 / 67.6 / 80.6</td>
+            <td>对象数量、属性、对象间关系和对象-建筑关系均为表 2 中最优；OOR 相对最佳外部基线约 2.2 倍。</td>
+          </tr>
+          <tr>
+            <td>ACC / NAV</td>
+            <td>83.4 / 97.6</td>
+            <td>不是最高，作者解释为高对象密度天然减少自由空间；这是密集可操作场景与通行空间之间的取舍。</td>
+          </tr>
+          <tr>
+            <td>COL / STB</td>
+            <td>1.2% / 95.6%</td>
+            <td>外部基线即便补上碰撞几何和物理属性，碰撞率仍为 3.0-28.9%，稳定率为 8.1-60.8%。</td>
+          </tr>
+          <tr>
+            <td>碰撞深度 / 稳定位移</td>
+            <td>MPD 3.77 ± 1.28 mm；MD 12.3 ± 4.5 mm</td>
+            <td>残余碰撞多是密集小物体的轻微重叠；基线平均穿透深度约 10.87-47.05 mm，平均位移约 382-932 mm。</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>机器人策略评测结果</h3>
+      <p>作者在 4 个 pick-and-place 任务上各生成 25 个场景，共 100 个场景。任务包括 fruit 到 plate、coke can 到 table、cup 到 sink，以及跨房间的 water bottle 到 living-room coffee table。人工标注 300 个评测状态后，evaluator agent 与人工判断一致 299/300，唯一分歧是水果落在盘子边缘的人类/agent 判定差异。标准策略总体 16/100，退化策略 12/100，论文据此说明自动评测能区分策略质量，但绝对成功率并不高，因此这部分更像评测管线验证，而不是强策略展示。</p>
+      <h3>代价、失败案例与证据边界</h3>
+      <ul>
+        <li>生成成本：SceneSmith 平均每个场景 $13.98，耗时 3:26；Designer 占成本 75.9%，Critic 占 20.0%。NoCritic 降到 $4.24 和 1:40，但对象数从 71.1 降到 54.0。</li>
+        <li>资产失败：验证器会拒绝类型错误、风格不符、复合物体未拆分、缺件、比例异常或开门/开抽屉冻结的资产；但对文字标签、金属/透明材质，以及检索资产的细节匹配更宽松。</li>
+        <li>物理失败：堆叠、填充容器、局部排列和 pile 工具都可能因碰撞、掉落或越界失败，并把失败对象和穿透深度反馈给 agent；后处理还会移除倾倒家具或离开支撑面的 manipuland。</li>
+        <li>评测边界：SceneEval 是 VLM-based，论文明确提到存在 false positive/negative；基线原本不具备完整 SimReady 属性，作者为公平比较给它们补了碰撞几何和物理参数，因此物理指标反映的是补齐后场景在 Drake 中的可行性。</li>
+        <li>能力边界：当前 text-to-3D 不可靠生成铰接结构，所以 articulated object 仍依赖 ArtVIP 检索；evaluator agent 能处理开放任务，但判定含糊空间关系时仍可能和人工不一致。</li>
+      </ul>
+      <div class="note">总的判断：SceneSmith 的强项不是“重建真实扫描场景”，而是把文本到场景生成推进到机器人仿真可用的资产级完整性。它的贡献集中在层次化 agent 编排、生成/检索混合资产管线、物理后处理和自动策略评测闭环。</div>
+    </section>
+  </main>
+</body>
+</html>

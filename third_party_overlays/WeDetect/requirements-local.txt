@@ -1,0 +1,5 @@
+# Additional packages installed into a Python 3.8 virtual environment created
+# with --system-site-packages. PyTorch 2.4.1+cu121 and torchvision 0.19.1+cu121
+# are reused from the host to avoid duplicating CUDA packages.
+onnx==1.17.0
+onnxruntime-gpu==1.19.2

@@ -1,0 +1,160 @@
+:root {
+  color-scheme: light;
+  --ink: #17352d;
+  --muted: #56746a;
+  --accent: #0b7f5b;
+  --accent-soft: #dff5ed;
+  --bg: #f4fbf7;
+  --card: #ffffff;
+  --line: #cfe5dc;
+  --warn: #fff6dd;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.7;
+  color: var(--ink);
+  background: linear-gradient(180deg, #edf8f2 0%, var(--bg) 240px);
+}
+
+main {
+  width: min(1080px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 36px 0 64px;
+}
+
+.paper-header,
+section,
+.toc {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 18px 45px rgba(41, 96, 75, 0.08);
+}
+
+.paper-header {
+  padding: 28px;
+  margin-bottom: 18px;
+}
+
+.paper-header p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.85rem, 4vw, 3rem);
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+h2 {
+  margin: 0 0 16px;
+  font-size: 1.35rem;
+}
+
+h3 {
+  margin: 22px 0 8px;
+  font-size: 1.05rem;
+  color: var(--accent);
+}
+
+section,
+.toc {
+  padding: 24px 28px;
+  margin: 18px 0;
+}
+
+a {
+  color: #006c4b;
+  font-weight: 700;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.meta div,
+.tag {
+  border: 1px solid var(--line);
+  background: #f8fffb;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--muted);
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.tag {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: #b9e7d6;
+}
+
+ul {
+  padding-left: 1.25rem;
+}
+
+li + li {
+  margin-top: 8px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+th,
+td {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: #edf8f2;
+}
+
+.note {
+  background: var(--warn);
+  border: 1px solid #efd89b;
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.back {
+  display: inline-flex;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 680px) {
+  main {
+    width: min(100% - 20px, 1080px);
+    padding-top: 20px;
+  }
+
+  .paper-header,
+  section,
+  .toc {
+    padding: 18px;
+    border-radius: 14px;
+  }
+}

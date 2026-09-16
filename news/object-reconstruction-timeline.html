@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="物体重建代表论文时间线：从隐式表面到单图快速网格与生成式三维资产。">
+  <title>物体重建论文时间线</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f6f1e8;--paper:#fffdf8;--ink:#211d17;--muted:#6f675c;--line:#ddd2c3;--accent:#a24f16;--soft:#f6dfca;--shadow:0 18px 50px rgba(71,44,20,.09)}
+    @media(prefers-color-scheme:dark){:root{--bg:#17130f;--paper:#231d17;--ink:#f4ede3;--muted:#b9ad9f;--line:#483b30;--accent:#f1a364;--soft:#4a2c1b;--shadow:none}}
+    *{box-sizing:border-box} body{margin:0;overflow-x:hidden;background:radial-gradient(circle at 12% 0%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 32rem),var(--bg);color:var(--ink);font-family:Inter,"Noto Sans SC","Microsoft YaHei",sans-serif;line-height:1.7} a{color:var(--accent);text-underline-offset:.18em}.shell{width:min(1100px,calc(100% - 32px));margin:auto;padding:32px 0 72px}.site-nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:48px}.site-nav a{padding:7px 13px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--muted);font-size:.86rem;text-decoration:none}.site-nav a[aria-current="page"]{border-color:var(--accent);background:var(--accent);color:#fff}.eyebrow{margin:0 0 10px;color:var(--accent);font-size:.76rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;overflow-wrap:anywhere}h1{max-width:800px;margin:0;font:560 clamp(2.5rem,7vw,5.8rem)/1.02 Georgia,"Noto Serif SC",serif;letter-spacing:-.045em;overflow-wrap:anywhere}.intro{max-width:760px;margin:22px 0 0;color:var(--muted);font-size:1.04rem}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:34px 0 58px}.fact{padding:17px 19px;border:1px solid var(--line);border-radius:16px;background:var(--paper);box-shadow:var(--shadow)}.fact strong{display:block;margin-bottom:4px;font-size:.92rem}.fact span{color:var(--muted);font-size:.86rem}.section-head{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:26px}.section-head h2{margin:0;font:560 clamp(1.7rem,4vw,2.7rem)/1.15 Georgia,"Noto Serif SC",serif}.section-head p{max-width:510px;margin:0;color:var(--muted);font-size:.9rem}.timeline{position:relative;display:grid;gap:18px}.timeline:before{position:absolute;top:18px;bottom:18px;left:112px;width:1px;background:var(--line);content:""}.entry{min-width:0;position:relative;display:grid;grid-template-columns:92px minmax(0,1fr);gap:38px}.entry:before{position:absolute;top:28px;left:107px;width:11px;height:11px;border:3px solid var(--bg);border-radius:50%;background:var(--accent);content:""}.date{padding-top:20px;color:var(--muted);font-size:.79rem;font-variant-numeric:tabular-nums}.card{min-width:0;padding:21px 23px;border:1px solid var(--line);border-radius:18px;background:var(--paper);box-shadow:var(--shadow)}.card h3{margin:0;font:600 clamp(1.12rem,3vw,1.45rem)/1.35 Georgia,"Noto Serif SC",serif}.paper-meta{min-width:0;display:grid;grid-template-columns:1fr 1.35fr 1fr;gap:8px;margin:13px 0 0}.paper-meta div{min-width:0;padding:9px 11px;border-radius:10px;background:var(--soft)}.paper-meta dt{color:var(--muted);font-size:.68rem}.paper-meta dd{overflow-wrap:anywhere;margin:1px 0 0;color:var(--ink);font-size:.79rem;font-weight:700;line-height:1.45}.card p{margin:10px 0 0}.io{color:var(--muted);font-size:.86rem}.boundary{padding-left:11px;border-left:3px solid var(--line);color:var(--muted);font-size:.84rem}.links{display:flex;flex-wrap:wrap;gap:14px;margin-top:13px;font-size:.86rem}.links a{font-weight:700}footer{margin:52px 0 0;padding-top:22px;border-top:1px solid var(--line);color:var(--muted);font-size:.84rem}@media(max-width:720px){.shell{padding-top:22px}.site-nav{margin-bottom:36px}.facts{grid-template-columns:1fr}.section-head{display:block}.section-head p{margin-top:8px}.timeline:before{left:5px}.entry{grid-template-columns:1fr;gap:7px;padding-left:24px}.entry:before{left:0}.date{padding-top:0}.card{padding:18px}.paper-meta{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <nav class="site-nav" aria-label="重建论文分类">
+      <a href="object-reconstruction-timeline.html" aria-current="page">物体重建</a>
+      <a href="simready-reconstruction-timeline.html">SimReady 重建</a>
+      <a href="visual-representation-reconstruction-timeline.html">视觉表征重建</a>
+    </nav>
+
+    <header>
+      <p class="eyebrow">Reconstruction Atlas · Object</p>
+      <h1>物体重建<br>论文时间线</h1>
+      <p class="intro">关注从单张或少量图像恢复一个可导出物体资产的方法。这里以几何、纹理和网格资产为主；纯新视角合成放入“视觉表征重建”，物理与交互闭环放入“SimReady 重建”。</p>
+    </header>
+
+    <section class="facts" aria-label="收录规则">
+      <div class="fact"><strong>边界</strong><span>输出应面向单物体几何、纹理或可编辑资产。</span></div>
+      <div class="fact"><strong>时间密度</strong><span>2019–2021 只留奠基工作；2023 年后加密。</span></div>
+      <div class="fact"><strong>质量门槛</strong><span>优先方法转折、强公开证据与可复现系统。</span></div>
+    </section>
+
+    <div class="section-head">
+      <h2>从隐式表面到快速资产</h2>
+      <p>日期采用 arXiv v1 首次公开日。生成式工作仅在其明确输出可用三维资产时纳入，并标注与严格重建的边界。</p>
+    </div>
+
+    <section class="timeline" aria-label="物体重建论文">
+      <article class="entry">
+        <time class="date" datetime="2019-01-16">2019-01-16</time>
+        <div class="card"><h3>DeepSDF</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码与预训练模型已开源</dd></div><div><dt>论文单位</dt><dd>华盛顿大学；MIT；Facebook Reality Labs</dd></div><div><dt>发表状态</dt><dd>CVPR 2019</dd></div></dl><p>用连续有符号距离函数学习形状类别的潜空间，使部分或带噪观测的形状补全成为可优化问题。</p><p class="io">输入 → 输出：部分 3D 观测 → 连续 SDF / 完整表面。</p><p class="boundary">入选理由：奠定学习式隐式表面与形状先验的经典路径；不负责纹理或 SimReady 属性。</p><div class="links"><a href="https://arxiv.org/abs/1901.05103">arXiv</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2021-06-20">2021-06-20</time>
+        <div class="card"><h3>NeuS</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码已开源</dd></div><div><dt>论文单位</dt><dd>香港大学；马克斯·普朗克信息学研究所；德州农工大学</dd></div><div><dt>发表状态</dt><dd>NeurIPS 2021</dd></div></dl><p>将 SDF 表面与体渲染结合，从多视图图像恢复高质量几何，为神经隐式表面的可渲染优化提供关键范式。</p><p class="io">输入 → 输出：已知相机多视图 → SDF / 可提取网格。</p><p class="boundary">也可用于场景；本页按“最终表面资产”收录。视图合成主线见视觉表征页面。</p><div class="links"><a href="https://arxiv.org/abs/2106.10689">arXiv</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2023-10-23">2023-10-23</time>
+        <div class="card"><h3>Wonder3D</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码与模型已开源</dd></div><div><dt>论文单位</dt><dd>香港大学；清华大学；VAST；宾夕法尼亚大学；上海科技大学；马克斯·普朗克信息学研究所；德州农工大学</dd></div><div><dt>发表状态</dt><dd>CVPR 2024</dd></div></dl><p>联合生成一致的多视图法线与颜色，再融合为带纹理网格，代表单图到多视图再到几何的扩散式路线。</p><p class="io">输入 → 输出：单张物体图像 → 多视图法线/颜色 → 纹理网格。</p><p class="boundary">重建受生成先验约束，遮挡区域是合理补全，不等同于真实观测恢复。</p><div class="links"><a href="https://arxiv.org/abs/2310.15008">arXiv</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2023-11-08">2023-11-08</time>
+        <div class="card"><h3>LRM: Large Reconstruction Model</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>官方未开源；有第三方 OpenLRM</dd></div><div><dt>论文单位</dt><dd>Adobe Research；澳大利亚国立大学</dd></div><div><dt>发表状态</dt><dd>ICLR 2024</dd></div></dl><p>以大规模 Transformer 将单图直接映射为对象 NeRF，把逐对象优化推进到约数秒级前馈重建。</p><p class="io">输入 → 输出：单图 → 对象级三平面 NeRF。</p><p class="boundary">输出仍是辐射场，不是天然可编辑网格；因其开启通用前馈对象重建路线而收录。</p><div class="links"><a href="https://arxiv.org/abs/2311.04400">arXiv</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2024-02-15">2024-02-15</time>
+        <div class="card"><h3>GaussianObject</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码与模型已开源</dd></div><div><dt>论文单位</dt><dd>上海交通大学；华为；多伦多大学</dd></div><div><dt>发表状态</dt><dd>ACM TOG / SIGGRAPH Asia 2024</dd></div></dl><p>从四视图构建物体高斯表示，并用视觉外壳与扩散修复改善稀疏观测下的几何和外观。</p><p class="io">输入 → 输出：约四张物体图像 → 对象级 3D Gaussian 表示。</p><p class="boundary">主要优化新视角质量，显式高斯不等于封闭网格或物理碰撞体。</p><div class="links"><a href="https://arxiv.org/abs/2402.10259">arXiv</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2024-03-04">2024-03-04</time>
+        <div class="card"><h3>TripoSR</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码与模型已开源（MIT）</dd></div><div><dt>论文单位</dt><dd>Stability AI；Tripo AI</dd></div><div><dt>发表状态</dt><dd>arXiv 技术报告</dd></div></dl><p>在 LRM 类架构上优化数据整理、渲染与训练，使单张图像可在亚秒级生成三维物体。</p><p class="io">输入 → 输出：单图 → 隐式三维表示 / 可导出网格。</p><p class="boundary">技术报告的速度为作者环境结果；不可见区域仍依赖生成先验。</p><div class="links"><a href="https://arxiv.org/abs/2403.02151">arXiv</a><a href="https://github.com/VAST-AI-Research/TripoSR">代码</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2024-04-10">2024-04-10</time>
+        <div class="card"><h3>InstantMesh</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码、权重与 Demo 已开源</dd></div><div><dt>论文单位</dt><dd>腾讯 ARC Lab；上海科技大学</dd></div><div><dt>发表状态</dt><dd>arXiv 技术报告</dd></div></dl><p>把多视图扩散与稀疏视图大重建模型组合，直接生成具有明确表面的单物体网格。</p><p class="io">输入 → 输出：单图 → 一致多视图 → 纹理网格。</p><p class="boundary">约十秒速度与质量来自论文报告；生成视图可能引入与原物体不一致的细节。</p><div class="links"><a href="https://arxiv.org/abs/2404.07191">arXiv</a><a href="https://github.com/TencentARC/InstantMesh">代码</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2024-04-18">2024-04-18</time>
+        <div class="card"><h3>MeshLRM</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>未找到官方代码或权重</dd></div><div><dt>论文单位</dt><dd>加州大学圣迭戈分校；Adobe Research</dd></div><div><dt>发表状态</dt><dd>arXiv 技术报告</dd></div></dl><p>在训练中加入可微网格提取与渲染，让大重建模型直接预测高质量网格，而不是事后从 NeRF 转换。</p><p class="io">输入 → 输出：四视图 → 物体网格。</p><p class="boundary">论文报告低于一秒的生成时间；真实速度与质量依赖硬件和输入分布。</p><div class="links"><a href="https://arxiv.org/abs/2404.12385">arXiv</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2024-12-02">2024-12-02</time>
+        <div class="card"><h3>TRELLIS</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码与模型已开源</dd></div><div><dt>论文单位</dt><dd>清华大学；中国科学技术大学；Microsoft Research</dd></div><div><dt>发表状态</dt><dd>CVPR 2025</dd></div></dl><p>以稀疏结构化潜变量统一生成辐射场、3D Gaussian 与网格，为高质量可控三维资产提供通用生成骨干。</p><p class="io">输入 → 输出：文本或图像 → RF / 3DGS / 网格。</p><p class="boundary">这是条件生成而非严格身份保持重建；因其多表示资产输出与公开模型而作为邻接重点。</p><div class="links"><a href="https://arxiv.org/abs/2412.01506">arXiv</a><a href="https://github.com/microsoft/TRELLIS">代码</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2025-01-08">2025-01-08</time>
+        <div class="card"><h3>SPAR3D</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码与模型已开源</dd></div><div><dt>论文单位</dt><dd>Stability AI；伊利诺伊大学厄巴纳-香槟分校</dd></div><div><dt>发表状态</dt><dd>CVPR 2025</dd></div></dl><p>先生成稀疏三维点，再将图像与点条件共同送入重建模型，以更直接地控制不可见区域的三维结构。</p><p class="io">输入 → 输出：单图 → 稀疏点 → 详细网格。</p><p class="boundary">点编辑提供交互能力，但遮挡面仍是模型推断；速度数字为作者报告。</p><div class="links"><a href="https://arxiv.org/abs/2501.04689">arXiv</a><a href="https://github.com/Stability-AI/stable-point-aware-3d">代码</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2025-01-21">2025-01-21</time>
+        <div class="card"><h3>Hunyuan3D 2.0</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码与预训练权重已开源</dd></div><div><dt>论文单位</dt><dd>腾讯混元</dd></div><div><dt>发表状态</dt><dd>arXiv 技术报告</dd></div></dl><p>将形状生成与多视图纹理合成拆成两阶段流水线，面向高分辨率纹理三维资产。</p><p class="io">输入 → 输出：图像或文本 → 网格形状 → 纹理资产。</p><p class="boundary">属于生成式资产管线；对原物体不可见部分的几何和纹理不构成观测证据。</p><div class="links"><a href="https://arxiv.org/abs/2501.12202">arXiv</a><a href="https://github.com/Tencent-Hunyuan/Hunyuan3D-2">代码</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2025-06-18">2025-06-18</time>
+        <div class="card"><h3>Hunyuan3D 2.1</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码与预训练权重已开源</dd></div><div><dt>论文单位</dt><dd>腾讯混元</dd></div><div><dt>发表状态</dt><dd>arXiv 技术报告</dd></div></dl><p>在高保真形状基础上进一步强调物理渲染材质与生产级资产流程，把输出从视觉纹理推进到 PBR 表达。</p><p class="io">输入 → 输出：图像或文本 → 网格 + PBR 材质。</p><p class="boundary">PBR 材质不等于经测量的真实物理参数，也不自动具备关节、碰撞体与动力学。</p><div class="links"><a href="https://arxiv.org/abs/2506.15442">arXiv</a><a href="https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1">代码</a></div></div>
+      </article>
+      <article class="entry">
+        <time class="date" datetime="2026-05-14">2026-05-14</time>
+        <div class="card"><h3>Articraft</h3><dl class="paper-meta" aria-label="论文元数据"><div><dt>开源程度</dt><dd>代码与 Articraft-10K 数据已开源</dd></div><div><dt>论文单位</dt><dd>剑桥大学；牛津大学；南洋理工大学</dd></div><div><dt>发表状态</dt><dd>arXiv 预印本</dd></div></dl><p>以 agentic 编程、资产 SDK 与验证环路规模化生成带关节三维物体资产，补足可动对象的 SimReady 供给。</p><p class="io">输入 → 输出：对象描述/需求 → 程序化关节物体资产 + 验证结果。</p><p class="boundary">它生成而非重建特定真实对象；本页按“对象级三维资产”收录，Articraft-10K 等规模指标来自论文作者报告。</p><div class="links"><a href="papers/Articraft.pdf">本地 PDF</a><a href="https://arxiv.org/abs/2605.15187">arXiv</a><a href="https://articraft3d.github.io/">项目页</a></div></div>
+      </article>
+    </section>
+
+    <footer>共 13 个节点 · 最近核对 2026-09-11 · 只收论文与项目证据，不维护公司或课题组名单。</footer>
+  </main>
+</body>
+</html>

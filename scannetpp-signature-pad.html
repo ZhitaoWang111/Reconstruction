@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ScanNet++ 手写签名采集</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18212f;
+      --muted: #687386;
+      --line: #dbe1e9;
+      --blue: #245eea;
+      --blue-soft: #edf3ff;
+      --paper: #ffffff;
+      --background: #f4f6f9;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--background); }
+    main { width: min(1080px, calc(100% - 32px)); margin: 48px auto 72px; }
+    header { display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: end; margin-bottom: 24px; }
+    .eyebrow { margin: 0 0 10px; color: var(--blue); font-size: 12px; font-weight: 750; letter-spacing: .17em; }
+    h1 { margin: 0; font-size: clamp(34px, 5vw, 56px); line-height: 1.04; letter-spacing: -.045em; }
+    .intro { max-width: 650px; margin: 14px 0 0; color: var(--muted); font-size: 16px; line-height: 1.7; }
+    .document { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--muted); font-size: 13px; white-space: nowrap; }
+    .notice { display: flex; gap: 12px; padding: 16px 18px; margin-bottom: 24px; border: 1px solid #f0d89b; border-radius: 14px; background: #fffaf0; color: #6d5418; line-height: 1.6; }
+    .notice strong { color: #4f3a0c; }
+    .notice-mark { display: grid; place-items: center; flex: 0 0 26px; height: 26px; border-radius: 50%; background: #f3c75b; font-weight: 800; }
+    .identity { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 24px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+    .identity div { min-width: 0; padding: 14px 16px; border-right: 1px solid var(--line); }
+    .identity div:last-child { border: 0; }
+    .identity small { display: block; margin-bottom: 5px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .identity strong { display: block; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+    .pads { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .pad-card { padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: 0 12px 36px rgba(31, 47, 73, .06); }
+    .card-head { display: flex; justify-content: space-between; gap: 16px; align-items: start; margin-bottom: 15px; }
+    .role { display: inline-block; margin-bottom: 7px; color: var(--blue); font-size: 11px; font-weight: 750; letter-spacing: .12em; }
+    h2 { margin: 0; font-size: 21px; }
+    .card-head p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .number { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--blue-soft); color: var(--blue); font-size: 12px; font-weight: 800; }
+    .canvas-wrap { position: relative; overflow: hidden; border: 1px solid #cfd7e3; border-radius: 12px; background-color: #fff; background-image: radial-gradient(#d8dee8 0.8px, transparent 0.8px); background-size: 18px 18px; }
+    canvas { display: block; width: 100%; height: 240px; cursor: crosshair; touch-action: none; }
+    .baseline { position: absolute; left: 7%; right: 7%; bottom: 52px; height: 1px; background: #bfc8d5; pointer-events: none; }
+    .hint { position: absolute; left: 0; right: 0; bottom: 22px; color: #9aa5b5; font-size: 11px; text-align: center; pointer-events: none; }
+    .actions { display: grid; grid-template-columns: auto auto 1fr; gap: 9px; margin-top: 14px; }
+    button { min-height: 42px; padding: 0 15px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+    button:hover { border-color: #aeb9c8; background: #fafbfc; }
+    button.primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+    button.primary:hover { background: #174fd9; }
+    footer { margin-top: 22px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    code { padding: 2px 5px; border-radius: 5px; background: #e9edf3; color: #39465a; }
+
+    @media (max-width: 850px) {
+      header { grid-template-columns: 1fr; }
+      .document { width: max-content; }
+      .identity { grid-template-columns: 1fr 1fr; }
+      .identity div { border-bottom: 1px solid var(--line); }
+      .pads { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">SCANNET++ ACCESS AGREEMENT</p>
+        <h1>手写签名采集</h1>
+        <p class="intro">请申请人和导师分别在对应画布中亲自签名。保存按钮会下载裁剪后的透明 PNG，供叠加到协议签名栏。</p>
+      </div>
+      <div class="document">scannetpp-terms-of-use-filled-unsigned.pdf</div>
+    </header>
+
+    <section class="notice">
+      <span class="notice-mark">!</span>
+      <div><strong>协议要求手写签名，且明确不接受数字签名。</strong> 鼠标或触控笔绘制是否被审核方接受存在不确定性；纸质打印、本人用笔签署并扫描仍是最稳妥的提交方式。</div>
+    </section>
+
+    <section class="identity" aria-label="协议填写信息">
+      <div><small>Requester</small><strong>Zhitao Wang</strong></div>
+      <div><small>Requester email</small><strong>wzt122196@sjtu.edu.cn</strong></div>
+      <div><small>PI / Supervisor</small><strong>Tong Qin</strong></div>
+      <div><small>PI email</small><strong>qintong@sjtu.edu.cn</strong></div>
+      <div><small>Affiliation</small><strong>Shanghai Jiao Tong University</strong></div>
+    </section>
+
+    <section class="pads">
+      <article class="pad-card" data-pad data-filename="requester-signature-zhitao-wang.png">
+        <div class="card-head">
+          <div><span class="role">REQUESTER</span><h2>Zhitao Wang</h2><p>由申请人本人绘制</p></div>
+          <span class="number">01</span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas aria-label="申请人手写签名画布"></canvas>
+          <span class="baseline"></span><span class="hint">请在横线上方签名</span>
+        </div>
+        <div class="actions">
+          <button type="button" data-undo>撤销一笔</button>
+          <button type="button" data-clear>清空</button>
+          <button type="button" class="primary" data-save>保存申请人签名 PNG</button>
+        </div>
+      </article>
+
+      <article class="pad-card" data-pad data-filename="pi-signature-tong-qin.png">
+        <div class="card-head">
+          <div><span class="role">PI / SUPERVISOR</span><h2>Tong Qin</h2><p>由导师本人绘制</p></div>
+          <span class="number">02</span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas aria-label="导师手写签名画布"></canvas>
+          <span class="baseline"></span><span class="hint">请在横线上方签名</span>
+        </div>
+        <div class="actions">
+          <button type="button" data-undo>撤销一笔</button>
+          <button type="button" data-clear>清空</button>
+          <button type="button" class="primary" data-save>保存导师签名 PNG</button>
+        </div>
+      </article>
+    </section>
+
+    <footer>下载完成后，两张图片通常位于 <code>/home/wzt/Downloads</code>。不要修改文件名；把文件路径告诉我，我会检查笔迹边界并生成最终签署版 PDF。</footer>
+  </main>
+
+  <script>
+    const pads = [...document.querySelectorAll('[data-pad]')];
+
+    function createPad(card) {
+      const canvas = card.querySelector('canvas');
+      const context = canvas.getContext('2d');
+      const strokes = [];
+      let activeStroke = null;
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        const scale = Math.max(1, window.devicePixelRatio || 1);
+        canvas.width = Math.round(rect.width * scale);
+        canvas.height = Math.round(rect.height * scale);
+        context.setTransform(scale, 0, 0, scale, 0, 0);
+        redraw();
+      }
+
+      function redraw() {
+        const rect = canvas.getBoundingClientRect();
+        context.clearRect(0, 0, rect.width, rect.height);
+        context.strokeStyle = '#111820';
+        context.lineWidth = 3.2;
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
+        for (const stroke of strokes) {
+          if (!stroke.length) continue;
+          context.beginPath();
+          stroke.forEach((point, index) => {
+            const x = point.x * rect.width;
+            const y = point.y * rect.height;
+            if (index === 0) context.moveTo(x, y);
+            else context.lineTo(x, y);
+          });
+          if (stroke.length === 1) context.lineTo(stroke[0].x * rect.width + .1, stroke[0].y * rect.height + .1);
+          context.stroke();
+        }
+      }
+
+      function pointFromEvent(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+          y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+        };
+      }
+
+      canvas.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        canvas.setPointerCapture(event.pointerId);
+        activeStroke = [pointFromEvent(event)];
+        strokes.push(activeStroke);
+        redraw();
+      });
+      canvas.addEventListener('pointermove', event => {
+        if (!activeStroke) return;
+        activeStroke.push(pointFromEvent(event));
+        redraw();
+      });
+      const finishStroke = () => { activeStroke = null; };
+      canvas.addEventListener('pointerup', finishStroke);
+      canvas.addEventListener('pointercancel', finishStroke);
+
+      card.querySelector('[data-undo]').addEventListener('click', () => {
+        strokes.pop();
+        redraw();
+      });
+      card.querySelector('[data-clear]').addEventListener('click', () => {
+        strokes.length = 0;
+        redraw();
+      });
+      card.querySelector('[data-save]').addEventListener('click', () => {
+        redraw();
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+        let left = canvas.width, top = canvas.height, right = -1, bottom = -1;
+        for (let y = 0; y < canvas.height; y += 1) {
+          for (let x = 0; x < canvas.width; x += 1) {
+            if (pixels.data[(y * canvas.width + x) * 4 + 3] > 0) {
+              left = Math.min(left, x); top = Math.min(top, y);
+              right = Math.max(right, x); bottom = Math.max(bottom, y);
+            }
+          }
+        }
+        if (right < left || bottom < top) {
+          window.alert('签名画布还是空的，请先手写签名。');
+          return;
+        }
+        const padding = Math.round(18 * (window.devicePixelRatio || 1));
+        left = Math.max(0, left - padding); top = Math.max(0, top - padding);
+        right = Math.min(canvas.width - 1, right + padding); bottom = Math.min(canvas.height - 1, bottom + padding);
+        const output = document.createElement('canvas');
+        output.width = right - left + 1; output.height = bottom - top + 1;
+        output.getContext('2d').drawImage(canvas, left, top, output.width, output.height, 0, 0, output.width, output.height);
+        const link = document.createElement('a');
+        link.download = card.dataset.filename;
+        link.href = output.toDataURL('image/png');
+        link.click();
+      });
+
+      return { resize };
+    }
+
+    const controllers = pads.map(createPad);
+    const resizeAll = () => controllers.forEach(controller => controller.resize());
+    window.addEventListener('resize', resizeAll);
+    resizeAll();
+  </script>
+</body>
+</html>

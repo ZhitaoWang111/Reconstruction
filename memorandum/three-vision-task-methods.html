@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="面向图像物体识别、全实例 2D mask 与视频米制点云恢复的候选方法备忘录。">
+  <title>三个视觉任务的方法备忘录</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #657086;
+      --line: #d9dee8;
+      --paper: #f7f5ef;
+      --card: rgba(255, 255, 255, .84);
+      --blue: #315cf4;
+      --blue-soft: #edf1ff;
+      --teal: #047d77;
+      --teal-soft: #e8f7f4;
+      --orange: #b45d12;
+      --orange-soft: #fff2e3;
+      --red: #a63c3c;
+      --red-soft: #fceded;
+      --navy: #0b1423;
+      --shadow: 0 18px 45px rgba(28, 38, 56, .08);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 1px 1px, rgba(49, 92, 244, .11) 1px, transparent 1.1px),
+        var(--paper);
+      background-size: 24px 24px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+    }
+
+    a { color: inherit; }
+    .page { width: min(1360px, calc(100% - 48px)); margin: 0 auto; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 26px 0;
+      border-bottom: 1px solid rgba(101, 112, 134, .22);
+    }
+    .brand {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .18em;
+      color: var(--blue);
+      text-transform: uppercase;
+    }
+    .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+    .nav a {
+      padding: 7px 12px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .nav a:hover { color: var(--blue); background: var(--blue-soft); }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
+      gap: 52px;
+      align-items: end;
+      padding: 78px 0 54px;
+    }
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 18px;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .17em;
+      text-transform: uppercase;
+    }
+    .eyebrow::before { content: ""; width: 24px; height: 2px; background: currentColor; }
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(44px, 6vw, 82px);
+      line-height: 1.02;
+      letter-spacing: -.055em;
+    }
+    h1 em { color: var(--blue); font-style: normal; }
+    .lead {
+      max-width: 820px;
+      margin: 26px 0 0;
+      color: #526078;
+      font-size: clamp(17px, 2vw, 22px);
+    }
+    .rule-card {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+    .rule-card h2 { margin: 0 0 12px; font-size: 18px; }
+    .rule-card ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+    .rule-card li + li { margin-top: 8px; }
+    .date {
+      display: inline-block;
+      margin-top: 18px;
+      padding: 5px 10px;
+      border-radius: 7px;
+      background: #eef0f5;
+      color: #5f6a7f;
+      font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .overview {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 74px;
+    }
+    .overview a {
+      display: block;
+      min-height: 190px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+      text-decoration: none;
+      box-shadow: 0 10px 30px rgba(28, 38, 56, .05);
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .overview a:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+    .overview .num { color: var(--blue); font: 700 12px ui-monospace, monospace; }
+    .overview h2 { margin: 18px 0 8px; font-size: 22px; line-height: 1.3; }
+    .overview p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .section { scroll-margin-top: 18px; margin: 0 0 86px; }
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(250px, .72fr) minmax(0, 1.28fr);
+      gap: 42px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+    .section-no {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      margin-bottom: 15px;
+      border: 1px solid rgba(49, 92, 244, .28);
+      border-radius: 50%;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font: 700 12px ui-monospace, monospace;
+    }
+    .section h2 { margin: 0; font-size: clamp(28px, 3vw, 42px); line-height: 1.16; letter-spacing: -.025em; }
+    .section-copy { margin: 0; color: var(--muted); }
+    .pick {
+      margin-top: 14px;
+      padding: 12px 15px;
+      border-left: 3px solid var(--blue);
+      border-radius: 0 10px 10px 0;
+      background: rgba(237, 241, 255, .8);
+      color: #405070;
+      font-size: 14px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, .9);
+      box-shadow: var(--shadow);
+    }
+    table { width: 100%; min-width: 1080px; border-collapse: collapse; table-layout: fixed; }
+    th {
+      padding: 15px 16px;
+      color: #6d778b;
+      background: #f1f2f5;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .07em;
+      text-align: left;
+      text-transform: uppercase;
+    }
+    td {
+      padding: 20px 16px;
+      border-bottom: 1px solid #e5e8ef;
+      color: #4f5b70;
+      font-size: 14px;
+      vertical-align: top;
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: rgba(237, 241, 255, .38); }
+    th:nth-child(1) { width: 19%; }
+    th:nth-child(2) { width: 23%; }
+    th:nth-child(3) { width: 13%; }
+    th:nth-child(4) { width: 22%; }
+    th:nth-child(5) { width: 23%; }
+    .method { display: flex; gap: 12px; }
+    .rank {
+      flex: 0 0 auto;
+      margin-top: 2px;
+      color: #94a0b5;
+      font: 700 11px ui-monospace, monospace;
+    }
+    .method a { color: var(--ink); font-size: 16px; font-weight: 800; text-decoration: none; }
+    .method a:hover { color: var(--blue); text-decoration: underline; }
+    .meta { margin-top: 5px; color: #818ca1; font: 600 11px ui-monospace, monospace; }
+    .badge {
+      display: inline-block;
+      margin: 0 5px 6px 0;
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: #465268;
+      background: #eef0f4;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .scope {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      padding: 5px 9px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .scope.open { color: var(--teal); background: var(--teal-soft); }
+    .scope.closed { color: #4d5d7a; background: #e9edf4; }
+    .scope.na { color: var(--orange); background: var(--orange-soft); }
+    .assessment strong { color: var(--ink); }
+    code {
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: #edf0f5;
+      color: #43506a;
+      font: 600 .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .level {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 29px;
+      height: 24px;
+      margin-right: 6px;
+      padding: 0 8px;
+      border-radius: 6px;
+      color: #fff;
+      background: var(--blue);
+      font-size: 11px;
+      font-weight: 900;
+    }
+    .level.a { background: #5f6c83; }
+    .availability { display: grid; gap: 7px; }
+    .status {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 9px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .yes { color: var(--teal); background: var(--teal-soft); }
+    .gated { color: var(--orange); background: var(--orange-soft); }
+    .no { color: var(--red); background: var(--red-soft); }
+    .license { color: #838da0; font-size: 11px; }
+    .note {
+      margin: 14px 4px 0;
+      color: #707b90;
+      font-size: 13px;
+    }
+
+    .scale-key {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 18px 0 24px;
+    }
+    .scale-item {
+      padding: 15px 17px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .74);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .scale-item strong { display: block; margin-bottom: 3px; color: var(--ink); font-size: 14px; }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 28px;
+      padding: 34px 0 48px;
+      border-top: 1px solid rgba(101, 112, 134, .24);
+      color: #788398;
+      font-size: 12px;
+    }
+    footer p { max-width: 760px; margin: 0; }
+
+    @media (max-width: 900px) {
+      .page { width: min(100% - 28px, 1360px); }
+      .hero, .section-head { grid-template-columns: 1fr; gap: 26px; }
+      .hero { padding-top: 52px; }
+      .overview { grid-template-columns: 1fr; }
+      .overview a { min-height: 0; }
+      .scale-key { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 620px) {
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .nav { display: none; }
+      h1 { font-size: 45px; }
+      footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">Vision Method Memorandum</div>
+      <nav class="nav" aria-label="页面导航">
+        <a href="#recognition-only">只识别</a>
+        <a href="#prompted-mask">标签分割</a>
+        <a href="#recognition-mask">识别 + Mask</a>
+        <a href="#metric-3d">米制点云</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Three tasks · selected methods</p>
+          <h1>三个视觉任务的<br><em>方法备忘录</em></h1>
+          <p class="lead">兼顾方法水平与新颖程度，并把“只识别”“标签引导分割”“自动识别并分割”三种能力严格拆开，明确每种方法的类别范围、开放状态与本地运行边界。</p>
+        </div>
+        <aside class="rule-card">
+          <h2>本页评估口径</h2>
+          <ul>
+            <li>“本地/端侧可运行”不考虑算力，只判断代码与权重能否取得。</li>
+            <li>权重需要注册或申请的，记为“获批后可以”。</li>
+            <li>水平等级是跨场景的综合判断，不等同于同一数据集排行榜。</li>
+            <li>“米制”专指具有绝对尺度，不把仅 up-to-scale 的点云算作带尺度结果。</li>
+          </ul>
+          <span class="date">评估日期 · 2026-09-12</span>
+        </aside>
+      </section>
+
+      <section class="overview" aria-label="能力分组概览">
+        <a href="#recognition-only">
+          <span class="num">01</span>
+          <h2>只识别，不输出 Mask</h2>
+          <p>只输入图像，自动给出类别或检测框，但模型本身不同时返回实例 mask。</p>
+        </a>
+        <a href="#prompted-mask">
+          <span class="num">02</span>
+          <h2>给标签，才输出 Mask</h2>
+          <p>输入图像和语义标签，返回指定类别的 mask；不能独立回答图中有哪些类别。</p>
+        </a>
+        <a href="#recognition-mask">
+          <span class="num">03</span>
+          <h2>识别并输出 Mask</h2>
+          <p>只输入图像，模型同时完成类别发现、实例定位和 mask 预测。</p>
+        </a>
+        <a href="#metric-3d">
+          <span class="num">04</span>
+          <h2>视频恢复带尺度点云</h2>
+          <p>优先直接预测米制几何的方法；相对尺度方法必须再接入尺度锚点。</p>
+        </a>
+      </section>
+
+      <section class="section" id="recognition-only">
+        <div class="section-head">
+          <div>
+            <span class="section-no">01</span>
+            <h2>只识别有哪些物体<br>不同时输出 Mask</h2>
+          </div>
+          <div>
+            <p class="section-copy">输入只有图像，输出类别标签，或类别加检测框。这类方法可以回答“有什么”，但不能在同一次模型输出中给出对应实例的像素级 mask。</p>
+            <div class="pick"><strong>首选：</strong>开放词表并需要框时用 WeDetect-Anything；固定类别工程部署用 YOLO26 Detect；只需要类别清单时用 RAM++。</div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>方法</th><th>输入输出</th><th>类别范围</th><th>水平与新颖性</th><th>开源 / 本地运行</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><div class="method"><span class="rank">01</span><div><a href="https://github.com/WeChatCV/WeDetect/tree/main/wedetect_anything" target="_blank" rel="noreferrer">WeDetect-Anything</a><div class="meta">2026 · CVPR 2026</div></div></div></td>
+                <td><span class="badge">输入：图像</span><span class="badge">输出：类别 + 框</span><br>类别无关候选框与预编码大型中文词表匹配；不输出 mask。</td>
+                <td><span class="scope open">开集</span><br>预置大词表限制实际可返回的名称。</td>
+                <td class="assessment"><span class="level a">A+</span><strong>水平：</strong>无提示开放词表检测能力强，Anything 流水线尚新。<br><strong>新颖性：很高。</strong>纯视觉提候选，再离线匹配大型词表。</td>
+                <td><div class="availability"><span class="status gated">代码、权重公开 · 本地可以</span><span class="license">仓库未声明许可证：公开可运行不等于已授予开源使用权</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">02</span><div><a href="https://docs.ultralytics.com/models/yolo26/" target="_blank" rel="noreferrer">YOLO26 Detect</a><div class="meta">2026 · ULTRALYTICS</div></div></div></td>
+                <td><span class="badge">输入：图像</span><span class="badge">输出：类别 + 框</span><br>从训练类别表中识别实例；Detect 权重不输出 mask。</td>
+                <td><span class="scope closed">闭集</span><br>例如官方 COCO 权重只覆盖 80 类。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>速度、精度、导出链路与工程成熟度突出。<br><strong>新颖性：高。</strong>支持端到端 NMS-free 推理和更轻检测头。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">AGPL-3.0 / Enterprise；支持 ONNX、TensorRT 等导出</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">03</span><div><a href="https://github.com/xinyu1205/recognize-anything" target="_blank" rel="noreferrer">RAM++</a><div class="meta">2023 · RECOGNIZE ANYTHING</div></div></div></td>
+                <td><span class="badge">输入：图像</span><span class="badge">输出：类别标签</span><br>不输出框和 mask，也不区分同类物体的实例数量。</td>
+                <td><span class="scope open">开集标签</span><br>支持大标签表与自定义类别描述。</td>
+                <td class="assessment"><span class="level a">A</span><strong>水平：</strong>适合生成较完整类别清单，但会混入属性、动作和场景词。<br><strong>新颖性：中。</strong>代表性的开放集图像标签模型。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">Apache-2.0；官方 RAM++ checkpoint 可下载</span></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="prompted-mask">
+        <div class="section-head">
+          <div>
+            <span class="section-no">02</span>
+            <h2>提供语义标签后<br>才能输出 Mask</h2>
+          </div>
+          <div>
+            <p class="section-copy">输入是“图像 + 要寻找的类别名称”，输出该类别对应的一个或多个实例 mask。输出标签来自用户输入，不代表模型已经独立发现了图中有哪些类别。</p>
+            <div class="pick"><strong>首选：</strong>追求概念分割水平用 SAM 3；需要实时与易部署用 YOLOE-26 Text-Prompt；成熟的可组合流水线用 Grounded SAM 2。</div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>方法</th><th>输入输出</th><th>类别范围</th><th>水平与新颖性</th><th>开源 / 本地运行</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><div class="method"><span class="rank">01</span><div><a href="https://github.com/facebookresearch/sam3" target="_blank" rel="noreferrer">SAM 3</a><div class="meta">2025 · ICLR 2026</div></div></div></td>
+                <td><span class="badge">输入：图像 + 语义短语</span><span class="badge">输出：实例 Mask + 框</span><br>找出与指定概念匹配的全部实例；没有语义提示时不能自动列出类别。</td>
+                <td><span class="scope open">开集</span><br>支持开放词汇概念提示。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>概念级实例穷举与 mask 质量强。<br><strong>新颖性：很高。</strong>统一图像/视频的 Promptable Concept Segmentation。</td>
+                <td><div class="availability"><span class="status gated">代码开放、权重需申请 · 获批后可以</span><span class="license">取得官方 checkpoint 后可完全本地推理</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">02</span><div><a href="https://docs.ultralytics.com/models/yoloe/" target="_blank" rel="noreferrer">YOLOE-26 Text-Prompt</a><div class="meta">2026 · ULTRALYTICS</div></div></div></td>
+                <td><span class="badge">输入：图像 + 类别名</span><span class="badge">输出：实例 Mask + 框</span><br>使用 <code>*-seg.pt</code> 并调用 <code>set_classes()</code>；返回指定类别的实例。</td>
+                <td><span class="scope open">开集</span><br>可以输入训练词表之外的类别名称。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>开放词汇、实例 mask 与部署效率兼顾。<br><strong>新颖性：很高。</strong>YOLOE 开放提示机制与 YOLO26 端到端架构结合。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">AGPL-3.0 / Enterprise；离线前需准备文本编码器或固化提示</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">03</span><div><a href="https://github.com/IDEA-Research/Grounded-Segment-Anything" target="_blank" rel="noreferrer">Grounded SAM 2</a><div class="meta">2024 · COMPOSITE PIPELINE</div></div></div></td>
+                <td><span class="badge">输入：图像 + 类别名</span><span class="badge">输出：实例 Mask + 框</span><br>Grounding DINO 按文本找框，SAM 2 根据框生成 mask。</td>
+                <td><span class="scope open">开集</span><br>类别范围由文本检测器决定。</td>
+                <td class="assessment"><span class="level a">A+</span><strong>水平：</strong>模块成熟、可替换，分割效果取决于前级检测是否召回。<br><strong>新颖性：中。</strong>价值主要在模型组合，不是单一新架构。</td>
+                <td><div class="availability"><span class="status yes">代码、组件权重可得 · 本地可以</span><span class="license">组件均可下载；部署时分别核对 Grounding DINO 与 SAM 2 许可</span></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">这一类不能单独回答“图中有哪些物体”。若先用 RAM++ 或 VLM 生成标签，再逐类调用分割器，就已经变成两阶段组合流水线，而不是单模型的 image-only 能力。</p>
+      </section>
+
+      <section class="section" id="recognition-mask">
+        <div class="section-head">
+          <div>
+            <span class="section-no">03</span>
+            <h2>自动识别有哪些物体<br>同时给出 Mask</h2>
+          </div>
+          <div>
+            <p class="section-copy">输入只有图像，模型自行确定类别，并为每个识别出的实例输出类别、框和像素级 mask。这一组才同时满足前两个任务。</p>
+            <div class="pick"><strong>答案是有：</strong>开放类别且需要本地运行，首选 YOLOE-26 Prompt-Free；允许云端 API 时可比较 DINO-X Prompt-Free；类别固定时首选 YOLO26-seg。</div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>方法</th><th>输入输出</th><th>类别范围</th><th>水平与新颖性</th><th>开源 / 本地运行</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><div class="method"><span class="rank">01</span><div><a href="https://docs.ultralytics.com/models/yoloe/" target="_blank" rel="noreferrer">YOLOE-26 Prompt-Free</a><div class="meta">2026 · ULTRALYTICS</div></div></div></td>
+                <td><span class="badge">输入：仅图像</span><span class="badge">输出：类别 + 框 + Mask</span><br>使用 <code>*-seg-pf.pt</code>，自动从内置约 4,585 个类别名中匹配。</td>
+                <td><span class="scope open">开集</span><br>开放词表，但实际受内置词表限制。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>本地方案中类别覆盖、实例 mask 和部署便利性最均衡。<br><strong>新颖性：很高。</strong>大词表无提示识别与端到端实例分割统一。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">AGPL-3.0 / Enterprise；必须使用 prompt-free 专用权重</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">02</span><div><a href="https://github.com/IDEA-Research/DINO-X-API" target="_blank" rel="noreferrer">DINO-X Prompt-Free</a><div class="meta">2024–2026 · IDEA RESEARCH</div></div></div></td>
+                <td><span class="badge">输入：仅图像</span><span class="badge">输出：类别 + 框 + Mask</span><br>API 的 universal 模式自动返回物体名称、检测框和实例 mask。</td>
+                <td><span class="scope open">开放世界</span><br>具体类别边界未以本地词表形式公开。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>适合作为开放世界效果上限参考。<br><strong>新颖性：高。</strong>提供无需用户类别提示的检测分割接口。</td>
+                <td><div class="availability"><span class="status no">仅 API 客户端 · 本地不可以</span><span class="license">客户端代码开放；模型代码与权重未发布</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">03</span><div><a href="https://docs.ultralytics.com/models/yolo26/" target="_blank" rel="noreferrer">YOLO26-seg</a><div class="meta">2026 · ULTRALYTICS</div></div></div></td>
+                <td><span class="badge">输入：仅图像</span><span class="badge">输出：类别 + 框 + Mask</span><br>自动识别训练类别内的实例并返回对应 mask。</td>
+                <td><span class="scope closed">闭集</span><br>类别由训练数据集固定。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>固定类别场景的强工程基线，训练、推理、导出统一。<br><strong>新颖性：高。</strong>继承 YOLO26 端到端设计并升级 mask 分支。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">AGPL-3.0 / Enterprise；官方分割权重可下载</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">04</span><div><a href="https://github.com/IDEA-Research/MaskDINO" target="_blank" rel="noreferrer">Mask DINO</a><div class="meta">2022 · CVPR 2023</div></div></div></td>
+                <td><span class="badge">输入：仅图像</span><span class="badge">输出：类别 + 框 + Mask</span><br>统一完成目标检测、实例分割、语义分割和全景分割。</td>
+                <td><span class="scope closed">闭集</span><br>官方权重使用 COCO、ADE20K 等类别表。</td>
+                <td class="assessment"><span class="level a">A+</span><strong>水平：</strong>精度导向的强 Transformer 分割基线。<br><strong>新颖性：中。</strong>统一检测与多种分割任务，但已不是最新一代。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">Apache-2.0；官方模型与配置可下载</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">05</span><div><a href="https://github.com/SHI-Labs/OneFormer" target="_blank" rel="noreferrer">OneFormer</a><div class="meta">2022 · CVPR 2023</div></div></div></td>
+                <td><span class="badge">输入：图像 + 固定任务 token</span><span class="badge">输出：类别 + Mask</span><br>内部指定 instance/panoptic 任务，不需要用户提供物体类别。</td>
+                <td><span class="scope closed">闭集</span><br>类别由所用数据集权重固定。</td>
+                <td class="assessment"><span class="level a">A</span><strong>水平：</strong>多分割任务共用模型的成熟基线。<br><strong>新颖性：中。</strong>task-conditioned universal segmentation 具有代表性。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">MIT；公开 ADE20K、Cityscapes、COCO 等权重</span></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">“开集”不等于真正识别每一个物理物体：结果仍受候选召回、训练分布、词表、阈值和遮挡影响；闭集方法则只可能输出训练类别表中的名称。</p>
+      </section>
+
+      <section class="section" id="metric-3d">
+        <div class="section-head">
+          <div>
+            <span class="section-no">04</span>
+            <h2>从视频中恢复<br>带尺度的点云</h2>
+          </div>
+          <div>
+            <p class="section-copy">这里把视频拆成有序帧输入，多视图方法预测深度/点图与相机位姿，再融合为点云。是否导出 PLY 或 GLB 不是关键；关键是坐标是否对应真实米制尺度。</p>
+            <div class="pick"><strong>首选：</strong>米制尺度是硬要求时，优先 AMB3R、MapAnything 或 Depth Anything 3 Nested；VGGT-Ω 与 InfiniteVGGT 需要额外尺度锚点。</div>
+          </div>
+        </div>
+
+        <div class="scale-key">
+          <div class="scale-item"><strong>直接米制</strong>方法自身具有 metric-depth / metric-geometry 机制，可在满足输入假设时输出绝对尺度。</div>
+          <div class="scale-item"><strong>需要尺度锚点</strong>模型先恢复 up-to-scale 几何，再用已知基线、相机高度、RGB-D/LiDAR 或米制深度对齐。</div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>方法</th>
+                <th>输入输出</th>
+                <th>尺度范围</th>
+                <th>水平与新颖性</th>
+                <th>开源 / 本地运行</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div class="method"><span class="rank">01</span><div><a href="https://github.com/HengyiWang/amb3r" target="_blank" rel="noreferrer">AMB3R / AMB3R-VO</a><div class="meta">2026 · CVPR 2026</div></div></div></td>
+                <td><span class="badge">输入：连续视频帧</span><span class="badge">输出：点图 + 位姿</span><br>输出世界坐标点图、相机位姿和置信度，融合后得到稠密点云。</td>
+                <td><span class="scope open">直接米制</span><br>模型具有 metric-scale 机制。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>与视频到米制稠密点云的需求最直接匹配，并带 VO 后端。<br><strong>新颖性：很高。</strong>2026 年的前馈米制重建与后端优化方案。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">官方仓库提供环境、checkpoint 与视频运行入口</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">02</span><div><a href="https://github.com/facebookresearch/map-anything" target="_blank" rel="noreferrer">MapAnything</a><div class="meta">2025 · 3DV 2026</div></div></div></td>
+                <td><span class="badge">输入：视频抽帧 / 多视图</span><span class="badge">输出：深度 + 点图 + 相机</span><br>将预测几何融合为场景点云。</td>
+                <td><span class="scope open">直接米制</span><br>支持 metric geometry 输出。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>通用输入条件和米制几何能力突出，适合离线高质量重建。<br><strong>新颖性：很高。</strong>统一前馈模型覆盖多种 3D mapping 输入组合。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">Apache-2.0 代码；另有 Apache 权重变体，注意不同 checkpoint 许可</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">03</span><div><a href="https://github.com/ByteDance-Seed/Depth-Anything-3" target="_blank" rel="noreferrer">Depth Anything 3 Nested</a><div class="meta">2025 · ICLR 2026</div></div></div></td>
+                <td><span class="badge">输入：视频抽帧 / 任意视图</span><span class="badge">输出：深度 + 位姿</span><br>深度反投影并跨视图融合为点云。</td>
+                <td><span class="scope open">直接米制</span><br>单目 metric-depth 分支提供尺度。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>兼顾任意视图几何、相机估计与米制缩放，接口完整。<br><strong>新颖性：很高。</strong>Nested 结构结合多视图相对几何与单目米制深度。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">代码与模型可下载；Nested Giant/Large 权重为 CC BY-NC 4.0</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">04</span><div><a href="https://github.com/facebookresearch/vggt-omega" target="_blank" rel="noreferrer">VGGT-Ω</a><div class="meta">2026 · CVPR 2026</div></div></div></td>
+                <td><span class="badge">输入：静态 / 动态视频</span><span class="badge">输出：相机 + 深度 + 点图</span><br>适合长视频与包含动态物体的场景。</td>
+                <td><span class="scope closed">需尺度锚点</span><br>绝对尺度必须由外部约束提供。</td>
+                <td class="assessment"><span class="level">S</span><strong>水平：</strong>高水平通用 3D 重建候选，动态场景能力突出。<br><strong>新颖性：很高。</strong>面向更大训练规模、动态场景和可扩展推理的新一代 VGGT。</td>
+                <td><div class="availability"><span class="status gated">代码开放、权重需申请 · 获批后可以</span><span class="license">Hugging Face checkpoint 需接受访问条件；训练代码已发布</span></div></td>
+              </tr>
+              <tr>
+                <td><div class="method"><span class="rank">05</span><div><a href="https://github.com/AutoLab-SAI-SJTU/InfiniteVGGT" target="_blank" rel="noreferrer">InfiniteVGGT</a><div class="meta">2026 · PREPRINT</div></div></div></td>
+                <td><span class="badge">输入：超长 / 持续视频</span><span class="badge">输出：深度 + 位姿 + 点图</span><br>滚动记忆可处理上千帧，预测结果可进一步融合。</td>
+                <td><span class="scope closed">需尺度锚点</span><br>原始几何不保证绝对米制尺度。</td>
+                <td class="assessment"><span class="level a">A+</span><strong>水平：</strong>长序列扩展性突出，成熟度与基准覆盖仍弱于正式发表方案。<br><strong>新颖性：很高。</strong>因果滚动记忆突破固定窗口。</td>
+                <td><div class="availability"><span class="status yes">代码、权重可得 · 本地可以</span><span class="license">Apache-2.0；官方提供预训练 checkpoint 下载入口</span></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">尺度验证建议：用场景中已知长度、RGB-D 深度或标定基线检查点云距离；仅看点云形状合理、坐标为有限值，不能证明已经恢复米制尺度。</p>
+      </section>
+    </main>
+
+    <footer>
+      <p>本表用于候选方法筛选，不把不同输入设定、训练数据、许可条件和评测协议下的指标硬拼成统一排名。方法名均链接到论文或官方代码仓库，便于继续核验。</p>
+      <p>Standalone HTML · 无外部字体与脚本 · 可直接打开</p>
+    </footer>
+  </div>
+</body>
+</html>

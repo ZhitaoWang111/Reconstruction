@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>scene0000_00 · 三类点云输出对照</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">SCANNET V2 · SCENE0000_00 · UNIFORM 500</p>
+      <h1>三类视频点云输出对照</h1>
+      <p class="lede">GT 修正版 AMB3R-VO、原版 AMB3R-VO 与 DA3，均来自 scene0000_00 的同一组 500 帧 RGB。</p>
+    </div>
+    <div class="winner" aria-label="综合结果">
+      <span>GT 辅助几何最优</span>
+      <strong>GT 修正版 AMB3R-VO</strong>
+      <small>Chamfer-L1 · 0.067 m</small>
+    </div>
+  </header>
+
+  <nav class="toolbar" aria-label="点云控制">
+    <div class="control-group view-presets">
+      <span class="control-label">视角</span>
+      <button type="button" data-view="perspective" class="active">透视</button>
+      <button type="button" data-view="top">俯视</button>
+      <button type="button" data-view="side">侧视</button>
+    </div>
+    <label class="switch-control">
+      <input id="sync-view" type="checkbox" checked>
+      <span>同步视角</span>
+    </label>
+    <label class="switch-control">
+      <input id="auto-rotate" type="checkbox">
+      <span>自动旋转</span>
+    </label>
+    <label class="range-control">
+      <span>点大小</span>
+      <input id="point-size" type="range" min="0.6" max="3.2" value="1.35" step="0.05">
+    </label>
+    <div class="control-group color-modes">
+      <span class="control-label">着色</span>
+      <button type="button" data-color="rgb" class="active">RGB</button>
+      <button type="button" data-color="height">高度</button>
+    </div>
+    <button type="button" id="reset-all" class="reset-button">重置全部</button>
+  </nav>
+
+  <main class="viewer-grid">
+    <article class="method-card best" data-method="amb3r_gt">
+      <div class="best-badge">GT-ASSISTED SIM(3)</div>
+      <div class="card-head">
+        <div>
+          <div class="rank">01</div>
+          <h2>GT 修正版 AMB3R-VO</h2>
+          <p>500 个 GT 相机位姿 · Sim(3) 尺度与坐标修正</p>
+        </div>
+        <button type="button" class="fullscreen-button" title="全屏查看" aria-label="全屏查看 GT 修正版 AMB3R-VO">↗</button>
+      </div>
+      <div class="canvas-shell">
+        <canvas aria-label="GT 修正版 AMB3R-VO 三维点云"></canvas>
+        <div class="loading"><span></span>正在解码点云</div>
+        <div class="axis-note">Z ↑</div>
+        <div class="interaction-note">拖动旋转 · 右键平移 · 滚轮缩放</div>
+      </div>
+      <div class="metric-row">
+        <div><span>Accuracy ↓</span><strong>0.057 m</strong></div>
+        <div><span>Chamfer ↓</span><strong>0.067 m</strong></div>
+        <div><span>F@10 cm ↑</span><strong>0.820</strong></div>
+      </div>
+      <div class="card-foot"><span class="status-dot"></span><span class="point-count">—</span><span>· GT-assisted Sim(3)</span></div>
+    </article>
+
+    <article class="method-card" data-method="amb3r">
+      <div class="card-head">
+        <div>
+          <div class="rank">02</div>
+          <h2>原版 AMB3R-VO</h2>
+          <p>官方 VO + RGB 自预测尺度 · 无 GT 尺度修正</p>
+        </div>
+        <button type="button" class="fullscreen-button" title="全屏查看" aria-label="全屏查看原版 AMB3R-VO">↗</button>
+      </div>
+      <div class="canvas-shell">
+        <canvas aria-label="原版 AMB3R-VO 三维点云"></canvas>
+        <div class="loading"><span></span>正在解码点云</div>
+        <div class="axis-note">Z ↑</div>
+        <div class="interaction-note">拖动旋转 · 右键平移 · 滚轮缩放</div>
+      </div>
+      <div class="metric-row">
+        <div><span>Accuracy ↓</span><strong>0.191 m</strong></div>
+        <div><span>Chamfer ↓</span><strong>0.182 m</strong></div>
+        <div><span>F@10 cm ↑</span><strong>0.296</strong></div>
+      </div>
+      <div class="card-foot"><span class="status-dot"></span><span class="point-count">—</span><span>· SE(3) 自预测尺度</span></div>
+    </article>
+
+    <article class="method-card" data-method="da3">
+      <div class="card-head">
+        <div>
+          <div class="rank">03</div>
+          <h2>Depth Anything 3 Nested</h2>
+          <p>官方 DA3-Streaming · 30 / 15</p>
+        </div>
+        <button type="button" class="fullscreen-button" title="全屏查看" aria-label="全屏查看 DA3 Nested">↗</button>
+      </div>
+      <div class="canvas-shell">
+        <canvas aria-label="Depth Anything 3 Nested 三维点云"></canvas>
+        <div class="loading"><span></span>正在解码点云</div>
+        <div class="axis-note">Z ↑</div>
+        <div class="interaction-note">拖动旋转 · 右键平移 · 滚轮缩放</div>
+      </div>
+      <div class="metric-row">
+        <div><span>Accuracy ↓</span><strong>0.125 m</strong></div>
+        <div><span>Chamfer ↓</span><strong>0.135 m</strong></div>
+        <div><span>F@10 cm ↑</span><strong>0.519</strong></div>
+      </div>
+      <div class="card-foot"><span class="status-dot"></span><span class="point-count">—</span><span>· SE(3) 原生尺度</span></div>
+    </article>
+  </main>
+
+  <section class="notes">
+    <div>
+      <span class="note-index">01</span>
+      <p><strong>显示真实彩色点云而非预览截图。</strong>GT 修正版与原版各读取 491,666 个 AMB3R 点，DA3 读取 447,230 个点。</p>
+    </div>
+    <div>
+      <span class="note-index">02</span>
+      <p><strong>三类结果共享同一显示尺度。</strong>三者都用 GT 相机对应关系确定旋转和平移；原版 AMB3R-VO 与 DA3 固定尺度为 1，GT 修正版额外拟合尺度。</p>
+    </div>
+    <div>
+      <span class="note-index">03</span>
+      <p><strong>GT 修正版是 oracle 产物。</strong>它使用全部 500 个 GT 相机对应关系拟合 Sim(3)，适合数据集处理与诊断，不代表未知视频上的可部署尺度。</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>RGB-only reconstruction · GT-assisted variant explicitly labeled</span>
+    <a href="../reports/SCANNET_SCENE0000_00_UNIFORM500_RESULTS.md">查看完整实验报告</a>
+  </footer>
+
+  <script src="assets/amb3r_gt.cloud.js"></script>
+  <script src="assets/amb3r.cloud.js"></script>
+  <script src="assets/da3.cloud.js"></script>
+  <script src="viewer.js"></script>
+</body>
+</html>

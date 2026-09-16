@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="记录从 RGB 视频重建可交互 SimReady 场景的方案讨论、判断变化与待验证问题。">
+  <title>方案思路演进 · Video to SimReady</title>
+  <style>
+    :root { color-scheme: light; --ink:#17352d; --muted:#56746a; --accent:#0b7f5b; --soft:#eaf6ef; --paper:#fff; --line:#cfe5dc; --bg:#f4fbf7; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+    body { margin:0; color:var(--ink); background:linear-gradient(180deg,#edf8f2,var(--bg) 260px); font:16px/1.85 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Microsoft YaHei",sans-serif; }
+    main { width:min(1040px,calc(100% - 40px)); margin:auto; padding:38px 0 60px; }
+    a { color:#006c4b; text-underline-offset:4px; }
+    a:hover { text-decoration-thickness:2px; }
+    a:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:5px; border-radius:3px; }
+    .skip { position:absolute; left:16px; top:-100px; background:white; padding:8px 16px; z-index:2; }
+    .skip:focus { top:12px; }
+    h1,h2,h3,p { margin:0; }
+    h1 { font-size:clamp(28px,4vw,40px); line-height:1.3; letter-spacing:.015em; }
+    h2 { font-size:clamp(22px,3vw,28px); line-height:1.5; }
+    h3 { font-size:20px; line-height:1.5; margin-bottom:14px; }
+    p + p { margin-top:12px; }
+    .intro, article { background:var(--paper); border:1px solid var(--line); border-radius:18px; }
+    .intro { padding:28px 32px; margin-bottom:24px; }
+    .eyebrow { font-size:12px; color:var(--accent); font-weight:700; letter-spacing:.12em; margin-bottom:8px; }
+    .intro > p:last-of-type { color:var(--muted); margin-top:12px; }
+    nav { display:flex; gap:8px 20px; flex-wrap:wrap; margin-top:20px; padding-top:16px; border-top:1px solid var(--line); font-size:14px; }
+    nav a { text-decoration:none; }
+    article { padding:30px 32px; }
+    article + article { margin-top:24px; }
+    .case-gallery { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0; }
+    .case-gallery figure { margin:0; min-width:0; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+    .case-gallery a { display:block; }
+    .case-gallery img { display:block; width:100%; height:auto; aspect-ratio:4/3; object-fit:contain; background:#111; }
+    .case-gallery figcaption { padding:12px; font-size:14px; line-height:1.65; }
+    .case-gallery figcaption strong { display:block; margin-bottom:4px; }
+    .case-details { padding:0 18px 18px; }
+    .round-meta { display:flex; align-items:center; gap:10px 16px; flex-wrap:wrap; font-size:13px; color:var(--muted); margin-bottom:12px; }
+    .round-number { background:var(--soft); color:var(--accent); padding:3px 10px; border-radius:6px; font-weight:700; }
+    .round-header > p { margin-top:10px; color:var(--muted); }
+    section { margin-top:30px; padding-top:28px; border-top:1px solid var(--line); }
+    details { margin-top:24px; border:1px solid var(--line); border-radius:10px; background:#f9fcfa; }
+    summary { padding:14px 18px; cursor:pointer; font-weight:600; }
+    blockquote { margin:0 18px 20px; padding-left:18px; border-left:3px solid #a2cbb6; color:#37564a; }
+    blockquote p { margin-top:10px; }
+    .recommendation { background:var(--soft); border-left:4px solid var(--accent); border-radius:0 10px 10px 0; padding:20px 22px; }
+    .recommendation strong { display:block; font-size:22px; line-height:1.6; margin-bottom:8px; }
+    .note { color:var(--muted); font-size:14px; }
+    .note-spaced { margin-top:14px; }
+    .flow { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; list-style:none; padding:0; margin:20px 0; }
+    .flow li { border:1px solid var(--line); border-radius:10px; padding:15px; margin:0; background:#f9fcfa; }
+    .flow span { display:block; font-size:12px; color:var(--accent); font-weight:700; margin-bottom:6px; }
+    .flow strong { display:block; font-size:16px; }
+    .flow p { font-size:14px; color:var(--muted); margin-top:5px; }
+    ul,ol { padding-left:23px; margin:14px 0 0; }
+    li + li { margin-top:12px; }
+    .table-wrap { overflow-x:auto; margin:16px 0; border:1px solid var(--line); border-radius:10px; }
+    table { border-collapse:collapse; width:100%; font-size:15px; }
+    caption { text-align:left; padding:12px 15px; color:var(--muted); background:#fafcfb; font-size:13px; }
+    th,td { text-align:left; vertical-align:top; padding:13px 15px; border-bottom:1px solid var(--line); }
+    th { background:var(--soft); font-weight:600; }
+    tr:last-child td { border-bottom:0; }
+    .example-table th:first-child { width:22%; }
+    .example-table th:nth-child(2) { width:23%; }
+    .evidence { margin:16px 0 0; }
+    .evidence > div { display:grid; grid-template-columns:115px 1fr; gap:16px; padding:14px 0; border-top:1px dashed var(--line); }
+    .evidence dt { font-weight:700; }
+    .evidence dd { margin:0; }
+    .boundary { padding:18px 20px; background:#fff8e9; border:1px solid #ead9b1; border-radius:10px; margin-top:18px; }
+    code { font: .9em/1.7 ui-monospace,SFMono-Regular,Consolas,monospace; background:#edf4f0; padding:2px 5px; border-radius:4px; overflow-wrap:anywhere; }
+    .record { padding:16px 20px; margin-top:18px; background:#f7faf8; border:1px dashed #b8cec1; border-radius:10px; }
+    .sources { font-size:14px; }
+    .sources li + li { margin-top:14px; }
+    footer { padding:22px 8px 0; color:var(--muted); font-size:13px; }
+    footer p + p { margin-top:8px; }
+    @media(max-width:680px) {
+      main { width:calc(100% - 24px); padding-top:18px; }
+      .intro,article { padding:22px 18px; border-radius:12px; }
+      .intro { margin-bottom:16px; }
+      .flow { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .case-gallery { grid-template-columns:1fr; }
+      .evidence > div { grid-template-columns:1fr; gap:3px; }
+      .example-table { min-width:590px; }
+      .recommendation { padding:16px; }
+      .recommendation strong { font-size:20px; }
+      blockquote { margin-left:14px; margin-right:14px; padding-left:12px; }
+      nav { gap:8px 16px; }
+    }
+    @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
+    @media print {
+      body { background:white; color:black; }
+      main { width:100%; padding:0; }
+      nav,.skip { display:none; }
+      .intro,article { border:0; padding:12px 0; }
+      section { break-inside:avoid; }
+      .table-wrap { overflow:visible; }
+      .example-table { min-width:0; }
+      a { color:inherit; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#round-01">跳到第一轮讨论</a>
+  <main>
+    <header class="intro">
+      <p class="eyebrow">VIDEO TO SIMREADY · DISCUSSION NOTES</p>
+      <h1>方案思路演进</h1>
+      <p>从 RGB 视频到可交互场景：保留每轮的问题、建议与验证路径，记录为什么改变想法，而不只记录最后的答案。</p>
+      <nav aria-label="讨论目录">
+        <a href="#round-02">第二轮 · 马桶异名与部件拆分</a>
+        <a href="#question">原问题</a>
+        <a href="#conclusion">核心判断</a>
+        <a href="#example">具体例子</a>
+        <a href="#approach">建议方案</a>
+        <a href="#validation">下一步验证</a>
+        <a href="#boundaries">能力边界</a>
+      </nav>
+    </header>
+
+    <!-- 后续讨论追加独立 article，使用 round-02、round-03 等 ID；保留旧轮次的原问题和当时建议。 -->
+    <article id="round-01" aria-labelledby="round-title">
+      <header class="round-header">
+        <div class="round-meta">
+          <span class="round-number">第一轮讨论</span>
+          <span>整理日期：<time datetime="2026-09-16">2026-09-16</time></span>
+          <span>状态：方案建议，尚待实验验证</span>
+        </div>
+        <h2 id="round-title">跨帧看见的，究竟是不是同一个物体？</h2>
+        <p>本轮聚焦物体身份、位置与类别的一致性，不把“得到点云”直接等同于“得到可交互资产”。</p>
+      </header>
+
+      <details id="question" open>
+        <summary>原问题 · 用户原文</summary>
+        <blockquote>
+          <p>我们来开放式的讨论一个问题，就是我想做的是一套能只接收视频作为输入，把视频中的场景重建成为可交互的simready场景的算法。</p>
+          <p>这个算法面对的一个重要的问题就是跨帧一致性的问题，同一个物体，在视角差别很大和拍摄时间差别很大的两帧中被拍到，很可能被赋予不同的类别名，因而被识别成不同的两个物体。</p>
+          <p>另外靠的相近两个同类物体也很在聚类时，因为类别一致而被聚类为一个物体。所以如何从视频中正确识别出所有物体，确定他们的位置和类别是个很困难的问题。你有什么思路？</p>
+        </blockquote>
+      </details>
+
+      <section id="conclusion" aria-labelledby="conclusion-title">
+        <h3 id="conclusion-title">核心判断：先建立身份，再统一名字</h3>
+        <div class="recommendation">
+          <strong>增量建档 ＋ 全局纠错，最后生成可交互资产。</strong>
+          <p>模型每一帧给出的 mask 和类别，只是一条“看见了什么”的观测。系统需要另外维护“它是谁”的物体档案，让同一个物体可以积累不同名称，不同物体也可以拥有相同类别。</p>
+        </div>
+        <p class="note note-spaced">这不要求在线立即做最终决定。先允许临时身份和不确定关系，视频结束后再利用全部视角修正。</p>
+        <p style="margin-top:16px">重新看这个问题，<strong>类别名变化不一定是错误</strong>：<code>chair</code> 和 <code>armchair</code> 可能只是描述粒度不同。真正需要避免的是把“名称变化”直接变成“物体数量变化”。</p>
+        <p>因此要分开四件事：<strong>类别名</strong>是属性，<strong>帧内 mask ID</strong>是观测编号，<strong>临时物体 ID</strong>是关联假设，<strong>全局物体 ID</strong>才代表最终确认的实体。</p>
+      </section>
+
+      <section id="example" aria-labelledby="example-title">
+        <h3 id="example-title">一个例子：并排摆着的两把椅子</h3>
+        <p>假设视频拍到了左椅子 A 和右椅子 B。下面是示意，不是当前实验的统计结果。</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="椅子跨帧身份示例，窄屏可横向滚动">
+          <table class="example-table">
+            <caption>同物可以异名，异物也可以同名；归属应由观测证据决定。</caption>
+            <thead><tr><th scope="col">观测</th><th scope="col">模型给的名称</th><th scope="col">系统应该怎样处理</th></tr></thead>
+            <tbody>
+              <tr><td>开头看见 A 正面</td><td><code>chair</code></td><td>建立临时档案 A，保存 mask、位置与来源帧。</td></tr>
+              <tr><td>很久后看见 A 侧面</td><td><code>armchair</code></td><td>若几何和中间视角支持同一物体，就归入 A；不因名字变化新建资产。</td></tr>
+              <tr><td>同一画面清楚看见 B</td><td><code>chair</code></td><td>A、B 是两个完整物体的证据支持分开；不因同类且靠近就合并。</td></tr>
+              <tr><td>只看见难以归属的椅背</td><td><code>chair</code></td><td>证据不足时暂不归属，等待其他视角；不强行猜 A 或 B。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>理想结果是<strong>两个物体 ID、两份各自的几何、各自的类别证据</strong>，而不是按名字生成三个模型，或把两把椅子拼成一个模型。</p>
+      </section>
+
+      <section id="approach" aria-labelledby="approach-title">
+        <h3 id="approach-title">建议方案：聚合观测，不直接按类别聚类点</h3>
+        <ol class="flow" aria-label="从观测到资产的四个阶段">
+          <li><span>01 · 收集</span><strong>逐帧观测</strong><p>图像、mask、局部几何、名称与置信度。</p></li>
+          <li><span>02 · 关联</span><strong>临时物体档案</strong><p>更新已有物体，或建立待确认的新身份。</p></li>
+          <li><span>03 · 纠错</span><strong>全局合并与拆分</strong><p>检查长时间回访、错误连边和类别冲突。</p></li>
+          <li><span>04 · 生成</span><strong>独立 SimReady 资产</strong><p>身份稳定后，再补几何和交互属性。</p></li>
+        </ol>
+        <ol>
+          <li><strong>先建立统一空间中的观测。</strong>从视频估计相机与几何，把每张 mask 对应的可见表面放到同一坐标系；保留原帧、像素对应和不确定性。几何重估时应能重新投影，不能把早期漂移永久焊死。</li>
+          <li><strong>再判断两次观测是否来自同一个物体。</strong>先按空间关系检索候选，再结合表面对应、多视角一致性、时序连续性和图像外观。类别只作辅助证据，不作为必须相等的条件；外观相似也不能单独证明身份。</li>
+          <li><strong>用全视频证据纠正临时关联。</strong>保留原始观测和每次合并／拆分理由，允许撤销。不能因为 A 连 B、B 连 C，就在存在冲突时把 A、B、C 全部合成一个物体。</li>
+          <li><strong>按物体融合位置、几何与语义。</strong>用多视角支持的表面估计位置和范围，而不是用单帧可见片段的质心当物体中心。类别按不同视角的证据加权，保留原始别名和候选细分类；连续相似帧不应重复计成大量独立证据。</li>
+        </ol>
+        <div class="record">
+          <strong>每个物体档案至少保存</strong>
+          <p>全局／临时 ID · 来源帧与 mask · 已观测表面点云 · 位置与范围 · 类别候选及置信度 · 合并／拆分历史。</p>
+          <p class="note">这是建议的数据表达，不代表这些字段已经全部实现。最终补全网格应与真实观测点分开保存。</p>
+        </div>
+      </section>
+
+      <section id="evidence" aria-labelledby="evidence-title">
+        <h3 id="evidence-title">最重要的规则：同一、不同、暂时不知道</h3>
+        <dl class="evidence">
+          <div><dt>支持同一</dt><dd>在误差容许范围内有一致的三维表面对应；其他视角能把局部观测连接为同一整体；外观与可见性也相容。要多条证据互相支持。</dd></div>
+          <div><dt>支持不同</dt><dd>多个可靠视角清楚显示两个独立完整物体，或位置／表面归属存在难以解释的冲突。空间相近和类别相同不能抵消这些证据。</dd></div>
+          <div><dt>暂时不知道</dt><dd>看不到共同表面、严重遮挡、几何质量差或外观过于相似。没有重叠不等于不同；没有冲突也不等于同一。</dd></div>
+        </dl>
+        <p class="note note-spaced">特别注意：同帧的两个 mask 可能是重复检测，或“椅子／椅背”这样的整体与部件；一张大 mask 也可能错包两个物体。因此不能机械地把同帧不同 mask 判为不同物体，也不能把一次重叠判为同一物体。</p>
+        <p>第一版宜<strong>优先控制误合并</strong>：把两个物体混成一个，后面的形状和资产生成都会受污染；暂时多留一个待确认档案，通常更容易回退。但必须同时报告未解决比例，不能靠“全部不知道”获得表面的高准确率。</p>
+      </section>
+
+      <section id="validation" aria-labelledby="validation-title">
+        <h3 id="validation-title">下一步：先验证“认对物体”，不要急着生成资产</h3>
+        <p>建议先做一个小型关联诊断，再扩展到整个场景；本轮仅记录实验设计，不运行新聚类。</p>
+        <ol>
+          <li><strong>选困难样例。</strong>从已有场景选少量关键帧和 20–50 对 mask 观测，覆盖同物异名、相邻同名、长时间回访，以及重复／部件 mask。人工标为同一、不同或证据不足。</li>
+          <li><strong>比较最小方案。</strong>对比“仅几何关联”与“几何＋多视角证据”，再看加入外观是否真正有帮助。先不把多个大模型堆在一起，也不预设某个相似度阈值天然正确。</li>
+          <li><strong>记录可检查的结果。</strong>每一对都输出支持证据、反对证据和决策。留出部分样例不参与调阈值；分别报告误合并、误拆分和未决比例。对确定给出的 same／different 判断统计错误，人工也无法判断的样例单列。</li>
+          <li><strong>再检验全局聚类。</strong>配对判断通过后，仍要检查是否出现错误连边造成的大簇、同一物体被拆成多个 ID，以及物体点云混入邻居表面。配对正确率高不等于全局身份正确。</li>
+        </ol>
+        <div class="record">
+          <strong>与现有实验的连接</strong>
+          <p>目前这份反投影结果有 500 帧、6,795 个原始 mask 观测，没有跨帧融合和类别归并。它可以作为关联实验的输入，但“观测数量”不是“物体数量”。</p>
+          <p class="note">依据：<a href="../InstanceRecognition/runtime/mask_pointclouds/scene0000_00/amb3r_gt_raw/projection_report.json">投影报告</a> · <a href="../InstanceRecognition/runtime/mask_pointclouds/scene0000_00/amb3r_gt_raw/index.html">离线点云检查页</a></p>
+        </div>
+      </section>
+
+      <section id="boundaries" aria-labelledby="boundaries-title">
+        <h3 id="boundaries-title">这套思路能解决什么，还不能保证什么</h3>
+        <ul>
+          <li><strong>先限定静态室内扫描。</strong>第一版以完整物体为身份单位；动态物体需要额外区分物体运动与相机运动，柜门／抽屉等部件身份和关节层级留到后续。不能只靠固定空间位置追踪移动物体。</li>
+          <li><strong>视频没有看到的内容，不能当作已恢复。</strong>漏检的物体不会靠聚类凭空出现；相反两面没有连接证据时，身份也可能无法确定。隐藏表面补全属于带先验的推测，不是观测真值。</li>
+          <li><strong>只输入单目 RGB，不代表绝对尺度可保证。</strong>几何本身存在尺度歧义；学习到的米制深度或尺寸先验可以估计尺度，但不是可验证的物理保证。若引入已知尺寸、深度或其他传感器，应明确说明输入假设已经改变。</li>
+          <li><strong>实例点云不等于 SimReady。</strong>还需要独立网格、碰撞体、支撑关系、合理尺度，以及任务需要的关节和物理参数。尤其摩擦、质量和未展示的关节运动，不能从普通扫描视频直接保证，需要先验、假设或额外验证。</li>
+        </ul>
+        <div class="boundary">
+          <strong>GT 边界必须单独记录</strong>
+          <p>当前点云使用 GT 修正的 AMB3R 几何。可先用它隔离变量、诊断关联问题，但它仍可能有局部几何误差；后续必须在不使用 GT 修正的 RGB 重建上重测。前者通过，不能证明整个系统已满足“只接收视频”的目标。</p>
+        </div>
+      </section>
+
+      <section id="references" aria-labelledby="references-title">
+        <h3 id="references-title">参考思路，不直接照搬输入假设</h3>
+        <ul class="sources">
+          <li><a href="https://pku-epic.github.io/MaskClustering/">MaskClustering · 官方项目</a>：借鉴多视角共识与 mask 图聚类。<a href="https://github.com/PKU-EPIC/MaskClustering">官方代码说明</a>的输入是 RGB-D 扫描与重建点云；它不是从纯 RGB 视频完成几何和 SimReady 的整套方法。</li>
+          <li><a href="https://concept-graphs.github.io/">ConceptGraphs · 官方项目</a>：借鉴对象级地图与跨视角增量关联。原方案使用带位姿的 RGB-D 图像；我们需要另行解决 RGB 几何、误差传播和可撤销身份关联。</li>
+        </ul>
+        <p class="note note-spaced">上面的组织方式与实验顺序是本轮方案建议，不是对已有论文效果的复现声明，也不是已验证的完整系统。</p>
+      </section>
+
+      <section id="takeaway" aria-labelledby="takeaway-title">
+        <h3 id="takeaway-title">第一轮留下的判断</h3>
+        <p><strong>不要让类别名决定物体身份；让跨视角证据维护可纠错的物体档案。</strong></p>
+        <p>暂不采用“同类别＋距离近就合并”，也不在逐帧阶段生成最终资产。下一轮应重点讨论：关联证据如何量化、何时允许合并，以及如何发现并拆开错误合并的物体。</p>
+      </section>
+    </article>
+
+    <article id="round-02" aria-labelledby="round-02-title">
+      <header class="round-header">
+        <div class="round-meta">
+          <span class="round-number">第二轮讨论</span>
+          <span>整理日期：<time datetime="2026-09-16">2026-09-16</time></span>
+          <span>状态：具体样例分析，尚未运行关联与融合</span>
+        </div>
+        <h2 id="round-02-title">同一个马桶，为什么变成了 potty、water tank 和 chair？</h2>
+        <p>本轮从三张实际截图出发，讨论如何得到“一份物体点云＋一个稳定类别”，不修改原始检测结果。</p>
+      </header>
+
+      <details id="round-02-question">
+        <summary>本轮问题 · 用户原文</summary>
+        <blockquote><p>我们从一个具体的问题出发，你可以看一下tmp/下的3张图，房间中的同一个马桶在相邻3次识别中被打上了不同的语义标签，对于这种情况，我们如何使用点云和2D Mask，在下一步处理的时候能正确定位物体的类别标签和对应的占据点云？</p></blockquote>
+      </details>
+
+      <section id="round-02-observations" aria-labelledby="round-02-observations-title">
+        <h3 id="round-02-observations-title">先看清问题：不仅异名，还拆成了部件</h3>
+        <div class="case-gallery">
+          <figure>
+            <a href="assets/scene-reconstruction/round-02/109.png" aria-label="查看 109.png 原图"><img src="assets/scene-reconstruction/round-02/109.png" alt="109.png：门内马桶的可见整体被标记为 5 · potty" width="823" height="634" loading="lazy"></a>
+            <figcaption><strong>109.png · 整体观测</strong><code>5 · potty</code><br>一个 mask 覆盖马桶的可见整体。</figcaption>
+          </figure>
+          <figure>
+            <a href="assets/scene-reconstruction/round-02/110.png" aria-label="查看 110.png 原图"><img src="assets/scene-reconstruction/round-02/110.png" alt="110.png：同一马桶区域被拆为 4 · water tank 和 11 · potty 两张 mask" width="830" height="625" loading="lazy"></a>
+            <figcaption><strong>110.png · 部件观测</strong><code>4 · water tank</code> ＋ <code>11 · potty</code><br>水箱与坐便器区域被分别分割。</figcaption>
+          </figure>
+          <figure>
+            <a href="assets/scene-reconstruction/round-02/111.png" aria-label="查看 111.png 原图"><img src="assets/scene-reconstruction/round-02/111.png" alt="111.png：马桶的可见整体被错误标记为 1 · chair" width="830" height="624" loading="lazy"></a>
+            <figcaption><strong>111.png · 类别误判</strong><code>1 · chair</code><br>名称错误，但仍可能提供有用的马桶表面点。</figcaption>
+          </figure>
+        </div>
+        <p class="note">截图来自 <code>tmp/109.png–111.png</code>，已保存独立副本，可点击放大。按帧内 ID 和类别与<a href="../InstanceRecognition/runtime/mask_pointclouds/scene0000_00/amb3r_gt_raw/manifest.json">本地 manifest</a>匹配，候选源帧为 <code>1218 / 1229 / 1241</code>（sequence <code>109 / 110 / 111</code>）；这是匹配推断，尚未逐像素确认。截图文件名不是原始视频帧号，类别前的 ID 也仅在各帧内有效。</p>
+      </section>
+
+      <section id="round-02-plan" aria-labelledby="round-02-plan-title">
+        <h3 id="round-02-plan-title">建议：先认定是同一物体，再确定它叫什么</h3>
+        <div class="recommendation">
+          <strong>不按名字合并；按跨帧表面对应建立物体 ID。</strong>
+          <p><code>chair</code> 不应自动产生第二个物体，<code>water tank</code> 也不应被当作 <code>toilet</code> 的同义词。</p>
+        </div>
+        <ol>
+          <li><strong>关联整体观测。</strong>取每张 mask 对应的已有世界坐标点，比较共同可见表面的对应，而不是只比中心距离。再投回另一帧：既要落入对应 mask，也要与该处深度相符。这样，109 的 <code>potty</code> 和 111 的 <code>chair</code> 才有依据归入同一个物体候选。</li>
+          <li><strong>区分整体与部件。</strong>若 110 的水箱点被其他视角的整体马桶观测稳定包含，就记录“水箱属于这个马桶”，坐便器区域同理。不能因为两块点相邻就合并，也不能因为同帧有两个 mask 就断定是两个独立物体。单张大 mask 可能包错，需更多视角复核。</li>
+          <li><strong>形成物体点云。</strong>将已关联观测映射到共享体素或表面邻域，合并重复采样；由多个有效视角支持的点组成稳定表面。边缘、只见一次或归属冲突的点单独保留为待确认，不直接混入最终点云。遮挡和漏检不计为反对票，相邻近似视角也不重复算作独立证据。</li>
+          <li><strong>最后确定类别。</strong>挑选清晰、视角不同的 RGB＋mask 裁剪，再识别一次或人工核对。几何能支持“是同一个”，却不能单独证明“叫马桶”。本例用户已给出马桶这一人工参照；自动流程仍应复核 <code>toilet</code>，把 <code>chair</code> 记为误判证据、<code>water tank</code> 记为部件描述，而不是对三帧简单多数投票。</li>
+        </ol>
+
+        <details id="round-02-technical">
+          <summary>展开：关联和点归属具体怎么判断？</summary>
+          <div class="case-details">
+            <p><strong>双向看覆盖。</strong>分别计算“A 的可靠可见点有多少得到 B 的 mask／表面支持”与反方向的比例。双向高覆盖支持同一表面观测；只有小块被大块覆盖，提示部件／局部观测候选，而非立即合并。可见共同表面太少时记为未知，不能用少数点的高比例作结论。</p>
+            <p><strong>再看多视角归属。</strong>每个体素保存来源帧、mask 和物体候选的支持／冲突证据。只在视野内、未被遮挡且深度可信的位置检验；只投到 2D mask 内还不够。没有检测到该物体不等于背景，若有可靠的其他实体表面争用该点，则保留冲突。体素尺寸和匹配半径应按局部几何误差校准。</p>
+            <p><strong>不丢原始数据。</strong>使用逐帧 NPZ 中的 mask 点，而非仅用展示用的抽样全局 PLY；沿用 <code>mask_bits</code> 的重叠归属及原始标签，另存派生物体结果。跨帧点不是天然共享同一索引，需要空间对应；重投影还需与点云一致的相机位姿、深度与图像裁剪，不能混用未修正的坐标。</p>
+          </div>
+        </details>
+      </section>
+
+      <section id="round-02-output" aria-labelledby="round-02-output-title">
+        <h3 id="round-02-output-title">这个例子希望得到的结果</h3>
+        <div class="record">
+          <p><strong>示意档案：</strong><code>object_001</code> → 候选类别 <code>toilet</code> → 水箱＋坐便器的已观测表面点云；水箱保留为部件，不另算一个完整物体。</p>
+          <p><strong>定位：</strong>记录稳定表面的空间范围框；其中心仅用于定位展示，不宣称是完整马桶的真实中心。原始标签、来源帧／mask 与待确认点都可追溯。</p>
+        </div>
+        <p class="note note-spaced">这是目标结果，不是已算出的关联。这里的“占据点云”只指已观测表面，不包含未见背面、内部实心体积或完整碰撞体。水箱上的卷纸、旁边的墙／地面不能因被 mask 带入就算作马桶；若所有视角都把卷纸与马桶粘在一起，仅靠投票也分不开，需要局部重新分割或保留未决。</p>
+        <p><strong>下一步只做这个马桶的小实验：</strong>复核这组三帧与原图的对应，补几张有不同视角的观测，展示候选关联、水箱部件关系，以及稳定／待确认／冲突三类点。先验证没有混入邻物，再扩大到整个房间。</p>
+        <p class="note note-spaced"><strong>相较第一轮的推进：</strong>把“先身份、后语义”具体化为“整体观测与部件观测分开关联”。当前 GT 修正 AMB3R 点云仅作诊断输入，仍有局部误差；三张相邻截图本身不足以证明三维关联和类别已正确。</p>
+        <p class="note note-spaced">思路参考：<a href="https://pku-epic.github.io/MaskClustering/">MaskClustering 官方项目</a>用其他视角的共同包含关系构建 mask 关联证据。本轮的部件关系、未决点与类别复核是针对本例的方案建议，不是该方法已保证解决的能力。</p>
+      </section>
+    </article>
+
+    <footer>
+      <p>后续每轮追加“原问题 → 本轮建议 → 与前轮相比的变化 → 验证证据／未决问题”，保留当时判断，不把后来的结果倒写成早已确定的结论。</p>
+      <p>本页可离线直接打开，无需服务或模型。<a href="../web_command.md">所有网页的打开方法</a> · <a href="#round-01">第一轮</a> · <a href="#round-02">第二轮</a></p>
+    </footer>
+  </main>
+</body>
+</html>

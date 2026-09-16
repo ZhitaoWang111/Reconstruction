@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SimRecon 论文阅读记录</title>
+  <style>
+    :root { color-scheme: light; --bg:#eef7f1; --card:#ffffff; --ink:#183528; --muted:#5d786b; --line:#cfe3d8; --accent:#0f7b52; --soft:#def2e8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg,#eef7f1,#f8fcfa); color: var(--ink); line-height: 1.72; }
+    main { max-width: 1080px; margin: 0 auto; padding: 40px 20px 72px; }
+    header, section { background: rgba(255,255,255,.92); border: 1px solid var(--line); border-radius: 18px; padding: 26px; margin-bottom: 22px; box-shadow: 0 10px 30px rgba(28,76,54,.06); }
+    h1 { margin: 0 0 12px; font-size: clamp(28px,4vw,44px); line-height: 1.14; }
+    h2 { margin: 0 0 16px; font-size: 24px; color: var(--accent); }
+    h3 { margin: 22px 0 8px; font-size: 18px; }
+    p { margin: 8px 0; }
+    a { color: var(--accent); font-weight: 650; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 18px; }
+    .meta div { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+    .tag { display: inline-block; margin: 0 8px 8px 0; padding: 4px 10px; border-radius: 999px; background: #e5f5ee; color: #0e6d49; font-size: 13px; font-weight: 700; }
+    ul { padding-left: 20px; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; overflow: hidden; border-radius: 12px; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; vertical-align: top; text-align: left; }
+    th { background: #e4f3eb; }
+    .note { border-left: 4px solid var(--accent); padding: 8px 12px; background: #f3faf6; color: var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="tag">SimReady 重建</span><span class="tag">Real Video</span><span class="tag">Perception-Generation-Simulation</span>
+    <h1>SimRecon: SimReady Compositional Scene Reconstruction from Real Videos</h1>
+    <p>阅读对象：<a href="../SimRecon.pdf">本地 PDF</a></p>
+    <div class="meta">
+      <div><strong>作者 / 单位</strong><br>Chong Xia, Kai Zhu, Zizhuo Wang, Fangfu Liu, Zhizheng Zhang, Yueqi Duan；Tsinghua University, Galbot。</div>
+      <div><strong>发表状态</strong><br>本地 PDF 正文未标注 arXiv 编号或会议接收信息；PDF metadata 显示创建时间为 2026-05-11。</div>
+      <div><strong>开源程度</strong><br>PDF 标题页提供项目页入口；正文未明确声明代码、数据或模型权重的开源范围，按“项目页可访问，开源状态未由 PDF 证实”记录。</div>
+    </div>
+  </header>
+
+  <section>
+    <h2>1. 研究背景和动机</h2>
+    <p>SimRecon 解决从真实视频恢复 simulation-ready、object-centric 组合场景的问题。NeRF、3DGS 等整体重建方法能获得高视觉保真，但缺少完整物体几何、明确 object boundaries 和可交互表示，因此难以直接用于仿真和机器人交互。</p>
+    <p>已有 real-to-sim 或 compositional reconstruction 方法通常分成语义重建、单物体生成和场景装配三步，但朴素串联会带来两个瓶颈：从感知到生成时，遮挡和不合适视角导致资产视觉/几何失真；从生成到仿真时，物体之间缺乏支撑与接触结构，最终场景漂浮、穿插或物理不稳定。</p>
+    <p class="note">论文把贡献集中在两段“桥接模块”：Active Viewpoint Optimization 保证生成条件更好，Scene Graph Synthesizer 保证仿真装配更像真实世界的构造过程。</p>
+  </section>
+
+  <section>
+    <h2>2. 研究方法</h2>
+    <h3>Perception-Generation-Simulation 管线</h3>
+    <p>输入为 cluttered real-world video。第一步做 scene-level semantic reconstruction，恢复 3D 场景并区分实例；第二步对每个对象做 single-object generation，获得完整资产；第三步在物理 simulator 中装配为 simulation-ready scene。</p>
+
+    <h3>Active Viewpoint Optimization</h3>
+    <p>AVO 解决“用哪张视角图作为 3D 资产生成条件”的问题。简单选择最大 2D 可见面积会被相机距离和透视误导，固定 canonical view 又容易被遮挡。SimRecon 在 3D 空间主动搜索投影视角，最大化可见/信息增益并加入深度约束，得到更适合单物体 completion 的条件图。</p>
+
+    <h3>Scene Graph Synthesizer</h3>
+    <p>SGS 从多个 region views 渐进合成全局 scene graph，主要建模 supported by 和 attached to 关系。它先在局部视图中推理子图，再把子图在线 merge 到全局图中；当新关系与已有路径冲突时，会重新选择 adjudication viewpoint 并用 VLM 重新判断关系集合。</p>
+
+    <h3>In-Situ、Corrective、Constructive Assembly</h3>
+    <p>论文图 1 把生成到仿真的装配思路概括为 In-Situ、Corrective、Constructive 三类。In-Situ 可以理解为直接沿用感知阶段给出的初始位置放置资产，问题是会把重建误差直接带入模拟器；Corrective 是先放置再用后处理优化修正碰撞/穿插，论文在与 MetaScenes 的对比中指出这类 post-hoc MCMC 碰撞搜索比较“盲”，容易陷入局部最优，也不能恢复准确接触关系；Constructive 是 SimRecon 采用的原则：先推断物体间 support / attachment 关系，再从 Floor、Wall 等基础节点开始层级构造。</p>
+
+    <h3>Hierarchical Physical Assembly</h3>
+    <p>具体装配时先放置 Floor、Wall 等基础节点，并把它们设为 passive rigid bodies。对于 support 关系，child object 先按初始位姿放置并相对 parent 略微上移，然后短时激活物理仿真，让它在重力和碰撞下 settle 到 parent surface；对于 attachment 关系，则施加 fixed constraint，模拟对象锚定到 parent 表面。这个流程是 Scene Graph Synthesizer 输出关系图后的执行层。</p>
+  </section>
+
+  <section>
+    <h2>3. 实验设计和结果</h2>
+    <h3>实验设置</h3>
+    <p>论文在 ScanNet 的 20 个真实场景上评测，只使用 raw RGB videos，不使用 depth、normal 或 semantics。语义重建用 2DGS 和 SceneSplat，单物体生成用 Rodin，仿真场景构建在 Blender 和 Isaac Sim 中完成；Qwen2.5-VL 用于 intrinsic attributes 和 scene graph 推理。AVO 在单张 NVIDIA RTX A6000 上每个物体约 30 秒，整场景平均约 21 分钟。</p>
+
+    <h3>主结果</h3>
+    <table>
+      <thead><tr><th>方法</th><th>CD ↓</th><th>F-Score ↑</th><th>NC ↑</th><th>PSNR ↑</th><th>SSIM ↑</th><th>LPIPS ↓</th><th>MUSIQ ↑</th><th>Time</th></tr></thead>
+      <tbody>
+        <tr><td>Gen3DSR</td><td>11.69</td><td>30.19</td><td>70.50</td><td>19.26</td><td>0.886</td><td>0.425</td><td>60.94</td><td>17min</td></tr>
+        <tr><td>SceneGen</td><td>7.66</td><td>46.72</td><td>79.13</td><td>18.18</td><td>0.873</td><td>0.334</td><td>60.22</td><td>6min</td></tr>
+        <tr><td>DPRecon</td><td>9.26</td><td>46.12</td><td>78.28</td><td>21.97</td><td>0.913</td><td>0.257</td><td>71.49</td><td>10h 42min</td></tr>
+        <tr><td>InstaScene</td><td>6.90</td><td>49.69</td><td>82.55</td><td>22.35</td><td>0.907</td><td>0.302</td><td>71.57</td><td>29min</td></tr>
+        <tr><td>SimRecon</td><td>4.34</td><td>62.65</td><td>87.37</td><td>24.43</td><td>0.924</td><td>0.153</td><td>73.56</td><td>21min</td></tr>
+      </tbody>
+    </table>
+
+    <h3>物理构建对比、消融与失败模式</h3>
+    <p>与 MetaScenes 的仿真构建对比中，MetaScenes 依赖从 ScanNet 得到的较好点云和检索资产，最后用 MCMC 后处理碰撞；SimRecon 用 SGS 指导层级装配，减少漂浮和穿插。AVO 消融显示：最大 2D 可见性通常只代表“近”，不代表 3D 结构完整；去掉深度约束时视点会贴近表面而不实用。SGS 消融显示：单张全局投影会漏物体/关系，naive merge 会产生混乱关系图。</p>
+
+    <h3>证据边界</h3>
+    <p>SimRecon 是典型 SimReady compositional reconstruction：它显式追求可仿真的 object assets 和物理装配，而不是只优化 novel-view rendering。PDF 没有单独的 failure-case 表，失败案例主要以对比图和消融说明出现：输入视角/固定 canonical view 会导致遮挡和 malformed geometry，最大 2D visibility 会选到信息不完整的近距离视角，去掉深度约束会让视角塌到物体表面，单次全局图推理会漏关系，naive graph merging 会得到不一致关系图。限制在于实验场景数量为 20 个 ScanNet 场景，并且依赖 2DGS、SceneSplat、Rodin、Qwen2.5-VL 等外部模型；这些模块的质量会直接影响最终资产和布局。</p>
+  </section>
+</main>
+</body>
+</html>
