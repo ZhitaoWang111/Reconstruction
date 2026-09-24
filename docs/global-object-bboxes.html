@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>全局对象 · 三维包围盒</title>
+  <link rel="stylesheet" href="assets/global-object-bboxes/style.css">
+</head>
+<body>
+  <header class="masthead"><div><p class="eyebrow">RECONSTRUCTION / OBJECT MAP</p><h1>全局对象<span>三维包围盒</span></h1></div><a class="download" href="assets/global-object-bboxes/bboxes.json" download="bboxes.json">下载 JSON ↗</a></header>
+  <main class="workspace">
+    <section class="viewport-card" aria-label="三维包围盒视图">
+      <div class="view-top"><div><span class="live-dot"></span><strong>观测空间 · WebGL</strong><span id="scene-summary" class="muted"></span></div><span id="coordinate-tag" class="tag">GLOBAL · Z ↑</span></div>
+      <div class="scene-controls" aria-label="显示控制"><label><input id="show-scene" type="checkbox" checked> 场景背景点云</label><label><input id="show-instances" type="checkbox" checked> 全部实例点云</label><label><input id="show-bboxes" type="checkbox" checked> 全部 3D bbox</label><label><input id="show-labels" type="checkbox"> 全部编号</label><label><input id="show-category-labels" type="checkbox"> 显示类别标签</label><label>点云亮度 <input id="cloud-opacity" type="range" min="20" max="100" value="85" aria-label="点云亮度"></label><div class="bbox-modes"><button data-bbox="obb" class="active">直立方向框 OBB</button><button data-bbox="filtered">轴对齐 AABB</button><button data-bbox="raw">原始 AABB</button></div></div><div class="canvas-wrap"><canvas id="viewport" tabindex="0" aria-label="三维包围盒。拖动旋转、滚轮缩放、单击边框选择对象。"></canvas><div id="empty-state" class="empty-state" hidden></div><div class="view-controls" aria-label="视角控制"><button data-view="orbit" class="active">自由视角</button><button data-view="top">俯视 XY</button><button data-view="front">正视 XZ</button><button id="focus-objects">聚焦所选框</button><button id="reset-view" title="显示完整场景">全场景</button></div><div class="gesture-hint">左键拖动旋转 <i>·</i> 右键拖动平移 <i>·</i> 滚轮缩放 <i>·</i> 点击边框选择</div></div>
+      <div class="view-bottom"><span id="visible-count">等待数据</span><span id="cloud-count">直立方向包围盒 / OBB</span></div>
+    </section>
+    <aside class="sidebar"><section class="object-panel"><div class="panel-heading"><h2>对象索引 <span id="object-count">0</span></h2><div class="compact-actions"><button id="select-all">全选</button><button id="select-none">清空</button></div></div><p class="panel-intro">每个 Object 独立控制点云和 3D 框；点击名称同时显示并聚焦。</p><div id="object-list" class="object-list" aria-label="对象列表"></div></section><section class="details-panel"><p class="eyebrow">BOUNDING BOX / DETAILS</p><div id="object-details"><p class="placeholder">选择对象查看包围盒坐标。</p></div></section></aside>
+  </main>
+  <footer><div class="notice"><span class="notice-icon">i</span><p><strong>这里显示的是观测到的空间范围。</strong> 包围盒由已有 first30、state version 6 的全局对象点云生成；场景背景来自整段视频的已有重建点云，仅用于空间参考；同时可叠加 harness_window01_v3 最新全部窗口的实例点云，二者使用同一世界坐标；物体框仍只使用前30帧。可切换过滤后范围和原始 min/max 对照。过滤可能丢失真实稀疏部件，也无法纠正错误归属；两者都不是真值或完整几何。</p></div><p id="filter-summary" class="filter-summary"></p><p id="provenance" class="provenance"></p></footer>
+  <script src="assets/global-object-bboxes/data.js?v=20260924-plane-face-fit"></script>
+  <script src="assets/global-object-bboxes/viewer.js?v=20260924-plane-face-fit"></script>
+</body>
+</html>

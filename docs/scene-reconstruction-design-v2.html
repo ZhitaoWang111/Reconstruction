@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>方案 v2 · 历史视觉证据按需查看</title><style>
+:root{color-scheme:light;--ink:#203247;--line:#d8e3ed;--blue:#14628b}*{box-sizing:border-box}body{margin:0;background:#f3f7fa;color:var(--ink);font:17px/1.75 system-ui,sans-serif}main{max-width:1120px;margin:auto;padding:32px 24px 80px}a{color:var(--blue)}h1{font-size:36px;line-height:1.3}h2{font-size:25px;margin-top:40px}h3{font-size:19px;margin:0 0 10px}p{margin:8px 0}header,.step,.card{background:white;border:1px solid var(--line);border-radius:14px;padding:24px}.meta{font-size:14px;color:#5b7181;letter-spacing:.07em}.lead{font-size:21px}.arrow{text-align:center;color:var(--blue);font-size:25px;padding:7px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.agent{background:#edf8f0;border-color:#b8d8c0}.tag{display:inline-block;background:#e5f0f8;padding:2px 9px;border-radius:6px;font-size:14px}.note{border-left:4px solid #dfae4f;padding:12px 18px;background:#fff9e9}table{width:100%;border-collapse:collapse;background:white}th,td{text-align:left;vertical-align:top;border:1px solid var(--line);padding:12px}code{font-size:.9em;overflow-wrap:anywhere}.table{overflow:auto}@media(max-width:700px){.grid{grid-template-columns:1fr}h1{font-size:29px}main{padding:18px 14px}.step,header,.card{padding:18px}}
+
+html{scroll-behavior:smooth;scroll-padding-top:28px}
+body{display:grid;grid-template-columns:260px minmax(0,1120px);gap:40px;max-width:1480px;margin:0 auto;padding:24px}
+main{width:100%;min-width:0;padding:0 0 80px}
+.design-sidebar{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px 18px}
+.sidebar-eyebrow{font-size:12px;letter-spacing:.13em;color:#688093;margin-bottom:6px}.sidebar-title{font-size:22px;font-weight:700;margin-bottom:22px}
+.version-label{display:block;font-size:13px;font-weight:600;color:#597184;margin-bottom:8px}
+.version-picker{width:100%;font:14px/1.5 system-ui,sans-serif;color:var(--ink);background:#f3f7fa;border:1px solid #cbdce7;border-radius:8px;padding:11px 8px;cursor:pointer}
+.chapter-nav{display:grid;gap:7px;margin-top:26px;padding-top:20px;border-top:1px solid var(--line)}
+.chapter-nav a{display:flex;gap:12px;align-items:center;padding:12px 10px;text-decoration:none;color:#566b7c;border:1px solid transparent;border-radius:9px;font-size:15px;transition:background .15s,color .15s}
+.chapter-nav a span{font:13px ui-monospace,monospace;color:#8195a4}.chapter-nav a:hover{background:#f3f7fa}.chapter-nav a.active{background:#e8f2f9;border-color:#cde1ef;color:#14628b;font-weight:650}.chapter-nav a.active span{color:#14628b}
+.version-picker:focus-visible,.chapter-nav a:focus-visible{outline:3px solid #62a8d2;outline-offset:3px}
+h2{scroll-margin-top:28px}
+@media(max-width:1000px){body{grid-template-columns:220px minmax(0,1fr);gap:24px;padding:20px}.design-sidebar{padding:20px 12px}}
+@media(max-width:760px){body{display:block;padding:14px}.design-sidebar{position:static;max-height:none;margin-bottom:20px;padding:18px}.sidebar-title{margin-bottom:12px}.chapter-nav{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:16px;padding-top:12px;gap:4px}.chapter-nav a{font-size:14px;padding:9px 7px;gap:8px}main{padding:0 0 40px}.grid{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.chapter-nav a{transition:none}}
+
+.input-tree{margin:16px 0 24px;padding:22px;background:#142737;color:#e4edf4;border:1px solid #294456;border-radius:12px;font:14px/1.9 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;white-space:pre;overflow-x:auto;tab-size:2}.tree-caption{font-size:14px;color:#597184}.tree-section{margin-top:28px}
+
+.tool-card{margin:18px 0;padding:24px;background:white;border:1px solid var(--line);border-radius:14px}.tool-card h3{font-size:21px;line-height:1.5;margin-bottom:6px}.tool-purpose{color:#597184;margin-bottom:18px}.tool-compare{display:grid;grid-template-columns:1fr 1fr;gap:16px}.tool-era{background:#f4f7fa;border-radius:10px;padding:16px}.tool-era.now{background:#edf6fb}.tool-era h4{margin:0 0 8px;font-size:16px}.tool-era p{margin:0}.tool-difference{margin:16px 0 0;padding:12px 16px;border-left:3px solid var(--blue);background:#f5f9fc}.tool-example{font-size:15px;color:#597184;margin-top:12px}@media(max-width:760px){.tool-compare{grid-template-columns:1fr}.tool-card{padding:18px}.tool-card h3{font-size:18px}}
+</style></head><body><aside class="design-sidebar" aria-label="方案版本与章节导航">
+<div class="sidebar-eyebrow">HARNESS DESIGN</div><div class="sidebar-title">方案设计</div>
+<label class="version-label" for="design-version">版本切换</label>
+<select class="version-picker" id="design-version" aria-label="切换方案设计版本">
+<option value="scene-reconstruction-design.html">v1 · 完整框架</option>
+<option value="scene-reconstruction-design-v2.html" selected>v2 · 2026-09-24</option>
+</select>
+<nav class="chapter-nav" aria-label="本版章节">
+<a class="active" aria-current="location" href="#input"><span>01</span>模型输入</a>
+<a href="#execution"><span>02</span>执行顺序</a>
+<a href="#tool-updates"><span>03</span>工具更新</a>
+<a href="#evidence"><span>04</span>代表图与空间信息</a>
+<a href="#scope"><span>05</span>版本边界与代码</a>
+</nav></aside><main>
+<header><p class="meta">SCENE UNDERSTANDING HARNESS · DESIGN V2 · <time datetime="2026-09-24">2026-09-24</time></p><h1>历史视觉证据按需查看</h1><p class="lead">先看当前 5 帧；历史物体先给文字与空间线索，需要辨认时再看图。</p><p class="meta">方案版本 v2。早期 harness_input_v2_preview 属于 overlay 输入修订，使用独立版本名；历史回放不代表本版实际运行结果。</p></header>
+<h2 id="input">01 · 一开始，模型到底收到什么？</h2>
+<div class="grid"><section class="card"><h3>当前窗口：5 帧、10 张图片</h3><p>每帧提供完整原始 RGB + mask overlay，各一张；overlay 保留 mask 编号、颜色和 2D bbox。</p><p>同时提供观测编号、category_label、2D bbox、图像尺寸和三维摘要。最后一个窗口不足 5 帧时，按实际帧数发送。</p></section><section class="card"><h3>所有历史物体：文字与空间信息</h3><p>提供全部 Object 的编号、object_label、已有观测信息和全局 3D 框。每条当前观测另有最多 3 个最近历史 Object 候选。</p><p><strong>初始历史图片：0 张。</strong>候选只是查找线索，不删除其他 Object，也不限制 Agent 的归属选择。</p></section></div>
+<p class="note">Object 编号或观测编号出现在列表中，不代表模型已经看过对应图片，不能仅凭“列表中有这个 ID”就把它当作可引用的视觉证据。</p>
+<section class="tree-section" aria-labelledby="input-tree-title"><h3 id="input-tree-title">1.1 · 初始调用：当前观测 + 历史物体信息</h3><p class="note">历史代表观测的文字元数据会发送；<code>selection</code>（程序选帧指标）仅保留在本地审计记录，不进入模型输入。图片形式用 prompt 统一说明，不在每个 Object 下重复放置 <code>image_description</code>；历史图片仍由 <code>inspect_object</code> 按需返回。</p><p class="tree-caption">按 <code>inputs.py</code> 的实际组装顺序展开。树中的“图片”是实际发送的图像内容；全局 3D bbox 是数字 JSON，不是渲染图片。历史目录不提供可让模型自行打开的文件地址，取图由工具完成。</p><pre class="input-tree">一个窗口的初始输入
+│
+├── 1. 当前观测（通常为 5 帧）
+│   │
+│   ├── 图片：每帧 2 张，5 帧共 10 张
+│   │   ├── 完整原始 RGB
+│   │   └── 完整 mask overlay
+│   │       └── 不同颜色的 mask + mask 编号 + 2D bbox
+│   │
+│   └── 文字：每个 mask 对应一条观测记录
+│       ├── 观测编号、帧序号、mask 编号
+│       ├── category_label：上游给这条观测的类别提示
+│       ├── 2D bbox 坐标、图像尺寸、mask 颜色
+│       ├── 反投影点云摘要：点数、质心、空间范围
+│       └── 距离最近的至多 3 个历史 Object
+│           └── Object 编号、object_label、距离和排名
+│
+└── 2. 历史物体信息（覆盖全部已归档 Object）
+    │
+    ├── 物体档案：每个 Object 一条
+    │   ├── Object 编号、object_label
+    │   ├── 创建记录、生命周期状态
+    │   ├── 类别修正记录（如果发生过 relabel）
+    │   └── 已归属观测的数量、编号列表、代表观测编号
+    │
+    ├── 全局空间信息：每个 Object 的 3D bbox
+    │   ├── 框中心
+    │   ├── 三个方向的尺寸
+    │   └── 框在世界坐标中的方向
+    │       （发送数字 JSON，不发送 3D 框的渲染图）
+    │
+    ├── 历史代表观测：每个 Object 选一条，只发文字
+    │   ├── 这条观测的编号、帧、category_label、2D bbox 等
+    │   └── 图片不在初始输入中；需要时调用 inspect_object 获取
+    │
+    └── 其他历史状态
+        ├── Object 合并后的旧编号映射
+        └── 尚未归属的观测记录
+
+说明：selection（选帧指标）只保存在本地审计记录中；图片形式由 prompt 统一说明，不在每个 Object 下重复发送 image_description。</pre><p class="note">第二窗口的已验证例子：38 条当前观测 + 18 个历史 Object；初始只有 5 × 2 = 10 张当前图片，历史图片为 0 张。历史文字目录仍随物体数量增加。</p><h3>1.2 · 按需调用：历史图片如何补进来？</h3><pre class="input-tree">Agent 调用 inspect_object({&quot;object_id&quot;: &quot;Object5&quot;})【参数示意】
+├── Harness 返回 tool 消息【文字 JSON】
+│   ├── object：物体类别、状态、已归属观测编号等
+│   └── object_id、observation；图片按需返回
+│   ├── observations[]：本次代表观测的元数据
+│   ├── visual_images[]：本次新增图片的观测编号、类型、文件地址
+│   └── reused_images[]：本窗口已发送、这次不再附送的图片记录
+└── Harness 追加 user 消息【有新增图片时】
+    ├── 工具名 + tool_call_id + 图片描述，关联到刚才的工具调用
+    └── 完整 RGB + 原始 SAM3 mask 的 bbox + Object 编号【实际图片 1 张】
+
+同一窗口再次查看同一 Object：仍返回文字信息，不重复附图。
+需要其他历史视角：调用 inspect_observations({&quot;ids&quot;: [观测编号]})。
+它返回指定观测的 RGB / 目标 overlay；已发送的同一图片也会省略。</pre></section>
+<h2 id="execution">02 · 按执行顺序看一遍</h2>
+<div class="step"><span class="tag">1 · 程序</span><h3>读取窗口开始前已提交的状态</h3><p>固定历史物体及其点云、代表观测和全局框；当前窗口的判断基于这份状态进行。使用当前观测到历史物体表面的最近距离中位数，对空间候选排序。</p></div><div class="arrow">↓</div>
+<div class="step"><span class="tag">2 · 程序</span><h3>发送当前图像 + 全部历史文字信息</h3><p>5 帧 RGB/overlay 共 10 张图片；历史 Object 不预先附图。模型先看当前帧，再用文字状态、全局框和最近候选查找可能对应的物体。</p></div><div class="arrow">↓</div>
+<div class="step agent"><span class="tag">3 · Agent</span><h3>判断是否需要看某个历史物体</h3><p>已有证据足够：直接组织提案。需要核对外观或身份：调用 <code>inspect_object(object_id)</code>；需要指定观测、其他视角或 mask 细节：调用 <code>inspect_observations(ids)</code>。空间证据不足时可使用 <code>compare_geometry</code>。</p></div><div class="arrow">↓ 有需要时取证</div>
+<div class="grid"><div class="step"><h3>inspect_object：一张代表图</h3><p>返回完整 RGB，叠加<strong>一条原始 SAM3 mask 的 bbox</strong>和 Object 编号。不是物体裁剪图，不是融合后所有 mask 的外接框。</p><p>代表选择沿用“大 bbox 且相对清晰”的方法；返回代表观测编号和选择信息，便于继续查证。</p></div><div class="step"><h3>inspect_observations：补充原图与 overlay</h3><p>按指定观测返回元数据、完整 RGB 和目标 mask overlay，保留周围环境。用于补看其他视角或原始 mask 范围。</p><p>窗口内相同证据图片不重复发送。模型可复用本窗口消息中已经出现过的证据。</p></div></div><div class="arrow">↓ 等待工具结果和图片</div>
+<div class="step agent"><span class="tag">4 · Agent</span><h3>依据实际看过的证据提出修改</h3><p>决定关联、新建、暂缓、标记修复、合并或修正 object_label。每项操作带证据与理由；新 category_label 不同本身不足以证明既有 object_label 错误。</p><p>取证仍不足就暂缓，不能用空间最近或标签相同代替身份判断。</p></div><div class="arrow">↓ propose_update → 阅读预览 → commit_update</div>
+<div class="step"><span class="tag">5 · 程序</span><h3>校验、保存新版本，再进入下一窗</h3><p>沿用现有提案和提交机制；按归属变化重算受影响点云，其余复用。图像去重限定在单个窗口；下一窗口重新建立输入和已发送证据记录。</p></div>
+<h2 id="tool-updates">03 · 工具更新记录</h2>
+<p>v2 · 2026-09-24：仍然是 6 个工具，调用名称和参数不变。前 3 个调整了返回内容或图片发送方式，后 3 个保持原有功能。</p>
+<p class="note"><strong>先区分两件事：</strong>初始请求现在不主动附送每个历史 Object 的代表图片；需要查看时，由 Agent 调用工具获取。下面介绍各个工具本身的变化。</p>
+<section class="tool-card"><h3>3.1 · <code>inspect_object(object_id)</code></h3><p class="tool-purpose">用途：查看一个已归档 Object 的信息和历史外观。</p>
+<div class="tool-compare"><div class="tool-era"><h4>原来的功能</h4><p>返回 Object 信息，并从归属观测列表中取首条、中间条、末条，去重后最多 3 条。每条附送完整原始 RGB 和目标 mask 的 overlay，最多 <strong>6 张图</strong>。</p></div><div class="tool-era now"><h4>现在的功能</h4><p>返回 Object 信息和预先选定的 <strong>1 条历史代表观测</strong>：先筛掉相对模糊的图，再优先选 bbox 较大的图。附送 <strong>1 张完整 RGB</strong>，上面画该观测原始 SAM3 mask 的 2D bbox，并标上 Object 编号；缺少有效框时保留原图并注明。</p></div></div>
+<p class="tool-difference"><strong>区别：</strong>从“按列表位置取最多 3 条观测，每条 2 张图”，变成“按清晰度和框大小选 1 条观测，只发 1 张带框 RGB”。同一图片在本窗口已发送时，只返回引用，不重复发图。选帧指标保留在本地审计记录，不作为模型输入。</p><p class="tool-example">例如：查看 Object005，原来最多收到 6 张图；现在首次通常收到 1 张，再查看相同代表图时新增 0 张。如果代表图看不清，可以用下面的工具补看其他观测。</p></section>
+<section class="tool-card"><h3>3.2 · <code>inspect_observations(ids)</code></h3><p class="tool-purpose">用途：指定观测编号，查看具体的图像证据。</p>
+<div class="tool-compare"><div class="tool-era"><h4>原来的功能</h4><p>一次指定 1–4 条观测，返回它们的信息。每条附送完整原始 RGB 和只突出该 mask 的全帧 overlay；再次调用仍会附送这些图片。</p></div><div class="tool-era now"><h4>现在的功能</h4><p>仍然一次查看 1–4 条观测，返回相同类型的信息与图像，但会检查图片是否已在当前窗口发送。只附送尚未发送的图片，对已发送的图片返回引用。</p></div></div>
+<p class="tool-difference"><strong>区别：</strong>查看内容不变，增加了<strong>窗口内图片去重</strong>。它既可以查看当前观测，也可以补看某个历史 Object 的其他观测。</p><p class="tool-example">例如：某帧 RGB 已在初始输入中发送，再查看该帧的一条观测时，只需新增目标 overlay；重复查看相同图片时，不再新增图片。</p></section>
+<section class="tool-card"><h3>3.3 · <code>list_objects()</code></h3><p class="tool-purpose">用途：列出已归档 Object 的文字目录，方便决定接下来查看谁。</p>
+<div class="tool-compare"><div class="tool-era"><h4>原来的功能</h4><p>返回 Object 的编号、名称、状态、观测数量等文字信息，并列出首条、中间条、末条代表观测的编号。</p></div><div class="tool-era now"><h4>现在的功能</h4><p>保留 Object 的文字信息，改为列出<strong>全部归属观测编号</strong>，以及按新规则选定的<strong>一条代表观测编号</strong>。</p></div></div>
+<p class="tool-difference"><strong>区别：</strong>原来给出最多 3 个按位置抽取的编号，现在给出“全部观测目录 + 推荐先看的 1 条”。两版都<strong>不发送图片</strong>；列出编号不等于 Agent 已经看过图像证据。</p><p class="tool-example">Agent 可以先用 inspect_object 查看代表图；若证据不足，再从全部观测编号中选择其他观测，调用 inspect_observations。</p></section>
+<section class="tool-card"><h3>3.4 · <code>compare_geometry(observation_a, observation_b)</code></h3><p class="tool-purpose">用途：比较两条观测的三维几何位置。</p>
+<div class="tool-compare"><div class="tool-era"><h4>原来的功能</h4><p>输入两条观测编号，计算并返回点云之间的距离、接近程度等几何信息，帮助 Agent 判断它们在空间上是否接近。</p></div><div class="tool-era now"><h4>现在的功能</h4><p>保持相同的输入和几何比较结果。Agent 结合这些测量信息和视觉证据判断是否属于同一个 Object。</p></div></div>
+<p class="tool-difference"><strong>区别：</strong><strong>本轮没有变化。</strong>空间接近本身不等于物体身份相同。</p></section>
+<section class="tool-card"><h3>3.5 · <code>propose_update(proposal_json)</code></h3><p class="tool-purpose">用途：先检查 Agent 提出的修改是否有效。</p>
+<div class="tool-compare"><div class="tool-era"><h4>原来的功能</h4><p>接收修改提案，检查操作、引用对象和所需证据等，返回检查结果；通过后提供修改预览和提案编号。此时还没有正式提交。</p></div><div class="tool-era now"><h4>现在的功能</h4><p>继续按原有规则检查提案并返回预览和提案编号。Agent 通过按需查看工具取得图像后，再据此提出修改。</p></div></div>
+<p class="tool-difference"><strong>区别：</strong><strong>提案工具本身没有变化。</strong>本轮没有增加提交前自动冲突审查。</p></section>
+<section class="tool-card"><h3>3.6 · <code>commit_update(proposal_id)</code></h3><p class="tool-purpose">用途：确认提交已通过检查的提案。</p>
+<div class="tool-compare"><div class="tool-era"><h4>原来的功能</h4><p>输入通过检查的提案编号，确认提交该提案；由 Harness 执行相应修改并保存更新后的物体状态。</p></div><div class="tool-era now"><h4>现在的功能</h4><p>仍然提交已经检查通过的提案，由 Harness 执行并保存结果。</p></div></div>
+<p class="tool-difference"><strong>区别：</strong><strong>本轮没有变化。</strong>仍按“先提案检查，再提交保存”的顺序运行。</p></section>
+<h2 id="evidence">04 · 代表图、全局框、空间候选分别是什么？</h2>
+<div class="table"><table><thead><tr><th>信息</th><th>具体含义</th><th>使用边界</th></tr></thead><tbody>
+<tr><td>代表图的 2D bbox</td><td>某条已有观测原始 SAM3 mask 在原图上的外接框。先在有效 bbox 候选中取清晰度不低于最高值 50% 的候选，再按归一化 bbox 面积、清晰度、观测编号选择。</td><td>清晰度为完整 RGB 灰度拉普拉斯方差，是相对启发式。没有有效 bbox 时保留最清晰原图并注明缺框；框不保证覆盖完整物体。</td></tr>
+<tr><td>历史 Object 的全局 3D 框</td><td>已观测表面的全局直立 OBB，包含中心、局部尺寸、世界方向轴；世界 Z 固定，单位米。</td><td>不是完整物体体积，也不推断遮挡表面。全部历史物体都提供框信息，不仅最近候选。</td></tr>
+<tr><td>最近 3 个候选</td><td>每条当前观测到历史物体表面的最近距离中位数排名；历史物体不足 3 个时按实际数量提供。</td><td>是几何检索结果，不是身份结论、类别结论或置信度；Agent 仍可考虑其他历史 Object。</td></tr>
+<tr><td>窗口内图像去重</td><td>同一证据图片已在当前窗口消息中发送，则后续调用不重复附送。</td><td>不意味着类别相同或 Object 相同的不同视角都被丢弃；未发送的补充图片仍可取证。</td></tr>
+</tbody></table></div>
+<h2 id="scope">05 · 版本边界与代码入口</h2>
+<p class="note">本版没有新增提交前自动冲突审查，没有重写既有实验日志或历史交互记录。此页描述输入与取证协议；具体效果需以采用该版本的新运行记录判断，不能据此声称历史任务已重跑。</p>
+<div class="table"><table><thead><tr><th>职责</th><th>仓库相对路径</th></tr></thead><tbody>
+<tr><td>窗口输入、历史文字与当前图片</td><td><a href="../InstanceRecognition/src/harness/inputs.py"><code>InstanceRecognition/src/harness/inputs.py</code></a></td></tr>
+<tr><td>代表观测选择、完整 RGB + 原始 mask bbox</td><td><a href="../InstanceRecognition/src/harness/history.py"><code>InstanceRecognition/src/harness/history.py</code></a></td></tr>
+<tr><td>全局 3D 框、最近空间候选</td><td><a href="../InstanceRecognition/src/harness/spatial_context.py"><code>InstanceRecognition/src/harness/spatial_context.py</code></a></td></tr>
+<tr><td>工具返回、证据登记及图片去重</td><td><a href="../InstanceRecognition/src/harness/tools.py"><code>InstanceRecognition/src/harness/tools.py</code></a></td></tr>
+<tr><td>模型如何使用输入与证据</td><td><a href="../InstanceRecognition/src/harness/prompt.zh-CN.txt"><code>InstanceRecognition/src/harness/prompt.zh-CN.txt</code></a></td></tr>
+</tbody></table></div>
+</main><script>
+const versionPicker=document.getElementById('design-version');
+versionPicker.addEventListener('change',()=>{window.location.href=versionPicker.value;});
+const chapterLinks=[...document.querySelectorAll('.chapter-nav a')];
+const headings=chapterLinks.map(link=>document.querySelector(link.getAttribute('href')));
+function activate(id){chapterLinks.forEach(link=>{const active=link.hash==='#'+id;link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','location');else link.removeAttribute('aria-current');});}
+let scheduled=false;
+function updateChapter(){let current=headings[0];for(const heading of headings){if(heading.getBoundingClientRect().top<=100)current=heading;}if(window.scrollY+window.innerHeight>=document.documentElement.scrollHeight-3)current=headings[headings.length-1];activate(current.id);scheduled=false;}
+window.addEventListener('scroll',()=>{if(!scheduled){scheduled=true;requestAnimationFrame(updateChapter);}},{passive:true});
+window.addEventListener('resize',updateChapter);
+chapterLinks.forEach(link=>link.addEventListener('click',()=>activate(link.hash.slice(1))));
+window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if(headings.some(h=>h.id===id))activate(id);});
+updateChapter();
+</script></body></html>

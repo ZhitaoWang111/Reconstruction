@@ -1,0 +1,17 @@
+.app{padding:14px}h1{font-size:21px}.topbar{align-items:flex-start;flex-wrap:wrap}.controls{justify-content:flex-start}#frameSlider{max-width:100%}
+.comparisonEmbedded .app{min-height:0}
+.comparisonEmbedded .topbar .controls{display:none}
+.comparisonEmbedded .workspace{grid-template-columns:minmax(0,43fr) minmax(0,57fr);gap:12px}
+.comparisonEmbedded .leftPane,.comparisonEmbedded .rightPane{min-width:0;gap:12px}
+.comparisonEmbedded .panelHeader{flex-wrap:wrap;padding:10px;gap:8px}
+.comparisonEmbedded .panelHeader h2{font-size:14px}
+.comparisonEmbedded .panelHeader button{font-size:12px;padding:0 7px;min-height:30px}
+.comparisonEmbedded .panel>.meta{padding:8px 10px}
+.comparisonEmbedded .instancePanel{max-height:320px}
+.comparisonEmbedded .instanceList{max-height:235px;overflow:auto}
+.comparisonEmbedded .instanceItem{grid-template-columns:16px 10px minmax(0,1fr);gap:7px;padding:7px;font-size:13px}
+.comparisonEmbedded .instanceItem .detail{grid-column:3/-1;font-size:11px}
+.comparisonEmbedded .cloudPanel{min-height:0}
+.comparisonEmbedded #cloudCanvas{min-height:560px;height:560px;flex:none}
+.comparisonEmbedded .maskLabel{font-size:12px;padding:3px 5px}
+@media(max-width:650px){.comparisonEmbedded .workspace{grid-template-columns:1fr}.comparisonEmbedded #cloudCanvas{height:400px;min-height:400px}.comparisonEmbedded .instancePanel{max-height:240px}}

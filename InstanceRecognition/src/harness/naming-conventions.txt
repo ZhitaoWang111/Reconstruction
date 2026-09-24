@@ -1,0 +1,73 @@
+实例识别 Harness 专有名词与命名规范
+
+版本：2
+
+1. observation（观测）
+
+一帧中的一个原始 mask，以及与它对应的 bbox、颜色、RGB 图像证据和 3D 点云。
+观测编号使用 抽样帧序号 seq 和 instance 编号，例如：0000:001。
+观测是输入证据，不等于跨帧物体身份。
+
+2. mask_id（帧内 mask 编号）
+
+用于在 overlay 图像中定位 mask 的帧内编号，例如 M01、M02。
+它只在当前帧内有效。不同帧中的 M01 不代表同一个物体。
+
+3. category_label（观测类别名）
+
+GPT 根据当前 RGB、overlay 和结构化信息，对一条 observation 给出的视觉类别描述。
+它可以是单个物体，也可以是“一对”或“一组”，例如：
+- chair
+- remote control
+- pair of shoes
+- set of books
+
+category_label 只描述当前观测，不负责决定跨帧身份，也不直接决定是否创建 Object。
+
+4. object（跨帧物体实体）
+
+Harness 根据多个窗口中的证据维护的现实世界物体实体。它可能由多个 observation 组成，也可能暂时只由一个 observation 组成。
+
+5. object_id（跨帧物体编号）
+
+Object 的稳定编号，例如 Object1。网页中可以显示为 Object 001，底层 state 和工具协议统一使用 Object1。
+object_id 与 mask_id 不得混用。
+
+6. object_label（物体规范类别）
+
+Harness 为一个跨帧 object 当前维护的类别名。它可以参考多个 observation 的 category_label，但不要求与每一帧的 category_label 完全相同。
+
+上游不同观测的 category_label 可存在分歧；Harness 根据跨帧证据确定 object_label。已有类别经视觉证据核对确有误时，可用 relabel 修正；不能仅因新观测的 category_label 不同就改名。
+
+7. semantic group（语义组）
+
+GPT 识别出的“一对”或“一组”类别描述，例如 pair of shoes。语义组不自动等于一个独立物理物体，也不自动要求拆成多个 object。当前按原始 mask 粒度维护实体：有视觉证据支持且上游有意整体分割的组，可作为一个语义组实体保留；代码没有独立 group 类型或成员拆分工具。意外混入无关物体的 mask 标记为 repair。
+
+8. GPT 输出与 Harness 决策的边界
+
+上游类别识别 GPT 输出：category_label；SAM 提供 mask，程序整理成 observation。
+Harness Agent 决策：assign 到已有 object、create 新 object、merge object、relabel 已有 object_label、defer/repair observation。
+
+推荐的概念流：
+observation + category_label
+        ↓ 结合多帧图像、bbox、mask 和 3D 几何
+object_id + object_label
+
+9. 字段对应
+
+代码、协议和历史实验统一使用以下字段，不保留 label 别名：
+- observations.json 中 observation.category_label：当前观测类别名。
+- state.json 中 objects[object_id].object_label：跨帧物体规范类别。
+- create 和 relabel 动作使用 object_label；list_objects 返回当前 object_label。
+- objects[object_id].label_history 记录每次 relabel 的 previous_label、object_label、evidence、reason、decided_at（此次决策的观测截止序号 cutoff）。其中 previous_label 是修改前的 object_label，不是 category_label。
+- 网页缓存、工具参数、请求和响应内嵌 JSON 使用相同字段。
+
+历史记录已迁移类别字段命名与物体编号（统一为 Object+数字），不代表重新推理；历史日志不是未经修改的原始字节，迁移清单见 runtime/docs。
+上游模型结果中的 class_name 和类别统计 labels 不是本次迁移的 label 字段。
+
+10. 当前动作边界（2026-09-22）
+
+object_label 由 create 初始设置，可通过 relabel 修正；merge 保留目标类别。relabel 须针对活跃物体，提供非空新 object_label、证据和理由；不修改 category_label、object_id、观测归属、mask 或几何。单独 relabel 复用原点云，并在 label_history 保留类别修改历史。
+defer / repair 是 observation 的归属状态，均将 object_id 设为 null 并排除其点；repair 只标记问题，不自动修复像素。
+pending 汇总所有未归属观测，不是第三种独立状态。
+当前 3D 占据点云实际是观测到的表面点融合，不是完整实体体积。

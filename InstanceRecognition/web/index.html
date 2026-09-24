@@ -12,10 +12,10 @@
       <div>
         <p class="eyebrow"><span></span> INSTANCE RECOGNITION LAB</p>
         <h1>ScanNet 实例识别</h1>
-        <p class="lede">选择本地 ScanNet v2 的任意场景与 RGB 帧，比较 YOLOE-26 Prompt-Free 检测结果和 SAM3.1 实例 mask。</p>
+        <p class="lede">选择本地 ScanNet v2 的任意场景与 RGB 帧，由 GPT-5.6 Terra 识别可见类别，再由 SAM3.1 文本提示生成实例 mask。</p>
       </div>
       <div class="pipeline-mark" aria-label="推理流程">
-        <div><small>01</small><strong>YOLOE-26</strong><span>类别 + 检测框</span></div>
+        <div><small>01</small><strong>GPT-5.6 Terra</strong><span>可见类别</span></div>
         <i>→</i>
         <div><small>02</small><strong>SAM3.1</strong><span>逐实例 mask</span></div>
       </div>
@@ -47,7 +47,7 @@
         <button id="load-frame" class="secondary-button">加载帧</button>
         <button id="run-inference" class="primary-button">
           <span class="button-dot"></span>
-          启动 YOLOE-26 + SAM3.1
+          启动 GPT + SAM3.1
         </button>
       </div>
 
@@ -83,18 +83,19 @@
         <article class="image-card">
           <div class="card-title">
             <span class="step yoloe">01</span>
-            <div><h3>YOLOE-26 Prompt-Free</h3><p>类别、置信度与检测框</p></div>
+            <div><h3 id="label-stage-title">GPT-5.6 Terra</h3><p id="label-stage-description">可见类别、证据与不确定性</p></div>
           </div>
           <div class="image-stage">
+            <div id="gpt-categories" class="hidden"></div>
             <img id="yoloe-image" alt="YOLOE-26 检测结果">
-            <div id="yoloe-placeholder" class="placeholder">运行后显示检测框结果</div>
+            <div id="yoloe-placeholder" class="placeholder">运行后显示类别判断</div>
           </div>
         </article>
 
         <article class="image-card featured">
           <div class="card-title">
             <span class="step sam">02</span>
-            <div><h3>SAM3.1 Multiplex</h3><p>由 YOLOE 检测框提示的实例 mask</p></div>
+            <div><h3>SAM3.1 Multiplex</h3><p>由 GPT 类别文本提示的实例 mask</p></div>
           </div>
           <div class="image-stage">
             <img id="sam31-image" alt="SAM3.1 实例 mask 结果">
@@ -111,18 +112,18 @@
           <h2 id="details-title">识别到的实例</h2>
         </div>
         <div class="artifact-links">
-          <a id="yoloe-json" href="#" target="_blank">YOLOE JSON</a>
+          <a id="yoloe-json" href="#" target="_blank">类别 JSON</a>
           <a id="sam-json" href="#" target="_blank">SAM3.1 JSON</a>
           <a id="instance-map" href="#" target="_blank">实例 ID 图</a>
         </div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>ID</th><th>类别</th><th>YOLOE 置信度</th><th>SAM 提示</th><th>框 / mask IoU</th><th>mask 像素</th></tr></thead>
+          <thead><tr><th>ID</th><th>类别</th><th>模型分数</th><th>SAM 提示</th><th>类别判断</th><th>mask 像素</th></tr></thead>
           <tbody id="instance-table"></tbody>
         </table>
       </div>
-      <p class="boundary-note">模型输入不包含人工文本提示。SAM3.1 只接收 YOLOE 的检测框；YOLOE 原生 mask 不会传入第二阶段。</p>
+      <p class="boundary-note">GPT 输入为原始 RGB，不包含旧标签或 mask。SAM3.1 使用 GPT 生成的类别文本；不确定类别和未分出 mask 的提示均保留。</p>
     </section>
   </main>
   <script src="/assets/app.js" defer></script>

@@ -36,7 +36,20 @@ node_modules/
 !/Video2PointCloud/output/README.md
 !/Video2PointCloud/output/reports/
 /ScanNet/assets/
-/docs/assets/
+/docs/assets/*
+# Keep viewer source; generated scene data and recorded API payloads stay local.
+!/docs/assets/global-object-bboxes/
+/docs/assets/global-object-bboxes/*
+!/docs/assets/global-object-bboxes/build_bboxes.py
+!/docs/assets/global-object-bboxes/style.css
+!/docs/assets/global-object-bboxes/viewer.js
+!/docs/assets/harness-records/
+/docs/assets/harness-records/*
+!/docs/assets/harness-records/build_records.py
+!/docs/assets/harness-records/page.js
+!/docs/assets/harness-tools/
+/docs/assets/harness-tools/*
+!/docs/assets/harness-tools/page.css
 /tmp/
 
 # Binary model / geometry / dataset payloads, including future additions

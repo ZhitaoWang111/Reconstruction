@@ -1,0 +1,15 @@
+# Python 3.12; install torch/torchvision from the CUDA 12.8 index first.
+# See README.md for the full setup command and local SAM3 installation.
+torch==2.10.0
+torchvision==0.25.0
+ultralytics==8.4.149
+numpy==1.26.4
+opencv-python==4.11.0.86
+setuptools<81
+Flask>=3.1,<4
+einops
+pycocotools
+psutil
+scipy
+scikit-image
+pytest

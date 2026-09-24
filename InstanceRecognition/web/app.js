@@ -34,6 +34,7 @@ let timer = null;
 let modelStatusTimer = null;
 let heartbeatTimer = null;
 let leaseOpen = false;
+let recognitionMethod = 'gpt_sam31';
 const clientId = window.crypto?.randomUUID?.()
   || `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -58,6 +59,8 @@ function showImage(key, url) {
 }
 
 function clearOutputs() {
+  document.querySelector('#gpt-categories').replaceChildren();
+  document.querySelector('#gpt-categories').classList.add('hidden');
   for (const key of ['yoloe', 'sam31']) {
     images[key].removeAttribute('src');
     images[key].classList.remove('visible');
@@ -83,21 +86,14 @@ async function requestJson(url, options = {}) {
 }
 
 function renderModelStatus(status) {
-  const yoloe = status.workers?.yoloe || {};
-  const sam31 = status.workers?.sam31 || {};
-  elements.modelService.className = 'model-service-state';
-  if (yoloe.loaded && sam31.loaded) {
+  const workers=Object.values(status.workers || {});
+  elements.modelService.className='model-service-state';
+  if(workers.length && workers.every(w=>w.loaded)){
     elements.modelService.classList.add('loaded');
-    elements.modelService.textContent = '模型已驻留 · 可直接推理';
-  } else if (yoloe.running || sam31.running || yoloe.loading || sam31.loading) {
-    elements.modelService.classList.add('loading');
-    const ready = [yoloe.loaded && 'YOLOE', sam31.loaded && 'SAM3.1'].filter(Boolean);
-    elements.modelService.textContent = ready.length
-      ? `模型预热中 · ${ready.join(' / ')} 已就绪`
-      : '模型预热中…';
-  } else {
-    elements.modelService.textContent = '模型未驻留';
-  }
+    elements.modelService.textContent=recognitionMethod==='gpt_sam31'?'SAM 模型已驻留 · GPT 按需调用':'YOLOE / SAM 模型已驻留';
+  } else if(workers.some(w=>w.running || w.loading)){
+    elements.modelService.classList.add('loading');elements.modelService.textContent='模型预热中…';
+  } else elements.modelService.textContent='模型未驻留';
 }
 
 async function refreshModelStatus() {
@@ -159,24 +155,36 @@ function addBadge(text) {
 
 function renderResult(result) {
   showImage('source', result.input_image);
-  showImage('yoloe', result.yoloe.image);
+  const isGpt=!!result.gpt;
+  if (isGpt) {
+    const list=document.querySelector('#gpt-categories');list.replaceChildren();list.classList.remove('hidden');
+    images.yoloe.removeAttribute('src');images.yoloe.classList.remove('visible');placeholders.yoloe.style.display='none';
+    document.querySelector('#label-stage-title').textContent=result.gpt.model.replace(/^openai\//,'');
+    for(const item of result.gpt.categories){
+      const card=document.createElement('article');const title=document.createElement('strong');
+      title.textContent=item.category+' · '+(item.certainty==='clear'?'明确':'不确定');
+      const evidence=document.createElement('p');evidence.textContent=item.evidence+(item.ambiguity?' / '+item.ambiguity:'');
+      card.append(title,evidence);list.append(card);
+    }
+    for(const region of result.gpt.unresolved_regions){const text=document.createElement('p');text.textContent='未识别：'+region.location+' / '+region.reason;list.append(text);}
+  } else showImage('yoloe', result.yoloe.image);
   showImage('sam31', result.sam31.image);
   elements.badges.replaceChildren();
-  addBadge(`${result.yoloe.instance_count} 个实例`);
-  addBadge(`${result.yoloe.unique_classes.length} 类标签`);
+  addBadge(`${result.sam31.instance_count} 个实例`);
+  addBadge(`${isGpt?result.gpt.categories.length:result.yoloe.unique_classes.length} 类标签`);
   addBadge(`${result.wall_seconds.toFixed(1)} s`);
   if (result.cached) addBadge('已缓存');
 
   elements.table.replaceChildren();
   for (const item of result.sam31.instances) {
     const row = document.createElement('tr');
-    const prompt = item.sam_prompt_type === 'positive_box' ? '正框' : '中心点回退';
+    const prompt = item.sam_prompt_type === 'text' ? item.sam_prompt : (item.sam_prompt_type === 'positive_box' ? '正框' : '中心点回退');
     const values = [
       item.instance_id,
       item.class_name,
-      item.yoloe_confidence.toFixed(3),
+      isGpt ? `SAM ${item.sam_score.toFixed(3)}` : `YOLOE ${item.yoloe_confidence.toFixed(3)}`,
       prompt,
-      item.prompt_box_iou.toFixed(3),
+      isGpt ? (item.gpt_certainty==='clear'?'明确':'不确定') : item.prompt_box_iou.toFixed(3),
       item.mask_pixels.toLocaleString(),
     ];
     values.forEach((value, index) => {
@@ -193,12 +201,12 @@ function renderResult(result) {
     });
     elements.table.appendChild(row);
   }
-  document.querySelector('#yoloe-json').href = result.yoloe.manifest;
+  document.querySelector('#yoloe-json').href = isGpt ? result.gpt.manifest : result.yoloe.manifest;
   document.querySelector('#sam-json').href = result.sam31.manifest;
   document.querySelector('#instance-map').href = result.sam31.instance_map;
   elements.details.classList.remove('hidden');
   const cacheText = result.cached ? '读取已有结果' : '两阶段推理完成';
-  setStatus('ready', cacheText, `${result.yoloe.instance_count} 个检测均已获得 SAM3.1 mask`);
+  setStatus('ready', cacheText, isGpt ? `${result.gpt.categories.length} 类提示，${result.sam31.instance_count} 个 mask，${result.sam31.empty_prompt_count} 类未分出 mask` : `${result.yoloe.instance_count} 个检测均已获得 SAM3.1 mask`);
 }
 
 async function runInference() {
@@ -208,10 +216,10 @@ async function runInference() {
   elements.infer.disabled = true;
   elements.load.disabled = true;
   const started = Date.now();
-  setStatus('running', '正在运行两阶段推理', '正在加载 YOLOE-26…');
+  setStatus('running', '正在运行两阶段推理', recognitionMethod==='gpt_sam31'?'正在调用 GPT 类别识别…':'正在运行 YOLOE 检测…');
   timer = window.setInterval(() => {
     const elapsed = Math.round((Date.now() - started) / 1000);
-    setStatus('running', '正在运行两阶段推理', `YOLOE-26 → SAM3.1 · 已等待 ${elapsed} 秒`);
+    setStatus('running', '正在运行两阶段推理', `${recognitionMethod==='gpt_sam31'?'GPT':'YOLOE'} → SAM3.1 · 已等待 ${elapsed} 秒`);
   }, 1000);
   try {
     const result = await requestJson('/api/infer', {
@@ -230,6 +238,23 @@ async function runInference() {
 }
 
 async function initialize() {
+  try {
+    recognitionMethod=(await requestJson('/api/health')).method;
+    if(recognitionMethod==='yoloe_sam31'){
+      document.querySelector('.lede').textContent='选择本地 ScanNet RGB 帧，由 YOLOE-26 检测类别与框，再由 SAM3.1 生成 mask。';
+      document.querySelector('.pipeline-mark strong').textContent='YOLOE-26';
+      document.querySelector('.pipeline-mark div span').textContent='类别与检测框';
+      document.querySelector('#label-stage-title').textContent='YOLOE-26';
+      document.querySelector('#label-stage-description').textContent='类别、置信度与检测框';
+      document.querySelector('.featured .card-title p').textContent='由 YOLOE 检测框提示的实例 mask';
+      document.querySelector('#run-inference').lastChild.textContent='启动 YOLOE + SAM3.1';
+      document.querySelector('thead th:nth-child(5)').textContent='框 IoU';
+      document.querySelector('.boundary-note').textContent='SAM3.1 只接收 YOLOE 检测框，不消费 YOLOE 原生 mask。';
+    }
+  } catch(error) {
+    setStatus('error','配置读取失败',error.message);
+    return;
+  }
   await openClientLease();
   modelStatusTimer = window.setInterval(refreshModelStatus, 1000);
   heartbeatTimer = window.setInterval(async () => {

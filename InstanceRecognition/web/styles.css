@@ -123,3 +123,5 @@ tbody tr:hover { background: rgba(100, 137, 255, 0.06); }
   .section-heading { align-items: start; flex-direction: column; }
   .artifact-links { flex-wrap: wrap; }
 }
+
+#gpt-categories{width:100%;max-height:520px;overflow:auto;padding:16px;text-align:left;align-self:stretch}#gpt-categories article{padding:12px 0;border-bottom:1px solid #ddd}#gpt-categories p{font-size:13px;line-height:1.5;margin-top:6px}

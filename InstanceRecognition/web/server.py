@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local ScanNet frame browser and YOLOE-26 + SAM3.1 inference service."""
+"""Local ScanNet frame browser with GPT + SAM3.1 inference."""
 
 from __future__ import annotations
 
@@ -19,12 +19,13 @@ def create_app(
     scans_root: Path = config.SCANNET_ROOT,
     runtime_root: Path = config.RUNTIME_ROOT,
     model_service: ModelServiceManager | None = None,
+    method: str = config.DEFAULT_METHOD,
 ) -> Flask:
     app = Flask(__name__, static_folder=None)
     runtime_root = Path(runtime_root).resolve()
     reader = ScanNetSensReader(scans_root, runtime_root)
-    model_service = model_service or ModelServiceManager(runtime_root)
-    pipeline = InstanceRecognitionPipeline(reader, runtime_root, model_service)
+    model_service = model_service or ModelServiceManager(runtime_root, method=method)
+    pipeline = InstanceRecognitionPipeline(reader, runtime_root, model_service, method=method)
     app.extensions["model_service"] = model_service
 
     @app.get("/")
@@ -45,8 +46,13 @@ def create_app(
             "sam31_checkpoint": config.SAM31_CHECKPOINT.is_file(),
             "sam3_source": (config.SAM3_REPO / "sam3/model_builder.py").is_file(),
         }
+        if method == "gpt_sam31":
+            dependencies.pop("yoloe_python")
+            dependencies.pop("yoloe_checkpoint")
+            dependencies["gpt_client"] = (config.GPT_API_DIR / "label_frames.py").is_file()
         return jsonify(
             {
+                "method": method,
                 "ok": all(dependencies.values()),
                 "dependencies": dependencies,
                 "models": model_service.status(),
@@ -94,7 +100,7 @@ def create_app(
     @app.get("/api/run/<scene_id>/<int:frame_index>")
     def existing_run(scene_id: str, frame_index: int):
         reader.header(scene_id)
-        run_root = runtime_root / "results" / scene_id / f"frame_{frame_index:06d}"
+        run_root = pipeline.result_root(scene_id, frame_index)
         summary_path = run_root / "summary.json"
         if not summary_path.is_file():
             return jsonify({"available": False})
@@ -117,14 +123,15 @@ def create_app(
     @app.get("/api/artifact/<scene_id>/<int:frame_index>/<stage>/<filename>")
     def artifact(scene_id: str, frame_index: int, stage: str, filename: str):
         reader.header(scene_id)
-        if stage not in {"yoloe", "sam31"} or filename not in {
+        if stage not in {"yoloe", "sam31", "gpt"} or filename not in {
             "annotated.jpg",
             "detections.json",
+            "labels.json",
             "predictions.json",
             "instance_id_map.png",
         }:
             raise ValueError("Artifact is not exposed")
-        root = runtime_root / "results" / scene_id / f"frame_{frame_index:06d}" / stage
+        root = pipeline.result_root(scene_id, frame_index) / stage
         return send_from_directory(root, filename, conditional=True, max_age=0)
 
     @app.errorhandler(FileNotFoundError)
@@ -144,6 +151,19 @@ def public_summary(summary: dict) -> dict:
     scene_id = summary["scene_id"]
     frame_index = summary["frame_index"]
     prefix = f"/api/artifact/{scene_id}/{frame_index}"
+    if summary.get("method") == "gpt_sam31":
+        sam = summary["sam31"]
+        return {"scene_id": scene_id, "frame_index": frame_index, "method": "gpt_sam31",
+            "cached": summary.get("cached", False), "wall_seconds": summary["wall_seconds"],
+            "contract": summary["contract"], "input_image": f"/api/frame/{scene_id}/{frame_index}.jpg",
+            "gpt": {"model": summary["gpt"]["requested_model"],
+                "categories": summary["gpt"]["labels"]["categories"],
+                "unresolved_regions": summary["gpt"]["labels"]["unresolved_regions"],
+                "manifest": f"{prefix}/gpt/labels.json", "elapsed_seconds": summary["gpt"]["elapsed_seconds"]},
+            "sam31": {"image": f"{prefix}/sam31/annotated.jpg", "manifest": f"{prefix}/sam31/predictions.json",
+                "instance_map": f"{prefix}/sam31/instance_id_map.png", "instance_count": sam["instance_count"],
+                "unique_classes": sam["unique_classes"], "timing": sam["timing"], "instances": sam["instances"],
+                "empty_prompt_count": sum(not x["raw_candidate_ids"] for x in sam["prompts"])}}
     yoloe = summary["yoloe"]
     sam31 = summary["sam31"]
     return {

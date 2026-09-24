@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="记录从 RGB 视频重建可交互 SimReady 场景的v1 方案设计、执行顺序、工具职责与代码入口。">
+  <title>v1 方案设计 · Video to SimReady</title>
+  <style>
+    :root { color-scheme: light; --ink:#17352d; --muted:#56746a; --accent:#0b7f5b; --soft:#eaf6ef; --paper:#fff; --line:#cfe5dc; --bg:#f4fbf7; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+    body { margin:0; color:var(--ink); background:linear-gradient(180deg,#edf8f2,var(--bg) 260px); font:16px/1.85 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Microsoft YaHei",sans-serif; }
+    main { width:min(1040px,calc(100% - 40px)); margin:auto; padding:38px 0 60px; }
+    a { color:#006c4b; text-underline-offset:4px; }
+    a:hover { text-decoration-thickness:2px; }
+    a:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:5px; border-radius:3px; }
+    .skip { position:absolute; left:16px; top:-100px; background:white; padding:8px 16px; z-index:2; }
+    .skip:focus { top:12px; }
+    h1,h2,h3,p { margin:0; }
+    h1 { font-size:clamp(28px,4vw,40px); line-height:1.3; letter-spacing:.015em; }
+    h2 { font-size:clamp(22px,3vw,28px); line-height:1.5; }
+    h3 { font-size:20px; line-height:1.5; margin-bottom:14px; }
+    p + p { margin-top:12px; }
+    .intro, article { background:var(--paper); border:1px solid var(--line); border-radius:18px; }
+    .intro { padding:28px 32px; margin-bottom:24px; }
+    .eyebrow { font-size:12px; color:var(--accent); font-weight:700; letter-spacing:.12em; margin-bottom:8px; }
+    .intro > p:last-of-type { color:var(--muted); margin-top:12px; }
+    nav { display:flex; gap:8px 20px; flex-wrap:wrap; margin-top:20px; padding-top:16px; border-top:1px solid var(--line); font-size:14px; }
+    nav a { text-decoration:none; }
+    article { padding:30px 32px; }
+    article + article { margin-top:24px; }
+    .case-gallery { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0; }
+    .case-gallery.case-gallery-four { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .case-gallery figure { margin:0; min-width:0; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+    .case-gallery a { display:block; }
+    .case-gallery img { display:block; width:100%; height:auto; background:#111; }
+    .case-gallery figcaption { padding:12px; font-size:14px; line-height:1.65; }
+    .case-gallery figcaption strong { display:block; margin-bottom:4px; }
+    .case-details { padding:0 18px 18px; }
+    .round-meta { display:flex; align-items:center; gap:10px 16px; flex-wrap:wrap; font-size:13px; color:var(--muted); margin-bottom:12px; }
+    .round-number { background:var(--soft); color:var(--accent); padding:3px 10px; border-radius:6px; font-weight:700; }
+    .round-header > p { margin-top:10px; color:var(--muted); }
+    section { margin-top:30px; padding-top:28px; border-top:1px solid var(--line); }
+    details { margin-top:24px; border:1px solid var(--line); border-radius:10px; background:#f9fcfa; }
+    summary { padding:14px 18px; cursor:pointer; font-weight:600; }
+    blockquote { margin:0 18px 20px; padding-left:18px; border-left:3px solid #a2cbb6; color:#37564a; }
+    blockquote p { margin-top:10px; }
+    .recommendation { background:var(--soft); border-left:4px solid var(--accent); border-radius:0 10px 10px 0; padding:20px 22px; }
+    .recommendation strong { display:block; font-size:22px; line-height:1.6; margin-bottom:8px; }
+    .note { color:var(--muted); font-size:14px; }
+    .note-spaced { margin-top:14px; }
+    .flow { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; list-style:none; padding:0; margin:20px 0; }
+    .flow li { border:1px solid var(--line); border-radius:10px; padding:15px; margin:0; background:#f9fcfa; }
+    .flow span { display:block; font-size:12px; color:var(--accent); font-weight:700; margin-bottom:6px; }
+    .flow strong { display:block; font-size:16px; }
+    .flow p { font-size:14px; color:var(--muted); margin-top:5px; }
+    ul,ol { padding-left:23px; margin:14px 0 0; }
+    li + li { margin-top:12px; }
+    .table-wrap { overflow-x:auto; margin:16px 0; border:1px solid var(--line); border-radius:10px; }
+    table { border-collapse:collapse; width:100%; font-size:15px; }
+    caption { text-align:left; padding:12px 15px; color:var(--muted); background:#fafcfb; font-size:13px; }
+    th,td { text-align:left; vertical-align:top; padding:13px 15px; border-bottom:1px solid var(--line); }
+    th { background:var(--soft); font-weight:600; }
+    tr:last-child td { border-bottom:0; }
+    .example-table th:first-child { width:22%; }
+    .example-table th:nth-child(2) { width:23%; }
+    /* 03.4 提案操作：给操作名称和通俗解释留出足够阅读空间。 */
+    .proposal-operations-table { table-layout:fixed; min-width:980px; }
+    .proposal-operations-table th:nth-child(1),
+    .proposal-operations-table td:nth-child(1) { width:25%; }
+    .proposal-operations-table th:nth-child(2),
+    .proposal-operations-table td:nth-child(2) { width:21%; }
+    .proposal-operations-table th:nth-child(3),
+    .proposal-operations-table td:nth-child(3) { width:29%; }
+    .proposal-operations-table th:nth-child(4),
+    .proposal-operations-table td:nth-child(4) { width:25%; }
+    .evidence { margin:16px 0 0; }
+    .evidence > div { display:grid; grid-template-columns:115px 1fr; gap:16px; padding:14px 0; border-top:1px dashed var(--line); }
+    .evidence dt { font-weight:700; }
+    .evidence dd { margin:0; }
+    .boundary { padding:18px 20px; background:#fff8e9; border:1px solid #ead9b1; border-radius:10px; margin-top:18px; }
+    code { font: .9em/1.7 ui-monospace,SFMono-Regular,Consolas,monospace; background:#edf4f0; padding:2px 5px; border-radius:4px; overflow-wrap:anywhere; }
+    .record { padding:16px 20px; margin-top:18px; background:#f7faf8; border:1px dashed #b8cec1; border-radius:10px; }
+    .sources { font-size:14px; }
+    .sources li + li { margin-top:14px; }
+    footer { padding:22px 8px 0; color:var(--muted); font-size:13px; }
+    footer p + p { margin-top:8px; }
+    @media(max-width:680px) {
+      main { width:calc(100% - 24px); padding-top:18px; }
+      .intro,article { padding:22px 18px; border-radius:12px; }
+      .intro { margin-bottom:16px; }
+      .flow { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .case-gallery,.case-gallery.case-gallery-four { grid-template-columns:1fr; }
+      .evidence > div { grid-template-columns:1fr; gap:3px; }
+      .example-table { min-width:590px; }
+      .recommendation { padding:16px; }
+      .recommendation strong { font-size:20px; }
+      blockquote { margin-left:14px; margin-right:14px; padding-left:12px; }
+      nav { gap:8px 16px; }
+    }
+    @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
+    @media print {
+      body { background:white; color:black; }
+      main { width:100%; padding:0; }
+      nav,.skip { display:none; }
+      .intro,article { border:0; padding:12px 0; }
+      section { break-inside:avoid; }
+      .table-wrap { overflow:visible; }
+      .example-table { min-width:0; }
+      a { color:inherit; }
+    }
+    /* Offline diagrams: semantic HTML, no external renderer or image assets. */
+    .design-figure { margin:20px 0; padding:20px; border:1px solid var(--line); border-radius:12px; background:#f6fbf8; }
+    .diagram-label { font-size:12px; font-weight:700; letter-spacing:.05em; color:var(--accent); margin-bottom:14px; }
+    .design-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
+    .design-node { position:relative; min-width:0; background:#fff; border:1px solid #c5ded2; border-radius:10px; padding:16px; }
+    .design-node .node-kicker { display:block; font-size:12px; color:var(--muted); margin-bottom:7px; }
+    .design-node strong { display:block; font-size:16px; line-height:1.6; }
+    .design-node p { font-size:14px; color:var(--muted); line-height:1.8; margin-top:8px; }
+    .model-node { background:#e6f5ec; border:2px solid #268f68; }
+    .diagram-arrow { text-align:center; color:var(--accent); font-size:25px; line-height:1; margin:12px 0; }
+    .process-grid .design-node:not(:last-child)::after,.revision-grid .design-node:not(:last-child)::after { content:'→'; position:absolute; top:40%; right:-17px; color:var(--accent); font-weight:bold; }
+    .diagram-return { padding:14px 16px; border:1px dashed #78b79a; background:#eef8f2; border-radius:8px; margin-top:18px; }
+    .diagram-return strong { display:block; font-size:14px; }
+    .diagram-return span { display:block; color:var(--muted); font-size:13px; margin-top:6px; }
+    .node-tag { display:block; font-size:12px; border-top:1px solid var(--line); padding-top:10px; margin-top:12px; color:var(--accent); }
+    .design-figure figcaption { margin-top:14px; color:var(--muted); font-size:13px; line-height:1.8; overflow-wrap:anywhere; }
+    @media(max-width:680px) {
+      .design-figure { padding:14px; }
+      .design-grid { grid-template-columns:1fr; }
+      .process-grid .design-node:not(:last-child)::after,.revision-grid .design-node:not(:last-child)::after { content:'↓'; right:auto; left:calc(50% - 6px); top:auto; bottom:-24px; }
+      .process-grid,.revision-grid { gap:28px; }
+    }
+
+    /* Round 06: a visual reading path, with the full design retained on demand. */
+    .harness-visual section { margin-top:26px; padding-top:24px; }
+    .harness-visual .visual-lead { font-size:20px; line-height:1.65; margin-top:16px; }
+    .harness-visual .visual-lead strong { color:var(--accent); }
+    .visual-route { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+    .visual-route a { font-size:13px; padding:5px 12px; border-radius:20px; border:1px solid var(--line); text-decoration:none; }
+    .harness-visual .design-figure { padding:20px; }
+    .h-legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; margin:0 0 14px; }
+    .h-legend span { display:flex; align-items:center; gap:6px; }
+    .h-dot { display:inline-block; width:11px; height:11px; border-radius:3px; background:#e9f2fc; border:1px solid #648ab4; }
+    .h-dot.model { background:#e1f3e8; border-color:#23825c; }
+    .h-dot.memory { background:#fff0d7; border-color:#ad8438; }
+    .h-rail { border:1px solid #93b1d0; background:#edf4fc; border-radius:10px; padding:11px 16px; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:14px; }
+    .h-rail span { color:#50677d; font-size:13px; }
+    .h-main { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:24px; margin:22px 0; }
+    .h-card { position:relative; min-width:0; padding:15px 12px; border:1px solid #93b1d0; background:#f1f6fc; border-radius:10px; }
+    .h-card h4 { margin:0 0 8px; font-size:16px; line-height:1.5; }
+    .h-card p { font-size:13px; line-height:1.7; color:#4d657b; margin:0; }
+    .h-card.model { background:#e1f3e8; border:2px solid #23825c; }
+    .h-card.model p { color:#316449; }
+    .h-card.memory { background:#fff5e3; border-color:#c9a96c; }
+    .h-main > .h-card:not(:last-child)::after { content:'→'; position:absolute; right:-22px; top:38%; font-size:20px; color:#527360; }
+    .h-main > .h-card.tool::after { content:'⇄'; }
+    .h-store { display:grid; grid-template-columns:1fr auto 1fr; gap:16px; align-items:center; }
+    .h-store .h-card { text-align:center; }
+    .h-store-arrow { text-align:center; font-size:12px; color:var(--muted); }
+    .h-store-arrow b { display:block; font-size:22px; }
+    .h-feedback { text-align:center; font-size:13px; color:#6e592d; margin:14px 0; padding:8px; background:#fff6e5; border-radius:8px; }
+    .h-link { text-align:center; font-size:13px; color:var(--muted); margin:12px 0; }
+    .h-case-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
+    .h-case { min-width:0; position:relative; background:white; border:1px solid var(--line); border-radius:12px; padding:14px; }
+    .h-case:not(:last-child)::after { content:'→'; position:absolute; right:-18px; top:42%; color:var(--accent); font-size:20px; }
+    .h-case h4 { margin:0; font-size:15px; }
+    .h-case p { font-size:13px; line-height:1.7; margin-top:10px; color:var(--muted); }
+    .h-case svg { display:block; width:100%; height:auto; margin:8px 0; }
+    .h-case svg text { font-family:inherit; }
+    .h-bubble { padding:9px 10px; background:#eaf6ef; border-radius:8px; font-size:13px; min-height:61px; }
+    .h-outcomes { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px; }
+    .h-outcomes > div { padding:12px 14px; border-radius:8px; background:#e6f4ec; font-size:13px; }
+    .h-outcomes > div:last-child { background:#fff2d9; }
+    .h-outcomes strong { display:block; margin-bottom:4px; }
+    .h-principles { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:16px 0; }
+    .h-principles div { background:#f0f7f3; padding:12px; border-radius:8px; font-size:13px; }
+    .h-principles strong { display:block; font-size:15px; margin-bottom:5px; }
+    .h-details { padding:0 20px 20px; }
+    .h-details > section:first-child { margin-top:0; }
+    @media(max-width:680px) {
+      .h-main,.h-case-grid { grid-template-columns:1fr; gap:26px; }
+      .h-main > .h-card:not(:last-child)::after,.h-case:not(:last-child)::after { content:'↓'; top:auto; bottom:-27px; left:calc(50% - 7px); right:auto; }
+      .h-main > .h-card.tool::after { content:'⇅'; }
+      .h-store { grid-template-columns:1fr; gap:6px; }
+      .h-store-arrow b { transform:rotate(90deg); }
+      .h-principles,.h-outcomes { grid-template-columns:1fr 1fr; }
+      .h-case svg { max-width:270px; margin:8px auto; }
+      .harness-visual .design-figure { padding:14px; }
+      .h-details { padding:0 12px 12px; }
+    }
+
+    /* Algorithm flow: local HTML/CSS, readable without scripts or external assets. */
+    .algo-chart { background:#f5f8fc; border-color:#ccd9e8; }
+    .algo-chart .algo-node { max-width:730px; margin:auto; border:1px solid #93b1d0; border-radius:10px; background:white; padding:14px 18px; }
+    .algo-node h4 { margin:0 0 8px; font-size:16px; }
+    .algo-node p { font-size:14px; line-height:1.7; margin:5px 0; }
+    .algo-node .algo-io { color:#50677d; font-size:13px; border-top:1px dashed #cbd9e5; padding-top:7px; margin-top:8px; }
+    .algo-node.agent { background:#e1f3e8; border:2px solid #23825c; }
+    .algo-arrow { text-align:center; color:#486a8b; font-size:22px; line-height:1.2; padding:8px 0; }
+    .algo-arrow small { font-size:12px; display:block; margin-bottom:4px; }
+    .algo-end { width:fit-content; margin:auto; padding:9px 24px; border:2px solid #486a8b; border-radius:30px; background:#edf4fc; font-weight:700; }
+    .algo-branches { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:0 auto; }
+    .algo-branch { background:white; border:1px solid #adbfce; border-radius:9px; padding:12px; min-width:0; font-size:14px; }
+    .algo-branch strong { display:block; margin:4px 0; }
+    .algo-branch .branch-label { font-size:12px; color:#486a8b; }
+    .algo-decision { margin:auto; max-width:730px; padding:13px 18px; background:#fff4de; border:2px solid #c6a15c; border-radius:4px; text-align:center; font-weight:700; }
+    .algo-return { border-left:3px solid #b68b39; background:#fff8eb; padding:9px 13px; font-size:13px; margin:12px auto; max-width:730px; }
+    .algo-merge { text-align:center; margin:10px 0; color:#486a8b; font-size:13px; border-top:2px solid #b3c5d6; padding-top:8px; }
+    @media(max-width:680px) { .algo-branches { grid-template-columns:1fr; } .algo-chart .algo-node { padding:12px; } }
+    .code-ref { display:block; font:12px/1.7 ui-monospace,monospace; overflow-wrap:anywhere; margin-top:7px; color:#486a8b; }
+    /* Flowchart refresh: stronger hierarchy, clearer roles, and softer connectors. */
+    .algo-chart {
+      position:relative;
+      overflow:hidden;
+      padding:28px 26px 24px;
+      border:1px solid #c9ddd9;
+      border-radius:18px;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(37,183,165,.13), transparent 32%),
+        linear-gradient(180deg,#f8fcfb 0%,#eef7f5 100%);
+      box-shadow:0 14px 34px rgba(38,84,91,.08), inset 0 1px rgba(255,255,255,.9);
+    }
+    .algo-chart::before {
+      content:'';
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      opacity:.35;
+      background-image:linear-gradient(rgba(96,142,143,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(96,142,143,.08) 1px,transparent 1px);
+      background-size:24px 24px;
+      -webkit-mask-image:linear-gradient(to bottom,black,transparent 90%);
+      mask-image:linear-gradient(to bottom,black,transparent 90%);
+    }
+    .algo-chart > * { position:relative; z-index:1; }
+    .algo-chart .algo-node {
+      max-width:860px;
+      padding:18px 22px 16px;
+      border:1px solid #b8d0d0;
+      border-left:5px solid #398a8c;
+      border-radius:14px;
+      background:rgba(255,255,255,.94);
+      box-shadow:0 8px 20px rgba(44,84,91,.09);
+    }
+    .algo-chart .algo-node h4 { color:#173e54; font-size:17px; letter-spacing:.01em; }
+    .algo-chart .algo-node h4::first-letter { color:#147f73; }
+    .algo-chart .algo-node p { color:#4b6671; line-height:1.8; }
+    .algo-chart .algo-node.agent {
+      border-color:#64ad8d;
+      border-left-color:#19865e;
+      background:linear-gradient(135deg,#e8f8ef,#f7fcf9);
+      box-shadow:0 10px 24px rgba(25,134,94,.13);
+    }
+    .algo-chart .algo-node.agent h4 { color:#176243; }
+    .algo-arrow {
+      position:relative;
+      width:fit-content;
+      min-width:90px;
+      margin:12px auto;
+      padding:3px 14px 1px;
+      color:#187f78;
+      font-size:25px;
+      line-height:1.1;
+      text-align:center;
+    }
+    .algo-arrow::before,.algo-arrow::after {
+      content:'';
+      position:absolute;
+      top:50%;
+      width:38px;
+      height:1px;
+      background:#a9cfca;
+    }
+    .algo-arrow::before { right:100%; }
+    .algo-arrow::after { left:100%; }
+    .algo-arrow small {
+      display:block;
+      max-width:360px;
+      margin-bottom:5px;
+      color:#607b82;
+      font-size:12px;
+      line-height:1.45;
+      font-weight:600;
+    }
+    .algo-branches {
+      max-width:980px;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:16px;
+      padding:4px 0;
+    }
+    .algo-branch {
+      min-height:150px;
+      padding:16px 16px 14px;
+      border:1px solid #c5d9d8;
+      border-top:4px solid #6c9ca0;
+      border-radius:13px;
+      background:rgba(255,255,255,.94);
+      box-shadow:0 7px 16px rgba(44,84,91,.07);
+    }
+    .algo-branch strong { color:#173e54; font-size:15px; line-height:1.45; }
+    .algo-branch p { color:#506971; line-height:1.7; }
+    .algo-branch .branch-label { display:inline-block; margin-bottom:7px; padding:3px 8px; border-radius:999px; background:#edf7f5; color:#247d78; font-weight:700; }
+    .algo-branch:nth-child(2) { border-top-color:#d29b45; }
+    .algo-branch:nth-child(2) .branch-label { background:#fff5e2; color:#9a6b1d; }
+    .algo-branch:nth-child(3) { border-top-color:#6686b8; }
+    .algo-branch:nth-child(3) .branch-label { background:#edf2fb; color:#4a6797; }
+    .algo-return {
+      max-width:860px;
+      margin:16px auto;
+      padding:12px 16px;
+      border:1px dashed #b69a59;
+      border-left:4px solid #c4994a;
+      border-radius:11px;
+      background:#fff9eb;
+      color:#6d5b35;
+      box-shadow:0 5px 12px rgba(139,104,37,.06);
+    }
+    .algo-chart figcaption {
+      max-width:860px;
+      margin:20px auto 0;
+      padding-top:14px;
+      border-top:1px solid #cfe0de;
+      color:#5b7479;
+      line-height:1.75;
+    }
+    @media(max-width:680px) {
+      .algo-chart { padding:20px 14px 18px; border-radius:14px; }
+      .algo-chart .algo-node { padding:15px 16px 14px; }
+      .algo-arrow::before,.algo-arrow::after { width:18px; }
+      .algo-branches { gap:12px; }
+      .algo-branch { min-height:0; }
+    }
+
+    /* 页面导航与层级 */
+    :root { --navy:#102d3f; --navy-2:#173e54; --cyan:#25b7a5; --gold:#f1b85b; --shadow:0 18px 50px rgba(26,73,88,.10); }
+    body { background:radial-gradient(circle at 8% 0%,#e5f5f1 0,#f4fbf7 34rem),linear-gradient(180deg,#f4fbf7,#eef7f4); }
+    .page-shell { width:min(1320px,calc(100% - 48px)); display:grid; grid-template-columns:240px minmax(0,1fr); gap:28px; align-items:start; margin:auto; padding:28px 0 64px; }
+    .page-content { min-width:0; }
+    .sidebar { position:sticky; top:24px; padding:24px 18px 18px; color:#e9fbf6; background:linear-gradient(170deg,var(--navy),var(--navy-2)); border-radius:22px; box-shadow:0 18px 42px rgba(16,45,63,.22); overflow:hidden; }
+    .sidebar:after { content:""; display:block; height:76px; margin:22px -18px -18px; background:linear-gradient(135deg,transparent 48%,rgba(37,183,165,.2) 49%,rgba(37,183,165,.2) 52%,transparent 53%),linear-gradient(25deg,transparent 44%,rgba(241,184,91,.18) 45%,rgba(241,184,91,.18) 48%,transparent 49%); }
+    .sidebar-brand { font-size:12px; line-height:1.15; letter-spacing:.16em; color:#a9e7db; }
+    .sidebar-brand strong { color:#fff; font-size:18px; letter-spacing:.12em; }
+    .sidebar-caption { margin:26px 0 18px; font-size:10px; letter-spacing:.14em; color:#85b8bc; line-height:1.7; }
+    .sidebar-caption span { letter-spacing:0; color:#c2dedb; }
+    .side-nav { display:grid; gap:7px; margin:0; padding:0; border:0; }
+    .side-link { display:grid; grid-template-columns:34px 1fr; column-gap:8px; padding:10px 9px; color:#d8eeea; text-decoration:none; border:1px solid transparent; border-radius:11px; transition:.18s ease; }
+    .side-link:hover,.side-link:focus-visible,.side-link.active { background:rgba(255,255,255,.10); border-color:rgba(140,226,211,.32); color:#fff; transform:translateX(2px); }
+    .side-link > span { grid-row:span 2; padding-top:1px; color:var(--gold); font:700 12px ui-monospace,monospace; }
+    .side-link b { font-size:14px; line-height:1.35; }
+    .side-link small { color:#91c4c1; font-size:11px; line-height:1.4; }
+    .sidebar-back { display:block; margin-top:20px; padding:12px 9px 0; border-top:1px solid rgba(180,230,220,.2); color:#b9e5dc; text-decoration:none; font-size:13px; }
+    .intro, article { box-shadow:var(--shadow); }
+    .intro { padding:34px 38px 26px; }
+    .intro h1 { color:var(--navy); }
+    .intro .eyebrow { color:#0c8f7b; }
+    .utility-nav { margin-top:22px; padding-top:17px; display:flex; gap:8px; flex-wrap:wrap; border-top:1px solid var(--line); }
+    .utility-nav a { padding:6px 11px; color:#276575; border:1px solid #c6e4dd; border-radius:999px; background:#f5fcfa; font-size:13px; text-decoration:none; }
+    .utility-nav a:hover { background:#e4f5f0; }
+    .round-header { padding-bottom:4px; }
+    .round-header h2 { color:var(--navy); }
+
+    .algo-chart { background:linear-gradient(180deg,#f8fcfb,#f1f8f6); border:1px solid #d4e9e2; box-shadow:inset 0 1px #fff; }
+    .algo-node { box-shadow:0 7px 18px rgba(36,83,91,.07); }
+    .code-ref a { color:#1f7080; }
+    @media (max-width:900px) { .page-shell { grid-template-columns:190px minmax(0,1fr); gap:18px; width:min(100% - 28px,1320px); } .sidebar { padding:18px 12px; } .sidebar-brand strong { font-size:15px; } .side-link { padding:9px 5px; } .side-link b { font-size:12px; } .side-link small { font-size:10px; } .sidebar:after { margin-left:-12px; margin-right:-12px; } }
+    @media (max-width:680px) { .page-shell { display:block; width:calc(100% - 24px); padding-top:12px; } .sidebar { position:relative; top:auto; margin-bottom:14px; padding:16px; } .sidebar-caption { margin:15px 0 10px; } .side-nav { display:flex; overflow-x:auto; gap:6px; padding-bottom:2px; } .side-link { min-width:112px; } .sidebar-back { margin-top:12px; padding-top:10px; } .intro { padding:25px 22px 20px; } article { padding:24px 20px; } .harness-visual > section { padding-left:0; } .harness-visual > section:before { position:static; display:inline-grid; margin-bottom:9px; } .round-header h2:before { display:block; margin-bottom:6px; } }
+
+    .harness-visual { padding:0; border:0; background:transparent; box-shadow:none; }
+    .harness-visual > section { margin:0 0 28px; padding:30px 32px; background:white; border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); scroll-margin-top:24px; }
+    .harness-visual > section:before { content:none; }
+    .harness-visual h2 { display:flex; align-items:center; gap:16px; padding-bottom:18px; margin-bottom:24px; border-bottom:1px solid var(--line); color:var(--navy); font-size:28px; }
+    .chapter-number { flex-shrink:0; display:grid; place-items:center; width:44px; height:44px; border-radius:12px; background:#117c70; color:white; font:700 18px ui-monospace,monospace; }
+    .harness-visual h3 { margin:26px 0 16px; font-size:20px; color:var(--navy); }
+    .harness-visual h4 { font-size:16px; }
+    .side-link:hover:not(.active) { background:rgba(255,255,255,.04); border-color:transparent; }
+    .sidebar { max-height:calc(100vh - 48px); overflow-y:auto; }
+    @media(max-width:680px) { .harness-visual > section { padding:22px 18px; } .harness-visual h2 { font-size:24px; gap:12px; } .sidebar { max-height:none; } }
+    @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .side-link { transition:none; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#design-current">跳到 v1 方案</a>
+  <main class="page-shell">
+    <aside class="sidebar" aria-label="方案设计章节导航">
+      <div class="sidebar-brand">VIDEO TO<br><strong>SIMREADY</strong></div>
+      <div class="sidebar-caption">DESIGN V1<br><span>v1 方案设计 · 2026-09-22</span></div>
+      <label for="design-version" style="display:block;margin:18px 0 8px;font-size:13px">版本切换</label>
+      <select id="design-version" aria-label="切换方案设计版本" style="width:100%;padding:10px 8px;border-radius:8px;font:14px system-ui;color:#203247;background:#f3f7fa" onchange="location.href=this.value">
+        <option value="scene-reconstruction-design.html" selected>v1 · 完整框架</option>
+        <option value="scene-reconstruction-design-v2.html">v2 · 2026-09-24</option>
+      </select>
+      <nav class="side-nav">
+        <a class="side-link active" href="#design-current"><span>01</span><b>总体框架</b><small>Harness 主循环</small></a>
+        <a class="side-link" href="#current-semantics"><span>02</span><b>术语与状态</b><small>语义边界</small></a>
+        <a class="side-link" href="#design-tools"><span>03</span><b>工具、循环与提案</b><small>6 个工具 · actions / commit</small></a>
+        <a class="side-link" href="#design-code-flow"><span>04</span><b>执行顺序</b><small>代码入口</small></a>
+        <a class="side-link" href="#design-stop"><span>05</span><b>失败处理</b><small>恢复与重试</small></a>
+      </nav>
+      <a class="sidebar-back" href="scene-reconstruction-discussions.html">← 返回方案讨论</a>
+    </aside>
+    <div class="page-content">
+    <header class="intro">
+      <p class="eyebrow">VIDEO TO SIMREADY · DESIGN V1</p>
+      <h1>v1 方案设计</h1>
+      <p>这里维护当前增量式场景理解 Harness 的方法框架、执行顺序、工具职责、状态语义和代码入口。运行中遇到的问题及解决思路记录在<a href="scene-reconstruction-discussions.html">方案讨论页面</a>。</p>
+      <p class="note">最后核对日期：2026-09-24。代码路径均相对于仓库根目录；页面内容以当前实现为准。</p>
+      <nav class="utility-nav" aria-label="方案设计快捷入口">
+        <a href="#design-current">从头阅读</a>
+        <a href="#design-code-flow">直接看执行顺序</a>
+        <a href="harness-tools.html">查看真实交互记录</a>
+      </nav>
+    </header>
+
+<article class="harness-visual" aria-label="v1 方案设计正文">
+      <section id="design-current" class="design-chapter" aria-labelledby="design-current-title">
+      <header class="round-header">
+        <div class="round-meta"><span class="round-number">v1 方案设计</span><time datetime="2026-09-21">2026-09-21</time><span>依据当前源码逐项核对</span></div>
+        <h2 id="design-current-title"><span class="chapter-number">01</span>总体框架</h2><h3>1.1 · 增量式场景理解 Harness</h3><section class="record"><h4>当前输入方案 v2 · 2026-09-24 · 历史视觉证据按需查看</h4><p>窗口开始时只发送当前 5 帧的完整 RGB 和 mask overlay，共 10 张图（不足 5 帧时按实际帧数）。全部历史 Object 以文字记录、全局 3D 框和最近空间候选提供，不预先发送历史图片。每条当前观测最多列出 3 个最近历史 Object；候选不限定归属，不是类别结论或置信度。</p><p>Agent 需要确认某个历史物体时调用 inspect_object(object_id)，返回一张完整 RGB 上叠加原始 SAM3 mask bbox 与 Object 编号的代表图；需要其他视角或 mask 细节时调用 inspect_observations。窗口内相同证据图片不重复发送，列表中的观测编号不等于已经查看过的视觉证据。</p><p>代表图仍采用“相对清晰候选池中优先大 bbox”的选择方法；全局框与空间候选来自窗口开始时已提交状态。<a href="scene-reconstruction-design-v2.html">打开 v2 方案子页：按执行顺序查看输入与工具行为</a>。本次不增加提交前自动冲突审查，也不改写历史实验记录。</p></section><p class="warn">早期 overlay 输入修订 v2（与本次方案版本不同）：当时改为完整 RGB ＋ 按 mask 着色的整帧 overlay；单物体取证也不裁剪。新增原图像素 bbox_xyxy 与 image_size_wh。<a href="../InstanceRecognition/runtime/experiments/harness_input_v2_preview/index.html">查看前五帧新版输入预览</a>（已准备，未调用 API）。下方旧运行回放保留历史输入。</p>
+        <p>按下方编号从上往下读，再沿返回路径理解循环。蓝白模块由程序执行，绿色模块由模型判断。这里记录 v1 方案的框架、执行顺序、工具职责和代码入口；运行中发现的问题与解决思路继续记录在方案讨论页面。</p>
+      </header>
+      </section>
+
+<section id="current-semantics" class="design-chapter" aria-labelledby="semantics-title">
+        <h2 id="semantics-title"><span class="chapter-number">02</span>术语与状态</h2>
+        <h3>2.1 · 一条观测不等于一个跨帧物体</h3><p class="record"><strong>版本化方案：</strong><a href="scene-reconstruction-design-v2.html">v2 · 历史图片按需查看（2026-09-24）</a>。本页维护当前语义；子页记录该版输入、工具行为与执行流程。早期输入修订和历史运行回放保留各自版本含义。</p>
+        <p class="note">本节按 2026-09-24 当前方案核对；旧轮次保留当时设想，当前能力以本节为准。命名规范：<a href="../InstanceRecognition/src/harness/naming-conventions.txt">InstanceRecognition/src/harness/naming-conventions.txt</a>。</p>
+        <div class="table-wrap"><table><thead><tr><th>术语</th><th>当前含义与边界</th></tr></thead><tbody>
+        <tr><td>observation · 观测</td><td>一帧中的一个原始 mask 及其元数据与三维观测点；ID 如 <code>0000:001</code>。同一物体可对应多帧、多条观测。</td></tr>
+        <tr><td>category_label / mask_id</td><td>前者是上游给这条观测的类别提示，不保证正确；后者如 M01，只标识当前帧中的 mask。overlay 显示 mask 编号和 bbox，类别仍在结构化元数据中。</td></tr>
+        <tr><td>object / object_id / object_label</td><td>跨帧维护的实体、稳定编号（Object1 等）、为实体选定的类别。类别相同不证明身份相同，类别不同也不证明是两个物体。create 设置初始 object_label；核对视觉证据确认旧类别有误后，relabel 可修正 object_label。原始观测的 category_label 保留。</td></tr>
+        <tr><td>语义组</td><td>当前按原始 mask 粒度维护身份。有视觉证据支持、且上游有意整体分割的一对或一组，可作为一个语义组实体保留；仅凭类别词不能确定分组。意外混入无关物体的 mask 应标 repair。当前没有独立 group 数据类型或成员拆分工具。</td></tr>
+        <tr><td>pending / defer / repair</td><td>pending 是所有未归属观测的汇总；defer 表示判断证据不足，repair 表示 mask 需要修复。它们是观测的状态，不是物体的状态，均不参加物体点云融合。</td></tr>
+        <tr><td>3D 占据点云</td><td>当前实际维护的是已归属观测的可见表面点融合，不是完整实体体积或不可见表面的恢复。</td></tr>
+        </tbody></table></div>
+        </section>
+
+<section id="design-tools" class="design-chapter" aria-labelledby="design-tools-title">
+        <h2 id="design-tools-title"><span class="chapter-number">03</span>工具、循环与提案</h2><h3>3.1 · Agent 如何取证与提交</h3>
+        <p><a href="harness-tools.html"><strong>打开逐窗口 Agent 交互记录 → 查看真实请求、响应、工具返回和报错</strong></a></p>
+        <p>把 Agent 理解为“负责判断的人”，工具就是它可以让程序代办的具体事情：查记录、取图片、算距离、检查修改、保存修改。<strong>这 6 个工具都是本地程序函数；不是 6 个额外的模型，也不要求每个窗口全部调用。</strong></p>
+        <p class="note">工具定义：<a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:13</a>。以下路径相对于仓库根目录；行号核对于 2026-09-22。这里记录已实现的能力。</p>
+        <figure class="algo-chart" aria-label="六个工具在窗口处理过程中的位置">
+          <div class="algo-node"><h4>起点 · Agent 已拿到当前观测与历史物体信息</h4><p>程序向 Agent 提供两类输入：当前窗口的新观测，以及截至上一窗口的历史物体文字状态与空间摘要，初始不附历史图片。当前观测包含完整 RGB、按 mask 着色并标有 mask 编号与 bbox 的整帧 overlay、category_label、2D bbox 和 3D 点云摘要；历史物体信息包含 Object ID、object_label、已有观测数量、代表观测编号、全局 3D 框；当前观测另有最近 3 个空间候选。仅列出编号不表示已经查看对应图像。</p></div>
+          <div class="algo-arrow">↓</div>
+          <div class="algo-node agent"><h4>Agent 判断：可以决定归属了吗？</h4><p>例如：这一帧的“遥控器”，是否就是之前那一帧的“手机”？证据不足时，自行选择下面需要的工具。</p></div>
+          <div class="algo-arrow"><small>按需取证；已有输入足够时可以直接提出更新</small>↓</div>
+          <div class="algo-branches">
+            <div class="algo-branch"><strong>查已有记录</strong><p><code>list_objects</code><br>现在记住了哪些物体？哪些观测还没决定归属？</p></div>
+            <div class="algo-branch"><strong>回看完整图片</strong><p><code>inspect_observations</code><br>查看指定 mask 所在帧。<br><code>inspect_object</code><br>回看某个已建物体的代表观测。</p></div>
+            <div class="algo-branch"><strong>补充空间证据</strong><p><code>compare_geometry</code><br>计算两条观测的三维点云有多接近。</p></div>
+          </div>
+          <div class="algo-return">工具结果 → 回到 Agent → 继续判断。可以重复取证；仍不确定的观测可以暂缓归属。</div>
+          <div class="algo-arrow">↓</div>
+          <div class="algo-node"><h4>propose_update · 先检查一份完整修改方案</h4><p>Agent 提出新建、归属、合并或暂缓等操作。程序检查版本、ID、证据引用和观测覆盖情况，返回提案编号及修改预览。此时尚未保存为新版本。</p></div>
+          <div class="algo-return">检查失败 → 把错误返回 Agent → 修改提案后重新检查。</div>
+          <div class="algo-arrow">↓</div>
+          <div class="algo-node"><h4>commit_update · 提交已经检查通过的提案</h4><p>程序核对提案编号和版本，再由运行器生成物体点云、保存新状态与 checkpoint；成功后进入下一个窗口。</p></div>
+          <figcaption>阅读顺序从上到下。取证次数由需要决定；正式修改走“提出 → 检查通过 → 提交”。</figcaption>
+        </figure>
+        <h3>3.2 · 六个工具的输入、输出与代码位置</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>工具 / 要解决的问题</th><th>Agent 传入什么</th><th>程序返回或执行什么</th><th>代码位置</th></tr></thead>
+          <tbody>
+            <tr><td><strong>1 · list_objects</strong><br>“我们已经记住了哪些物体？”</td><td>空参数 <code>{}</code></td><td>当前版本、物体 ID / 类别 / 状态 / 观测数 / 代表观测 ID，以及别名和待定观测。不返回图片，不修改状态。</td><td><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:33</a><br><code>listing()</code></td></tr>
+            <tr><td><strong>2 · inspect_observations</strong><br>“把这几个 mask 对应的画面再给我看一下。”</td><td><code>ids</code>：1–4 个观测 ID，例如 <code>["0000:011", "0003:006"]</code></td><td>每条观测的元信息，以及依次排列的完整 RGB、只高亮该目标的整帧 overlay。保留周围场景，不把物体裁出来；最多 8 张图；窗口内已发送的相同证据图不再重复附送。只允许查看当前窗口及历史观测。</td><td><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:26</a><br><code>observe()</code></td></tr>
+            <tr><td><strong>3 · inspect_object</strong><br>“之前建立的这个物体长什么样？”</td><td><code>object_id</code>：已有物体 ID，例如 <code>Object11</code></td><td>物体信息及一条代表观测：一张完整 RGB 叠加原始 SAM3 mask bbox 和 Object 编号。先筛选相对清晰的候选，再优先选择归一化 bbox 面积大的观测；不裁剪、不融合多个 mask 的框。窗口内相同证据图不重复发送。</td><td><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:46</a><br><code>call()</code> 对应分支</td></tr>
+            <tr><td><strong>4 · compare_geometry</strong><br>“这两次看到的表面在三维中有多接近？”</td><td><code>observation_a</code>、<code>observation_b</code>：两个观测 ID</td><td>两片点云抽样后的最小距离、双向最近邻距离中位数、双向 5 cm 内点比例，以及可引用的几何证据 ID；距离单位为米。无有效点则返回不可用。不会直接判定是同一物体，也不会自动合并。</td><td><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:50</a><br><code>call()</code> 对应分支</td></tr>
+            <tr><td><strong>5 · propose_update</strong><br>“我准备这样修改，先检查能不能执行。”</td><td><code>proposal_json</code>：JSON 字符串，包含基础版本和操作列表；操作附理由与证据引用</td><td>检查后在内存中保存待提交提案，返回 <code>proposal_id</code>、受影响物体、物体数量、待定数量、操作和基础版本。失败返回错误供 Agent 修正；不会写入正式状态。每次提出新提案都会清空旧待提交提案，即使新提案失败。</td><td><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:63</a><br>校验：<a href="../InstanceRecognition/src/harness/state.py">InstanceRecognition/src/harness/state.py:23</a></td></tr>
+            <tr><td><strong>6 · commit_update</strong><br>“把刚才检查通过的修改正式保存。”</td><td><code>proposal_id</code>：上一步返回的提案编号</td><td>核对待提交提案和当前版本。工具分支返回可提交标记；<code>run.py</code> 随后真正生成 / 复用物体点云、写新版本并更新 checkpoint。提交成功后结束当前窗口。</td><td><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:70</a><br>实际提交：<a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:77</a></td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>3.3 · 6 个工具与 6 种操作的关系</h3>
+        <figure class="algo-chart" aria-label="工具与状态操作的关系">
+          <div class="algo-node"><h4>读取证据：4 个查询工具</h4><p>list_objects 查状态；inspect_observations / inspect_object 回看图像；compare_geometry 算表面距离。它们不修改物体归属；检查工具会登记可引用的证据。</p></div>
+          <div class="algo-arrow">↓</div>
+          <div class="algo-node agent"><h4>Agent 组织 actions 操作列表</h4><p>create → assign；或重新 assign、relabel、defer、repair、merge。下面这些操作不是可以直接调用的独立工具。</p></div>
+          <div class="algo-arrow">↓</div>
+          <div class="algo-node"><h4>propose_update：检查整批操作，返回预览</h4><p>传入 JSON 字符串 proposal_json，里面包含 base_version 与 actions。按顺序在状态副本中执行并校验，尚不修改正式版本。</p></div>
+          <div class="algo-arrow">↓ 读取成功预览，下一轮调用</div>
+          <div class="algo-node"><h4>commit_update：提交最近的有效提案</h4><p>传入返回的 proposal_id；宿主程序生成或复用点云、保存新版本和 checkpoint。收到 committed 才表示实际完成。</p></div>
+        </figure>
+        <h3>3.4 · 六种提案操作</h3>
+        <div class="table-wrap"><table class="proposal-operations-table"><thead><tr><th>操作 / 通俗解释</th><th>操作字段（另须 evidence、reason）</th><th>状态与点云如何变化</th><th>限制 / 代码</th></tr></thead><tbody>
+        <tr><td><code>create</code> · 给新物体建档</td><td>object_id、object_label</td><td>创建暂定实体；本身不附带观测点。</td><td>编号为 Object+无前导零正整数，不复用活跃或退役编号；同一事务需 assign 实际观测。<code>state.py:42</code></td></tr>
+        <tr><td><code>relabel</code> · 修正物体类别</td><td>object_id、object_label（新物体类别）</td><td>只更新目标物体的 object_label；label_history 保存 previous_label、object_label、evidence、reason、decided_at（观测截止序号 cutoff）。保留 object_id、所有 category_label 和归属；单独修正类别复用原点云。</td><td>目标须为活跃物体，新类别须为非空字符串，去除首尾空白后须与旧类别不同；只允许 object_label，不接受 category_label 等额外字段。Agent 应先核对视觉证据，确认旧 object_label 有误；不能仅因新 category_label 不同就修改。<a href="../InstanceRecognition/src/harness/state.py">InstanceRecognition/src/harness/state.py:51 · relabel 分支</a></td></tr>
+        <tr><td><code>assign</code> · 把观测归给物体</td><td>object_id、observations</td><td>一条观测只归一个物体，可将历史观测从旧物体转给新目标；提交时重算受影响点云。</td><td>目标须已存在；不能靠重新分配把保留物体清空。多个 mask 可归同一实体。<code>state.py:68</code></td></tr>
+        <tr><td><code>defer</code> · 暂时无法决定</td><td>observations</td><td>状态置为 defer，object_id 置为 null；撤销此前归属，这些点不融合到任何物体。</td><td>保留原始观测，之后可重新 assign。<code>state.py:68</code></td></tr>
+        <tr><td><code>repair</code> · 标记分割需要修复</td><td>observations</td><td>状态置为 repair，同样撤销归属并排除其点。</td><td>不会调用 SAM、不会拆像素，也不会自动创建修复任务。当前没有自动修复闭环。<code>state.py:68</code></td></tr>
+        <tr><td><code>merge</code> · 两份档案其实是同一物体</td><td>source_object、object_id（目标）</td><td>来源全部观测转给目标；来源退役为目标的别名，目标类别保留。</td><td>两者须存在且不同；不是类别修正工具。提交时重算目标点云。<code>state.py:82</code></td></tr>
+                </tbody></table></div>
+        <p>上述行号对应 <a href="../InstanceRecognition/src/harness/state.py">InstanceRecognition/src/harness/state.py</a>。<strong>evidence</strong> 是已提供视觉观测或取证工具实际返回的证据编号；<strong>reason</strong> 是解释为何执行该修改的简洁中文。仅列在物体清单中的观测编号不自动成为可引用证据；Object1 和 M01 也不是证据编号。</p>
+        <h3>3.5 · 已有物体类别修正</h3>
+        <figure class="algo-chart" aria-label="已有物体类别修正流程">
+          <div class="algo-node"><h4>发现类别分歧</h4><p>新的 category_label 与已有 object_label 不同，只是需要核查的线索，不直接触发改名。</p></div>
+          <div class="algo-arrow">↓ 核对当前 RGB / overlay 与历史 RGB+bbox；必要时 inspect</div>
+          <div class="algo-node agent"><h4>Agent 判断旧物体类别是否确实有误</h4><p>有证据支持纠正：提出 relabel，填写 object_id、新 object_label、evidence、reason。仍不能确定：保留旧类别，在理由中说明疑点。</p></div>
+          <div class="algo-arrow">↓ propose_update → 检查预览 → commit_update</div>
+          <div class="algo-node"><h4>保存新类别与修正历史</h4><p>更新 object_label，保留原始 category_label、物体身份和观测归属。label_history 记录修改前后类别及依据；没有同时修改归属时，不重新融合点云。</p></div>
+        </figure>
+        <h3>3.6 · 执行约束与实现边界</h3>
+        <details><summary>执行约束：哪些是程序强制检查，哪些只是提示要求？</summary>
+          <p><strong>程序检查：</strong>基础版本、可访问证据编号、非空理由、有效目标和观测；同一提案中观测只能出现在一次 assign/defer/repair 中；事务结束后 cutoff 之前的每条观测都须有 assigned/defer/repair 状态，每个保留物体须有观测。未变化的历史记录不必重复提交。</p>
+          <p><strong>提示要求：</strong>判断需有相关视觉证据、解释实际可见线索、避免无证据的身份拆分或合并。代码不验证语义结论是否正确，也不证明理由真实；格式合法不代表识别准确。</p>
+          <p><strong>取证顺序：</strong>inspect 返回的图像放在随后一条带 tool_call_id 的 user 消息中；等待图片后再提出依赖它的判断，不能在同一模型响应中一边请求图像一边提前决定。compare_geometry 仅返回几何数据，不提供图片或身份判定。</p>
+          <p><strong>提案生命周期：</strong>每次 propose_update 都清空旧待提交提案，即使新提案校验失败；commit_update 只能提交最近成功校验的提案。ready_to_commit 只是工具内部标记，正式成功由 run.py 返回 committed。</p>
+        </details>
+        <p class="warn"><strong>尚未实现：</strong>delete、mask 像素拆分或自动修复、任意几何编辑。relabel 已支持修正物体的 object_label，不是修改观测的 category_label 或物体编号。同一物体的部件观测可直接 assign 同一实体；部件与整体需要分别维护时，也分别作为有观测的 Object 处理；不能创建没有观测的整体父对象。</p>
+        <p class="note">调用频率：这些工具属于按窗口运行的 Harness。工具在本地执行，结果再交给 GPT，才进入下一轮模型判断；不是每个 mask 固定调用一次 GPT，也不能把“6 个工具”理解为“每窗固定调用 6 次 GPT”。</p>
+      </section>
+
+<section id="design-code-flow" aria-labelledby="design-flow-title">
+        <h2 id="design-flow-title"><span class="chapter-number">04</span>执行顺序</h2><h3>4.1 · 算法流程与代码入口</h3>
+        <p class="note">代码路径统一相对于当前工作目录（仓库根目录）。每个模块标注函数或代码块的起始行；行号为 2026-09-21 快照。点击文件名可打开源码，编辑器中用行号定位；普通浏览器不保证跳到指定行。</p>
+        <figure class="algo-chart" aria-label="Harness 当前实现执行流程图">
+<div class="algo-node"><h4>01 · 启动：确定输入、参数和续跑目录</h4><p>读取参数，默认 30 帧、每窗 5 帧、每窗最多 14 次 API 调用、2 cm 体素；获取运行锁，保存代码哈希，核对配置和输入。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:15</a> · <code>main()</code></span></div><div class="algo-arrow"><small></small>↓</div><div class="algo-node"><h4>02 · 把已有 mask 和三维点整理成可查询观测</h4><p>读取 manifest 与每帧 NPZ，根据 mask_bits 取出每个 mask 的 points_world；生成观测 ID、类别、点数、中心和包围盒。生成完整 RGB 和带 mask 编号、bbox 的整帧 overlay；不裁剪物体。这里不重新调用 GPT/SAM，也不重新估计深度。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/observations.py">InstanceRecognition/src/harness/observations.py:22</a> · <code>Observations.__init__()</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/observations.py">InstanceRecognition/src/harness/observations.py:57</a> · <code>Observations.view()</code></span></div><div class="algo-arrow"><small></small>↓</div><div class="algo-node"><h4>03 · 恢复物体记忆，确定下一窗</h4><p>读取 checkpoint 指向的 state；首次运行创建空状态。窗口从 cutoff + 1 开始。虽然启动时已加载全部输入，工具只允许读取当前 cutoff 及之前的观测。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:45</a> · <code>main() 内：读取 checkpoint / state</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/state.py">InstanceRecognition/src/harness/state.py:19</a> · <code>initial()</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:21</a> · <code>Tools.__init__()</code></span></div><div class="algo-arrow"><small>外层循环：逐窗口推进</small>↓</div><div class="algo-node"><h4>04 · 组装这一窗给模型的输入</h4><p>放入新观测及最多三个空间候选、当前物体/待定记录、窗口内完整 RGB 与 overlay、每个历史物体的一张完整 RGB+bbox 代表图，以及已提交版本的全局 3D OBB JSON；每窗重新建立 messages。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:47</a> · <code>main() → inputs.build_window_content()</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:32</a> · <code>Tools.listing()</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/prompt.txt">InstanceRecognition/src/harness/prompt.txt:1</a> · <code>系统提示词</code></span></div><div class="algo-arrow"><small></small>↓</div><div class="algo-node agent"><h4>05 · 模型读图，选择下一步工具</h4><p>发送 messages 和六个工具定义。模型可以请求证据，也可以提出归属修改。客户端读取完整 SSE 响应；失败最多尝试 3 次。每轮返回的多个工具调用按顺序执行。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:61</a> · <code>main() 内：API / 工具循环</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/client.py">InstanceRecognition/src/harness/client.py:54</a> · <code>Client.call()</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/client.py">InstanceRecognition/src/harness/client.py:24</a> · <code>read_stream()</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:12</a> · <code>TOOLS 工具定义</code></span></div><div class="algo-arrow"><small>模型选择以下一种工具路径；不是每轮都走遍三条路径</small>↓</div><div class="algo-branches"><div class="algo-branch"><span class="branch-label">A / 需要再看证据</span><strong>列物体、按需看整帧证据、比几何</strong><p><code>list_objects</code>：状态清单<br><code>inspect_observations</code>：最多 4 个观测的完整 RGB / overlay<br><code>inspect_object</code>：一张完整 RGB + 原始 mask bbox 代表图<br><code>compare_geometry</code>：两个观测的双向距离和 5 cm 内点比例</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:41</a> · <code>Tools.call()：四个读取/计算分支</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:25</a> · <code>Tools.observe()</code></span><p>返回文字与图像 → 回到 05。几何数值作为证据，不直接用阈值决定身份。</p></div><div class="algo-branch"><span class="branch-label">B / 已有修改建议</span><strong>propose_update：先校验，不落盘</strong><p>新物体：create 后 assign；旧物体：assign；无法确定：defer；mask 有问题：repair；旧物体类别有误：relabel；身份纠错使用 merge。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:41</a> · <code>Tools.call()：propose_update 分支</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/state.py">InstanceRecognition/src/harness/state.py:23</a> · <code>propose()</code></span><p>在状态副本上检查版本、ID、证据引用和全部可见观测的处理状态。通过：保存 pending、返回 proposal_id → 回到 04 请求提交。失败：返回错误 → 回到 04 修改提案。</p></div><div class="algo-branch"><span class="branch-label">C / 提交已校验建议</span><strong>commit_update：确认 proposal_id</strong><p>必须与 pending 提案一致，且基础版本未过期。工具返回 ready_to_commit；实际文件写入交由主循环。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:41</a> · <code>Tools.call()：commit_update 分支</code></span><p>校验失败 → 回到 05；校验通过 → 向下进入下一步。</p></div></div><div class="algo-arrow"><small>仅 C 成功后进入</small>↓</div><div class="algo-node"><h4>06 · 按新的归属重新生成物体点云</h4><p>受影响物体：从其所属的原始观测点重新拼接、体素化；未受影响物体复用上一版本的点云。先在临时版本目录写 clouds、transaction 和 state。模型不生成三维坐标。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/publish.py">InstanceRecognition/src/harness/publish.py:15</a> · <code>materialize()</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/observations.py">InstanceRecognition/src/harness/observations.py:83</a> · <code>Observations.fused()</code></span></div><div class="algo-arrow"><small></small>↓</div><div class="algo-node"><h4>07 · 发布版本，推进断点</h4><p>临时目录改名为正式版本目录，然后原子写 checkpoint，最后更新内存 state。checkpoint 是恢复入口；写出点云之前不会推进窗口。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:73</a> · <code>main() 内：commit_update 落盘分支</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/state.py">InstanceRecognition/src/harness/state.py:9</a> · <code>save()</code></span></div><div class="algo-arrow"><small></small>↓</div><div class="algo-node"><h4>08 · 刷新回放，再进入下一窗</h4><p>记录本窗耗时，导出离线 3D 页面、审计页和逐物体 PLY。仍有帧：回到 04；全部完成：再次发布并写 summary.json。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:91</a> · <code>main() 内：窗口收尾与最终汇总</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/publish.py">InstanceRecognition/src/harness/publish.py:27</a> · <code>publish()</code></span></div>
+          <div class="algo-return"><strong>内层返回：</strong>A 的证据、B 的预览或错误、C 的校验错误 → 04；工具结果和证据图加入 messages（<a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:82</a>，main 内结果回传块）。并非每轮都重新扫描整个场景。</div>
+          <div class="algo-return"><strong>外层返回：</strong>08 → 04，读取下一窗；上一窗的 state 成为新一窗的物体记忆。</div>
+          <figcaption>输入：已有类别、2D mask 和世界坐标系中的观测表面点。输出：可追溯的“观测 → 物体”归属、物体累计点云以及每窗版本。</figcaption>
+        </figure>
+      </section>
+
+<section id="design-stop" class="design-chapter" aria-labelledby="design-stop-title">
+        <h2 id="design-stop-title"><span class="chapter-number">05</span>失败处理</h2><h3>5.1 · 没有提交成功，会怎么走？</h3>
+        <div class="algo-branches">
+          <div class="algo-branch"><strong>提案不合法</strong><p>返回错误给模型，继续当前窗口的内层循环；正式状态不变。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:82</a> · <code>main() 内：工具错误与结果回传</code></span></div>
+          <div class="algo-branch"><strong>API 连续失败</strong><p>客户端 3 次尝试仍失败则抛出异常，停止运行；之后从最后已提交窗口恢复，不恢复窗口内的对话。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/client.py">InstanceRecognition/src/harness/client.py:54</a> · <code>Client.call()</code></span></div>
+          <div class="algo-branch"><strong>窗口调用预算用尽</strong><p>倒数第二次提示提交完整提案、未决项暂缓；仍未提交则退出，保留旧 checkpoint。</p><span class="code-ref"><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:61</a> · <code>main() 内：调用预算循环</code></span><span class="code-ref"><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:90</a> · <code>main() 内：未提交检查</code></span></div>
+        </div>
+        <p class="note note-spaced">实现边界：repair 目前只做标记；证据校验检查引用是否可访问，不能证明语义判断正确；几何是预先固定的全视频校正结果，因此本轮增量的是物体身份与点云归属，不是相机位姿或深度。</p>
+      </section>
+
+      </article>
+    </div>
+  </main>
+<script>
+(() => {
+  const links = [...document.querySelectorAll('.side-link')];
+  const chapters = links.map(link => document.querySelector(link.getAttribute('href')));
+  let pending = null;
+  let scheduled = false;
+  function activate(index) {
+    links.forEach((link, i) => {
+      link.classList.toggle('active', i === index);
+      if (i === index) link.setAttribute('aria-current', 'location');
+      else link.removeAttribute('aria-current');
+    });
+  }
+  function sync() {
+    scheduled = false;
+    // Keep the clicked destination highlighted during native smooth scrolling.
+    if (pending !== null) { activate(pending); return; }
+    const marker = Math.min(160, innerHeight * .22);
+    let index = 0;
+    chapters.forEach((chapter, i) => { if (chapter.getBoundingClientRect().top <= marker) index = i; });
+    if (scrollY > 0 && scrollY + innerHeight >= document.documentElement.scrollHeight - 4) index = chapters.length - 1;
+    activate(index);
+  }
+  let releaseTimer;
+  function followHash() {
+    const index = links.findIndex(link => link.hash === location.hash);
+    if (index < 0) { pending = null; sync(); return; }
+    pending = index;
+    activate(index);
+    clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(() => { pending = null; sync(); }, 1500);
+  }
+  links.forEach((link, index) => link.addEventListener('click', () => {
+    pending = index; activate(index);
+    clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(() => { pending = null; sync(); }, 1500);
+  }));
+  addEventListener('scroll', () => { if (!scheduled) { scheduled = true; requestAnimationFrame(sync); } }, {passive:true});
+  addEventListener('scrollend', () => { pending = null; sync(); });
+  for (const type of ['wheel', 'touchstart', 'keydown']) addEventListener(type, () => { pending = null; }, {passive:true});
+  addEventListener('resize', sync);
+  addEventListener('hashchange', followHash);
+  addEventListener('popstate', followHash);
+  followHash();
+})();
+</script>
+</body>
+</html>

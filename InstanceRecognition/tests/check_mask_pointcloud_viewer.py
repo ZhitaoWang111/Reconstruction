@@ -85,6 +85,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
+    projection = json.loads((args.page.parent / "projection_report.json").read_text())
+    expected_background = projection["validation"]["canonical_point_count"]
     profile = Path(tempfile.mkdtemp(prefix="mask-projection-chrome-"))
     results = {"page": str(args.page.resolve()), "profile": str(profile), "screenshots": [], "checks": {}}
     log = (args.output / "browser.log").open("wb")
@@ -125,8 +127,13 @@ def main():
         """)
         stats = browser.js("({frames:manifest.frames.length, options:document.getElementById('frameSelect').options.length, points:glState.drawCount, expected:manifest.frames[0].point_count, background:glState.bgCount, error:glState.gl.getError()})")
         assert stats["frames"] == stats["options"] == 500, stats
-        assert stats["points"] == stats["expected"] and stats["background"] == 491666 and stats["error"] == 0, stats
+        assert stats["points"] == stats["expected"] and stats["background"] == expected_background and stats["error"] == 0, stats
         results["checks"]["initial"] = stats
+        if projection.get('method') == 'gpt_sam31':
+            method = browser.js("({method:manifest.method,model:manifest.model,title:document.querySelector('.eyebrow').textContent,scoreLabels:document.getElementById('instanceList').textContent})")
+            assert method['method'] == 'gpt' and method['model'] == 'openai/gpt-5.6-terra', method
+            assert 'GPT-5.6 Terra' in method['title'] and 'SAM ' in method['scoreLabels'], method
+            results['checks']['primary_method'] = method
         browser.wait("selectedInstanceIndices instanceof Set && !!document.getElementById('modeSelectedMasks')")
         browser.js("document.getElementById('modeAllMasks').click()")
         browser.wait("imageMode === 'all' && selectedInstanceIndices.size === 0")
@@ -256,24 +263,30 @@ def main():
 
         browser.js("document.getElementById('frameSelect').value='0';document.getElementById('frameSelect').dispatchEvent(new Event('change'))")
         browser.wait("currentFrameIndex === 0 && document.getElementById('status').textContent.startsWith('已加载') && selectedInstanceIndices.size === 0")
-        browser.js("__maskTest.clickInstance(5); __maskTest.clickInstance(7)")
-        browser.wait("imageMode === 'selected' && selectedInstanceIndices.has(5) && selectedInstanceIndices.has(7) && glState.drawCount === __maskTest.expectedSelectedPoints([5, 7])")
+        frame_instances = browser.js("manifest.frames[0].instances")
+        same_class = {}
+        for index, item in enumerate(frame_instances):
+            same_class.setdefault(item["class_name"], []).append(index)
+        class_name, duplicate_indices = next((name, indices) for name, indices in same_class.items() if len(indices) >= 2)
+        first_same, second_same = duplicate_indices[:2]
+        browser.js(f"__maskTest.clickInstance({first_same}); __maskTest.clickInstance({second_same})")
+        browser.wait(f"imageMode === 'selected' && selectedInstanceIndices.has({first_same}) && selectedInstanceIndices.has({second_same}) && glState.drawCount === __maskTest.expectedSelectedPoints([{first_same}, {second_same}])")
         same_name = browser.js("__maskTest.frameInfo()")
-        assert same_name["selected"] == [5, 7], same_name
-        assert sorted(label["index"] for label in same_name["labels"]) == [5, 7], same_name
-        same_name_text = " ".join(label["text"] for label in same_name["labels"])
-        assert "American shorthair" in same_name_text and "6" in same_name_text and "8" in same_name_text, same_name
+        assert same_name["selected"] == [first_same, second_same], same_name
+        assert sorted(label["index"] for label in same_name["labels"]) == [first_same, second_same], same_name
+        for label in same_name["labels"]:
+            assert class_name in label["text"] and str(frame_instances[label["index"]]["instance_id"]) in label["text"], same_name
 
         browser.js("""
           loadFrame(90);
           loadFrame(0);
         """)
         browser.wait("currentFrameIndex === 0 && document.getElementById('status').textContent.startsWith('已加载')")
-        browser.js("__maskTest.clickInstance(5); __maskTest.clickInstance(5); __maskTest.clickInstance(7)")
-        browser.wait("currentFrameIndex === 0 && imageMode === 'selected' && selectedInstanceIndices.size === 1 && selectedInstanceIndices.has(7)")
+        browser.js(f"__maskTest.clickInstance({first_same}); __maskTest.clickInstance({first_same}); __maskTest.clickInstance({second_same})")
+        browser.wait(f"currentFrameIndex === 0 && imageMode === 'selected' && selectedInstanceIndices.size === 1 && selectedInstanceIndices.has({second_same})")
         time.sleep(0.5)
         rapid_toggle = browser.js("__maskTest.frameInfo()")
-        assert rapid_toggle["index"] == 0 and rapid_toggle["selected"] == [7], rapid_toggle
+        assert rapid_toggle["index"] == 0 and rapid_toggle["selected"] == [second_same], rapid_toggle
         assert rapid_toggle["drawCount"] == rapid_toggle["expectedSelected"], rapid_toggle
 
         results["checks"]["mask_selection"] = {
