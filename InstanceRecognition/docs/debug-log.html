@@ -48,16 +48,29 @@ li{margin:5px 0}
 .entry-body .files{font:12.4px var(--mono);line-height:1.9;color:var(--ink2)}
 .entry-body .files div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .entry.wide .entry-body{grid-template-columns:minmax(0,1fr)}
+/* Result-debug entries lead with the observation, so the head carries an
+   unnumbered marker until the cause is found. Numbering waits for the fix. */
+.entry.issue .entry-head{background:#fdf3f2}
+.entry.issue .entry-head .id{color:var(--bad)}
+.entry-body p{margin:0 0 10px;font-size:14px}
+/* Screenshot slot. Left as a dashed box so a missing file reads as "not yet
+   supplied" rather than as a broken image in a finished page. */
+figure.shot{margin:12px 0 0}
+figure.shot .ph{border:1px dashed var(--line);border-radius:7px;background:#f7f9fa;
+padding:26px 14px;text-align:center;font:12px var(--mono);color:var(--ink3);line-height:1.9}
+figure.shot .ph code{background:none;color:var(--ink2)}
+figure.shot figcaption{margin-top:6px;font-size:12.5px;color:var(--ink3)}
+figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:7px;display:block}
 @media (max-width:900px){.entry-body{grid-template-columns:minmax(0,1fr)}.entry-body>div+div{border-left:none;border-top:1px solid var(--line)}}
 </style>
 </head>
 <body><div class="wrap">
 
 <header>
-<div class="eyebrow">harness · change log</div>
-<h1>代码改动记录</h1>
-<p class="lede">每一条记录只回答三个问题：<b>要解决什么问题</b>、<b>往哪个方向改</b>、<b>动到哪些文件</b>。
-具体怎么改的在 commit 里，这里不重复。倒序排列，最新的在最上面。</p>
+<div class="eyebrow">harness · debug log</div>
+<h1>Debug 记录</h1>
+<p class="lede">两个用途：<b>变更记录</b>（每次代码改动解决什么、往哪个方向改、动了哪些文件）和
+<b>结果 debug</b>（某次运行里观察到的具体问题、实测数据、待查环节）。倒序排列，最新的在最上面。</p>
 <div class="meta">
 <span class="tag">更新 <b>2026-11-04</b></span>
 <span class="tag">条目 <b id="entryCount">—</b></span>
@@ -66,16 +79,65 @@ li{margin:5px 0}
 
 <h2><span class="no">00</span>怎么用这一页</h2>
 
-<p>每次改动记一条：解决了什么、往哪个方向改、动了哪些文件。写清问题和方向，不要写实现细节——
-细节会随代码漂移，问题不会。倒序排列，最新的在最上面。</p>
+<p>变更记录写问题和方向，不写实现细节——细节会随代码漂移，问题不会。结果 debug 写现象和实测数字，
+问题未解决时不写编号，解决后再补 commit。</p>
 
 <div class="note info">
-<b>为什么只记三件事。</b>改动本身可以从 <code>git log -p</code> 读出来，但<b>当时想解决什么</b>
-读不出来。半年后看到一行 <code>if</code>，能查到的只有它现在长什么样，查不到它当初在防什么。
-这一页补的就是后者。
+<b>为什么只记这些。</b>改动本身可以从 <code>git log -p</code> 读出来，但<b>当时想解决什么</b>
+读不出来；结果的问题同样如此——界面上看到一处错，背后是哪一步造成的，事后很难重建。
+这一页补的就是这两样。
 </div>
 
-<h2><span class="no">01</span>改动记录</h2>
+<h2><span class="no">01</span>v11 结果 debug</h2>
+
+<p class="small">对象：<code>harness-v11-amb3r-500frames-20261026-1400</code>（500 帧 / 100 窗 / 114 物体 / 4632 观测）。</p>
+
+<div class="entry issue">
+<div class="entry-head">
+<span class="id">待编号</span>
+<span class="title">Problem 01 · 两只「鞋」的点云几乎完全重叠</span>
+<span class="date">2026-11-04</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">现象</span>
+<p><code>Object12</code>（<code>left gray shoe beside console</code>）与 <code>Object13</code>
+（<code>right gray shoe beside console</code>）在结果页选中后，两个点云和两个 OBB 基本重合，
+肉眼分不出是两只鞋。</p>
+<figure class="shot">
+<div class="ph">图片占位 · 待放置<br><code>docs/assets/debug-log/p01-shoe-overlap.png</code></div>
+<figcaption>v11 末版结果页，同时选中 Object 012 / 013。</figcaption>
+</figure>
+</div>
+<div>
+<span class="h">实测</span>
+<ul>
+<li>中心距 <b>5.7 cm</b>（1.551, 2.211, 0.152）vs（1.547, 2.268, 0.148）。</li>
+<li>包围盒几乎相同：A <code>[1.33,1.89,0.08]–[1.77,2.55,0.23]</code>，
+B <code>[1.33,1.89,0.07]–[1.76,2.61,0.23]</code>。</li>
+<li>2 cm 内互邻：A 的 <b>41%</b> 点、B 的 <b>49%</b> 点；5 cm 内：<b>64%</b> / <b>89%</b>。</li>
+<li>中位最近距离 A→B <b>2.7 cm</b>，B→A <b>2.0 cm</b>。</li>
+<li>32 帧里两者同时出现（同一帧有两张 mask，各自归一个物体）。</li>
+</ul>
+</div>
+<div>
+<span class="h">待查</span>
+<ul>
+<li><b>这是一个物体被拆成两个，还是两只鞋本来就这么近？</b> GT 只有<b>一个</b>
+<code>shoes</code> 物体（<code>obj_0058</code>，60 帧，43 点），但 GT 的物体粒度本身比 harness 粗，
+不能直接据此判定。</li>
+<li>若是两只鞋：为什么点云重叠到这程度？两只鞋相距 5.7 cm 时，2 cm 体素 +
+4 cm 中位反投影误差会让它们几乎无法区分。</li>
+<li>若是一个物体：<code>create</code> 在同一窗口被调了两次（都在 <code>created_at: 4</code>），
+当时模型看到的是同一帧的两张 mask，还是不同帧？</li>
+<li>参考位置：两者均在 <code>(1.55, 2.21–2.27, 0.15)</code>，与 console 相邻；同区域的
+<code>Object14</code>（remote）和 <code>Object9</code>（printed sheet）也都在这个台面上。</li>
+</ul>
+</div>
+</div>
+</div>
+
+<h2><span class="no">02</span>变更记录</h2>
 
 <!-- 2026-11-04 -->
 <div class="entry">
