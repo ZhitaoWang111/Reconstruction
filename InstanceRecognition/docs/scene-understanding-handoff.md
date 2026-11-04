@@ -131,7 +131,7 @@ id 是 `seq:instance`，比如 `0045:001`。**窗口自己的观测 id 天然可
 
 ## 六、prompt 的现状
 
-当前 `prompt.txt` 是 P6，12,041 字符，sha256 前缀 `0e950a5`，六节：
+当前 `prompt.txt` 是 P7，12,556 字符，sha256 前缀 `548ebaf`，六节：
 
 ```
 WHAT THE WINDOW CONTAINS               窗口里有什么

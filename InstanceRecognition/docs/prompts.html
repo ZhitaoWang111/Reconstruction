@@ -65,11 +65,9 @@ blockquote p{margin:0;font-size:14.5px;color:#123f39}
 <p class="lede">这里记录 <code>src/harness/prompt.txt</code> 每一版的全文（英文原文 + 中文对照），以及基于实验数据对当前版本问题的分析。
 prompt 的哈希参与了续跑检查：改一个字，已有 run 目录就不能再续跑，所以每一版都必须留档。</p>
 <div class="meta">
-<span class="tag">当前版本 <b>ca37ac3</b></span>
-<span class="tag">行数 <b>51</b></span>
-<span class="tag">字符 <b>15,315</b></span>
-<span class="tag">草案 <b>P5（未启用）</b></span>
-<span class="tag">更新 <b>2026-10-23</b></span>
+<span class="tag">当前版本 <b>548ebaf</b>（P7）</span>
+<span class="tag">字符 <b>12,556</b></span>
+<span class="tag">更新 <b>2026-11-04</b></span>
 </div>
 </header>
 
@@ -111,10 +109,22 @@ prompt 的哈希参与了续跑检查：改一个字，已有 run 目录就不�
 <td>尚未启用</td>
 </tr>
 <tr>
-<td><b>P5</b><br><span class="small">草案</span></td>
-<td><span class="small">未定（尚未写入 <code>prompt.txt</code>）</span></td>
+<td><b>P5</b></td>
+<td><code>f74e469…</code></td>
 <td>按窗口工作流的时序重排：输入与不变量 → 提交时机 → 四种结局 → 取证规则 → 提交 → 历史修补。删除五条自查、<code>list_objects</code> 与硬编码预算数字，修正 <code>evidence</code> 语义。见第 07 节。</td>
-<td>尚未启用</td>
+<td><code>harness-v9-amb3r-150frames</code></td>
+</tr>
+<tr>
+<td><b>P6</b></td>
+<td><code>0e950a5…</code></td>
+<td>ASSIGN 段加入「cue 必须能把这条观测与同窗其他候选区分开」；CREATE 段新增标签规则（<span class="mark bad">label 必须能指向唯一一个物体</span>），并在六个动作处重复一遍。意图是压掉 P5 的同名重复（v9 有 6 组 17 个同名物体），实际把「区分个体」的职责压进了 label：标签从 P5 的 1.8 词涨到 4.3 词，最长 13 词，41% 含相对位置短语。</td>
+<td><code>harness-v10</code>（失败）<br><code>harness-v11-amb3r-500frames</code>（完整 500 帧）</td>
+</tr>
+<tr>
+<td><b>P7</b><br><span class="small">当前</span></td>
+<td><code>548ebaf…</code></td>
+<td>撤销 P6 的标签规则，改为「label 回答是什么，不回答是哪一个」：1–3 词类别名词、同类可同名、区分靠 <code>object_id</code>、指名道姓写进 <code>reason</code>。保留 P6 里真正的部分（一个 Object 是一件实体，不是一类）。<code>relabel</code> 处的一句话替代原来重复的整段。</td>
+<td>尚未使用</td>
 </tr>
 </tbody>
 </table>

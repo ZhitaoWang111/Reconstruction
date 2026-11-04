@@ -48,7 +48,7 @@ Three act on Objects - `create`, `merge`, `relabel`. They carry no `observations
 CREATE an Object when you can name what the observation is and the registry holds nothing that matches it. Naming what it is ranks below recognising which archived Object it is, and both rank above silence: an unfamiliar floor fan is an Object even when the archive holds nothing like one. When several masks in this window show the surface of one independent thing, create it once and assign all of them in the same proposal; splitting one thing across two creates is a duplicate you must then merge. An Object that ends the proposal owning nothing is a permanent error; there is no delete.
   `{"action":"create","object_id":"ObjectN","object_label":"...","evidence":[...],"reason":"..."}`, plus a separate assign entry in the same proposal. `object_id` is a fresh number and is never reused. A `create` carries no `observations` key: an `observations` list on a create is ignored, and those observations are then reported missing. Give them their own `assign`.
 
-The label names one thing you can point at. A word that covers a kind shared by several separate physical things classifies them rather than identifies any: those things are that many Objects, each with its own label. When you cannot point at which thing your label names, you have not identified anything yet.
+The label answers what kind of thing it is, not which one. Use one to three words: a common English category noun for what you saw - `shoe`, `office chair`, `wall picture`. Several separate things of the same kind are still separate Objects, because one Object is one physical thing and never a kind; but they may all carry the same label. `object_id` is what tells them apart, and the label never does. Do not widen a label to make it unique. A position, a neighbour, a colour, a size - `left shoe beside console`, `paper on computer desk` - turns the label into an address, and an address goes stale the moment the thing it points at is merged or relabelled. Say which one you mean in `reason`, where a sentence costs nothing and can be wrong harmlessly.
 
 MERGE two Objects that are one thing seen twice: `source_object` folds into `object_id`, its observations move with it, and the source retires as an alias. Irreversible, and still better than leaving a duplicate.
   `{"action":"merge","source_object":"ObjectN","object_id":"ObjectM","evidence":[...],"reason":"..."}`
@@ -58,7 +58,7 @@ RELABEL an archived Object whose appearance contradicts its name. It changes the
 
 Both repair what an inspection reveals: `inspect_object` on two Objects returns the same mask, or an archived Object looks like something other than what it is called.
 
-One rule holds across all six actions: a label names one thing, and it must let you point at which thing. A word shared by several separate things has classified them rather than identified any of them; those things are that many Objects, and the label belongs on each of them individually.
+The same label rule applies to `relabel`: an archived Object named by an address rather than a kind is a defect worth fixing, since the name then tells a later window nothing it can check.
 
 ## HOW TO GET MORE INFORMATION
 
@@ -101,7 +101,7 @@ The window runs in one order. Read this once; the sections above say what each s
 
 2. Where a decision turns on something you cannot see in the current window, look first. If an observation could belong to an archived Object you have not seen this window, `inspect_object` shows you what that Object looked like. If what a mask actually covers is in doubt, `inspect_observations` shows it. If two candidates differ only in extent, `compare_geometry` gives the distances.
 
-3. Decide each observation, one at a time: `assign`, `create` with its `assign`, `defer`, or `exclude`. Decide identity first, label second - the label is a short English noun phrase for what you decided the thing is. `merge` and `relabel` are for a mistake an inspection has already exposed, not for this window's decisions.
+3. Decide each observation, one at a time: `assign`, `create` with its `assign`, `defer`, or `exclude`. Decide identity first, label second - the label is a short English noun phrase for what you decided the thing is, and does not have to be unique. `merge` and `relabel` are for a mistake an inspection has already exposed, not for this window's decisions.
 
 4. Before sending, walk the window frame by frame and confirm every id of every frame appears exactly once. A proposal that stops at the fourth frame is rejected whole. Then send the whole window as one `proposal_json` through `propose_update`. Read what comes back: an error names a defect to fix, and `verification_required` names Objects to inspect before you try again.
 
