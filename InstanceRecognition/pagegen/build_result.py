@@ -87,7 +87,8 @@ def build(run_dir, site_dir):
                 if kind=='assign' and oid in previous['objects']:add(oid,'补充观测')
         changes.append({'window_index':index,'first':previous.get('cutoff',-1)+1,'cutoff':state['cutoff'],'objects':list(entries.values())})
         previous=state
-    (out/'result_data.js').write_text('window.RESULT_FRAMES='+dumps_sanitized(mapping,ensure_ascii=False)+';\nwindow.RESULT_CHANGES='+dumps_sanitized(changes,ensure_ascii=False)+';')
+    (out/'result_data.js').write_text('window.RESULT_FRAMES='+dumps_sanitized(mapping,ensure_ascii=False)+';\nwindow.RESULT_CHANGES='+dumps_sanitized(changes,ensure_ascii=False)+';\n'
+                                      'window.RESULT_EVIDENCE_ROOT='+dumps_sanitized(evidence_root,ensure_ascii=False)+';')
     templates = app_config.WEB_ROOT / 'result'
     html=(templates/'harness_result.html').read_text()
     # The geometry disclosure is chosen by the source's own lifting policy, so a
@@ -118,6 +119,7 @@ def build(run_dir, site_dir):
     (out/'harness_object_groups.js').write_text((templates/'harness_object_groups.js').read_text())
     (out/'harness_bbox_display.js').write_text((templates/'harness_bbox_display.js').read_text())
     (out/'harness_cloud_pick.js').write_text((templates/'harness_cloud_pick.js').read_text())
+    (out/'harness_observation_panel.js').write_text((templates/'harness_observation_panel.js').read_text())
     # Keep the all500 viewer layout as the canonical result-page template.
     for name in ('all500-layout.css', 'all500-layout.js'):
         (out/name).write_bytes((templates/name).read_bytes())
