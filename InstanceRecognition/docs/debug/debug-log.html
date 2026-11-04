@@ -97,10 +97,14 @@ figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:7px;di
 
 <p class="small">对象：<code>harness-v11-amb3r-500frames-20261026-1400</code>（500 帧 / 100 窗 / 114 物体 / 4632 观测）。</p>
 
+<p class="small">每个问题有一个随机编号（如 <code>kj9b68</code>），它不是序号，只用于给证据图像命名：
+<code>docs/debug/evidence_img/&lt;编号&gt;-&lt;说明&gt;.png</code>。加新问题时随机生成一个六位编号，
+避开 <code>0</code>/<code>o</code>/<code>1</code>/<code>l</code>/<code>i</code> 这些容易看错的字符。</p>
+
 <div class="entry issue">
 <div class="entry-head">
-<span class="id">待编号</span>
-<span class="title">Problem 01 · 两只「鞋」的点云几乎完全重叠</span>
+<span class="id">kj9b68</span>
+<span class="title">两只「鞋」的点云几乎完全重叠</span>
 <span class="date">2026-11-04</span>
 </div>
 <div class="entry-body stacked">
@@ -110,7 +114,7 @@ figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:7px;di
 （<code>right gray shoe beside console</code>）在结果页选中后，两个点云和两个 OBB 基本重合，
 肉眼分不出是两只鞋。</p>
 <figure class="shot">
-<div class="ph">图片占位 · 待放置<br><code>docs/debug/evidence_img/p01-shoe-overlap.png</code></div>
+<div class="ph">图片占位 · 待放置<br><code>evidence_img/kj9b68-*.png</code></div>
 <figcaption>v11 末版结果页，同时选中 Object 012 / 013。</figcaption>
 </figure>
 </div>
