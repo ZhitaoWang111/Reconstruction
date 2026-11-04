@@ -35,7 +35,7 @@ Creating is not a fourth state. A `create` registers an Object and records nothi
 ASSIGN to an archived Object when its archived evidence matches this observation on a cue you can point at - shape, proportions, surface, colour, position relative to a fixed neighbour, what occludes it - and that cue separates this observation from the other candidates in the window. A feature shared by adjacent surfaces does not separate them; name what distinguishes this one. Name that cue in `reason`.
   `{"action":"assign","object_id":"ObjectN","observations":[...],"evidence":[...],"reason":"..."}`
 
-DEFER an observation when you cannot decide what it is, or can name it but cannot choose among two or more candidates. State which of the two. One reason per observation, at most four observations per entry; the host rejects more. Deferring is the right outcome for a genuine unknown - a wrong owner pollutes an Object permanently, an unowned observation can be claimed later.
+DEFER an observation when you cannot decide what it is, or can name it but cannot choose among two or more candidates. State which of the two. One reason per observation, at most four observations per entry; the host rejects more. Deferring is the right outcome for a genuine unknown - a wrong owner pollutes an Object permanently. A deferral is final: this mask appears in no later window, and the host does not offer deferrals back to you. Defer only what you are content to leave unnamed for the rest of the run.
   `{"action":"defer","observations":[...],"evidence":[...],"reason":"..."}`
 
 EXCLUDE a mask when it visibly spans two or more separate physical things, so its points belong to none of them.

@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 import pytest
 from src.harness.state import initial,propose
 from src.harness.tools import Tools
@@ -218,3 +219,20 @@ def test_assign_batches_are_not_capped():
                action('assign', object_id='Object1', observations=ids)]
     checked = propose(initial(), {'base_version': 0, 'actions': actions}, obs, 0, evidence)
     assert all(checked['state']['assignments'][i]['object_id'] == 'Object1' for i in ids)
+
+
+def test_listing_hides_deferrals_but_state_keeps_them():
+ """A deferral is a closed decision, not a queue: the listing omits it, the
+ state still records it so audit and coverage keep working.
+
+ Across the 500-frame run no deferred observation was ever reclaimed, because
+ its mask never appears in a later window. Broadcasting 550 of them every
+ window cost 149 KB of the first message and bought nothing.
+ """
+ s=propose(initial(),{'base_version':0,'actions':[action('defer',observations=['0000:001']),
+     action('exclude',observations=['0001:001'])]},OBS,1,E)['state']
+ listing=Tools(SimpleNamespace(items=OBS),s,0).listing()
+ assert set(listing)=={'version','objects','aliases'}
+ assert '0000:001' not in json.dumps(listing)
+ assert s['assignments']['0000:001']['status']=='defer'
+ assert s['assignments']['0001:001']['status']=='exclude'

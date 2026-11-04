@@ -72,9 +72,8 @@ def describe(index, block, seq_for_image=None):
             return '一个 JSON 文本块'
         if 'window' in parsed:
             objects = len(parsed['state']['objects'])
-            pending = len(parsed['state']['pending'])
             return (f'窗口状态与全部历史：范围 {parsed["window"]}、版本 {parsed["state"]["version"]}、'
-                    f'{objects} 个已归档物体（含 3D OBB）、{pending} 条待定观测')
+                    f'{objects} 个已归档物体（含 3D OBB）')
         if 'sampled_sequence' in parsed:
             n = len(parsed['observations'])
             return f'帧 {parsed["sampled_sequence"]} 的 {n} 条观测：类别、2D 框、点数、质心与 3 个空间候选'
@@ -189,7 +188,6 @@ def build(run_dir, first, output):
     state_text = blocks[0]['text']
     state = json.loads(state_text)
     observation_count = len(state['state']['objects'])
-    pending_count = len(state['state']['pending'])
 
     body = []
     body.append(f"""<section><h2><span class="no">0</span>请求信封</h2>
@@ -215,12 +213,11 @@ def build(run_dir, first, output):
     body.append(f"""<section>
 <h3>block 00 · 窗口状态与全部历史 <span class="h">{len(state_text):,} 字符</span></h3>
 <p>模型在开头拿到的就是这一块：窗口范围、版本、{observation_count} 个已归档物体的完整档案、
-{len(state['global_object_geometry']['objects'])} 个 3D OBB、{pending_count} 条历史待定观测。</p>
+{len(state['global_object_geometry']['objects'])} 个 3D OBB。</p>
 <dl class="facts">
 <dt>window</dt><dd>{esc(state['window'])}</dd>
 <dt>state.version</dt><dd>{state['state']['version']}</dd>
 <dt>state.objects</dt><dd>{observation_count} 个已归档物体（每个含标签、观测数、代表观测 id 与 OBB）</dd>
-<dt>state.pending</dt><dd>{pending_count} 条历史 defer / repair，带当时的 reason 与 evidence</dd>
 <dt>global_object_geometry</dt><dd>{len(state['global_object_geometry']['objects'])} 个直立 OBB（中心、尺寸、三轴朝向）</dd>
 <dt>max_calls</dt><dd>{state['max_calls']}</dd>
 </dl>
@@ -228,8 +225,6 @@ def build(run_dir, first, output):
 <pre class="json">{esc(pretty(state['state']['objects'][0]))}</pre>
 <h3>同一个物体的 OBB</h3>
 <pre class="json">{esc(pretty(state['global_object_geometry']['objects'][0]))}</pre>
-<h3>一条历史待定观测</h3>
-<pre class="json">{esc(pretty(dict([next(iter(state['state']['pending'].items()))])))}</pre>
 <details><summary>展开 block 00 全文</summary><pre class="json">{esc(pretty(state))}</pre></details>
 </section>""")
 

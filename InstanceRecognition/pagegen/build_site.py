@@ -155,7 +155,12 @@ def publish(data, run_dir, site_dir, voxel):
                                     'object_id': int(a['object_id'][6:]) if a['object_id'] else None,
                                     'status': a['status'], 'reason': a['reason'], 'evidence': a['evidence']})
         snapshot = {'objects': objects, 'assignments': assignments,
-                    'pending': [k for k, a in state['assignments'].items() if a['object_id'] is None],
+                    # `deferrals` is a count of closed decisions, not a queue. The
+                    # harness stopped re-sending them (see Tools.listing) because a
+                    # deferral's mask never returns; the page keeps the number so a
+                    # run's coverage gap stays visible instead of silently vanishing.
+                    'deferrals': [k for k, a in state['assignments'].items() if a['status'] == 'defer'],
+                    'excluded': [k for k, a in state['assignments'].items() if a['status'] == 'exclude'],
                     'events': transaction['proposal']['actions'], 'conflict_entries': 0,
                     'cutoff': state['cutoff'], 'version': state['version']}
         save(site_dir / 'states' / f'{index:04d}.json', snapshot)

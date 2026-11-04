@@ -739,8 +739,8 @@ response = predictor.handle_request({
 │   │   ├── center_xyz              <i>框中心</i>
 │   │   ├── size_xyz                <i>三个方向的尺寸</i>
 │   │   └── axes_world              <i>局部轴在世界坐标里的朝向</i>
-│   ├── aliases                     <i>merge 后的旧编号映射</i>
-│   └── pending                     <i>尚未归属的观测（defer / repair 后的）</i>
+│   └── aliases                     <i>merge 后的旧编号映射</i>
+│   <i>（不再有 pending：deferral 不再广播，见下）</i>
 │
 ├── 2. 当前观测             <i>每帧一组，逐帧发送</i>
 │   ├── 图片：每帧 2 张
@@ -1297,6 +1297,13 @@ site/experiments/<b>&lt;run&gt;</b>/               <i>生成的页面</i>
     <strong>harness 框架的 <code>pending</code> 不是错误。</strong>
     没被归属的观测会以 <code>defer</code> 收尾，占总数的几个百分点是正常的——
     它代表模型在证据不足时选择不猜，这比强行分配要好。
+    <br><br>
+    <strong>2026-11-04 起，deferral 不再随窗口广播。</strong>原因不是它碍事，而是它没有出路：
+    一条观测的 mask 只在自己那一窗出现，后续窗口不会重新看到它，所以召回只能靠模型按 id
+    主动 assign 一条历史观测。在 500 帧全量运行里，这个动作发生了 <b>0 次</b>（8,909 条 assign
+    全部指向本窗），532 条 deferral 被重新认领的也是 <b>0 条</b>。清单因此只增不减，到末窗
+    占掉首条消息的 149 KB，而唯一的读者是渲染。现在 <code>defer</code> 仍是合法状态，
+    <code>state.json</code> 仍记录每一条，`listing` 只是不再列它。
   </div>
 </section>
 

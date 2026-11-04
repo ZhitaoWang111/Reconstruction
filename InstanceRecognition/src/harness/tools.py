@@ -104,7 +104,20 @@ class Tools:
             # it as evidence. The representative chosen for that call is still
             # written in full to window_inputs/*_context.json for audit.
             objects.append({'id':oid,**obj,'observation_count':len(ids)})
-        return {'version':self.state['version'],'objects':objects,'aliases':self.state['aliases'],'pending':{k:v for k,v in self.state['assignments'].items() if v['object_id'] is None}}
+        # `pending` used to be re-sent here on every window: every assignment with
+        # no owner, full record, `reason` and `evidence` included. Two things made
+        # that dead weight. First, `exclude` is a closed decision - "this mask
+        # spans two objects" never has a follow-up - so listing it as a to-do was
+        # wrong on its face. Second, `defer` had no way back either: a deferral is
+        # decided in the window that saw its mask, and that mask is never offered
+        # again. Re-claiming one would mean assigning a historical observation by
+        # id, and across the 500-frame run that happened 0 times out of 8,909
+        # assigns, while 0 of 532 deferrals were ever reclaimed. The list therefore
+        # only grew - 550 entries, 149 KB by the last window - and nothing read it.
+        # Deferral stays a legal per-observation state (the coverage check in
+        # state.propose requires every visible observation to have one); it is just
+        # no longer broadcast. The records remain in state.json for audit.
+        return {'version':self.state['version'],'objects':objects,'aliases':self.state['aliases']}
 
     def call(self,name,args):
         images=[]
@@ -147,7 +160,6 @@ class Tools:
                         'note':'The proposal is valid and remains pending; it was not rejected. Before committing, call inspect_object for each object_id listed in checks and confirm the assignment against its archived appearance. Then resubmit the same proposal; resubmitting it unchanged is allowed, and so is changing the decision after inspecting.',
                         'checks':checks,'base_version':self.state['version']},images
             return {'proposal_id':checked['id'],'affected':checked['affected'],'object_count':len(checked['state']['objects']),
-                    'pending_count':sum(a['object_id'] is None for a in checked['state']['assignments'].values()),
                     'actions':checked['proposal']['actions'],'base_version':self.state['version']},images
         if name=='commit_update':
             if self.pending is None or args['proposal_id']!=self.pending['id']:raise ValueError('No matching validated proposal')
