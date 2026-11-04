@@ -48,6 +48,11 @@ li{margin:5px 0}
 .entry-body .files{font:12.4px var(--mono);line-height:1.9;color:var(--ink2)}
 .entry-body .files div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .entry.wide .entry-body{grid-template-columns:minmax(0,1fr)}
+/* Result-debug entries read top to bottom instead of in columns: the three
+   parts are a narrative (what I saw, what the numbers say, what is unresolved),
+   not parallel lists that benefit from being scanned side by side. */
+.entry-body.stacked{display:block}
+.entry-body.stacked>.blk+.blk{border-top:1px solid var(--line);padding-top:14px;margin-top:2px}
 /* Result-debug entries lead with the observation, so the head carries an
    unnumbered marker until the cause is found. Numbering waits for the fix. */
 .entry.issue .entry-head{background:#fdf3f2}
@@ -98,18 +103,18 @@ figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:7px;di
 <span class="title">Problem 01 · 两只「鞋」的点云几乎完全重叠</span>
 <span class="date">2026-11-04</span>
 </div>
-<div class="entry-body">
-<div>
+<div class="entry-body stacked">
+<div class="blk">
 <span class="h">现象</span>
 <p><code>Object12</code>（<code>left gray shoe beside console</code>）与 <code>Object13</code>
 （<code>right gray shoe beside console</code>）在结果页选中后，两个点云和两个 OBB 基本重合，
 肉眼分不出是两只鞋。</p>
 <figure class="shot">
-<div class="ph">图片占位 · 待放置<br><code>docs/assets/debug-log/p01-shoe-overlap.png</code></div>
+<div class="ph">图片占位 · 待放置<br><code>docs/debug/evidence_img/p01-shoe-overlap.png</code></div>
 <figcaption>v11 末版结果页，同时选中 Object 012 / 013。</figcaption>
 </figure>
 </div>
-<div>
+<div class="blk">
 <span class="h">实测</span>
 <ul>
 <li>中心距 <b>5.7 cm</b>（1.551, 2.211, 0.152）vs（1.547, 2.268, 0.148）。</li>
@@ -120,7 +125,7 @@ B <code>[1.33,1.89,0.07]–[1.76,2.61,0.23]</code>。</li>
 <li>32 帧里两者同时出现（同一帧有两张 mask，各自归一个物体）。</li>
 </ul>
 </div>
-<div>
+<div class="blk">
 <span class="h">待查</span>
 <ul>
 <li><b>这是一个物体被拆成两个，还是两只鞋本来就这么近？</b> GT 只有<b>一个</b>

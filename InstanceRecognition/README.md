@@ -146,7 +146,7 @@ taskset -c 0 .venv/bin/python -u -m src.harness.run \
 - **结果页**：窗口末帧 + 累计物体点云 + 3D bbox 的三维回放；底部链接到同目录的 `audit.html`（窗口归属与纠错记录）。
 - **记录页**：逐窗口的模型调用流水（工具、参数、结果、英文理由）；资源在 `<实验名>/records/`。
 
-第三个页面是文档页，不随实验生成，直接放在 `docs/` 下用浏览器打开：`pipeline.html`（四段流水线的全局图景）、`prompts.html`（prompt 每一版的全文与改动理由）、`change-log.html`（代码改动记录：问题、方向、涉及文件）。
+第三个页面是文档页，不随实验生成，直接放在 `docs/` 下用浏览器打开：`pipeline.html`（四段流水线的全局图景）、`prompts.html`（prompt 每一版的全文与改动理由）、`debug/debug-log.html`（debug 记录：代码改动的问题与方向，以及某次运行里观察到的具体问题；图像证据放 `docs/debug/evidence_img/`）。
 
 两页顶部的实验切换栏来自仓库共享的 `docs/assets/experiment-navigation.js`，按目录名匹配。**注意它只认 `harness-` 前缀的实验名**——目录名不匹配时导航会静默不显示（脚本 regex 不命中即 return），不是报错。
 
