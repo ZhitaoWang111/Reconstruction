@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness 改动记录</title>
+<style>
+:root{--ink:#16191d;--ink2:#454c55;--ink3:#6b7480;--line:#dfe3e8;--line2:#eef1f4;
+--bg:#fbfcfd;--card:#fff;--accent:#0f766e;--accent2:#e6f4f1;--warn:#b45309;--bad:#b42318;
+--mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.75 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 120px}
+header{padding:52px 0 26px;border-bottom:1px solid var(--line)}
+.eyebrow{font:11.5px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+h1{margin:0 0 12px;font-size:32px;line-height:1.25;letter-spacing:-.02em}
+.lede{margin:0;color:var(--ink2);max-width:70ch}
+.meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.tag{font:11.5px var(--mono);background:var(--card);border:1px solid var(--line);border-radius:5px;padding:3px 9px;color:var(--ink2)}
+h2{margin:52px 0 12px;font-size:22px;display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+h2 .no{font:13px var(--mono);color:var(--accent);font-weight:600}
+h3{margin:32px 0 10px;font-size:16.5px}
+p{margin:0 0 12px}
+code{font:12.8px var(--mono);background:var(--line2);padding:1.5px 5px;border-radius:4px}
+table{border-collapse:collapse;width:100%;margin:14px 0 20px;font-size:14px;background:var(--card)}
+th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:var(--line2);font:11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+td code{font-size:12px}
+.note{border-left:3px solid var(--warn);background:#fef6e7;padding:12px 16px;border-radius:0 7px 7px 0;margin:16px 0;font-size:14px}
+.note.info{border-left-color:var(--accent);background:var(--accent2)}
+ul,ol{margin:0 0 14px;padding-left:24px}
+li{margin:5px 0}
+.small{font-size:13px;color:var(--ink3)}
+/* One change record. The three columns are the three questions this page
+   answers, in the same order every time, so a reader can scan one column
+   down the page instead of re-reading each entry. */
+.entry{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:0;margin:18px 0;overflow:hidden}
+.entry-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;padding:13px 18px;background:var(--line2);border-bottom:1px solid var(--line)}
+.entry-head .id{font:12px var(--mono);color:var(--ink3)}
+.entry-head .title{font-weight:600;font-size:15.5px}
+.entry-head .date{margin-left:auto;font:11.5px var(--mono);color:var(--ink3)}
+.entry-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1fr);gap:0}
+.entry-body>div{padding:14px 18px}
+.entry-body>div+div{border-left:1px solid var(--line)}
+.entry-body .h{display:block;font:10.5px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
+.entry-body ul{margin:0;padding-left:18px;font-size:14px}
+.entry-body li{margin:4px 0}
+.entry-body .files{font:12.4px var(--mono);line-height:1.9;color:var(--ink2)}
+.entry-body .files div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.entry.wide .entry-body{grid-template-columns:minmax(0,1fr)}
+@media (max-width:900px){.entry-body{grid-template-columns:minmax(0,1fr)}.entry-body>div+div{border-left:none;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body><div class="wrap">
+
+<header>
+<div class="eyebrow">harness · change log</div>
+<h1>代码改动记录</h1>
+<p class="lede">每一条记录只回答三个问题：<b>要解决什么问题</b>、<b>往哪个方向改</b>、<b>动到哪些文件</b>。
+具体怎么改的在 commit 里，这里不重复。倒序排列，最新的在最上面。</p>
+<div class="meta">
+<span class="tag">更新 <b>2026-11-04</b></span>
+<span class="tag">条目 <b id="entryCount">—</b></span>
+</div>
+</header>
+
+<h2><span class="no">00</span>怎么用这一页</h2>
+
+<p>每次改动记一条：解决了什么、往哪个方向改、动了哪些文件。写清问题和方向，不要写实现细节——
+细节会随代码漂移，问题不会。倒序排列，最新的在最上面。</p>
+
+<div class="note info">
+<b>为什么只记三件事。</b>改动本身可以从 <code>git log -p</code> 读出来，但<b>当时想解决什么</b>
+读不出来。半年后看到一行 <code>if</code>，能查到的只有它现在长什么样，查不到它当初在防什么。
+这一页补的就是后者。
+</div>
+
+<h2><span class="no">01</span>改动记录</h2>
+
+<!-- 2026-11-04 -->
+<div class="entry">
+<div class="entry-head">
+<span class="id">4d95fa9</span>
+<span class="title">标签不再承担区分个体的职责</span>
+<span class="date">2026-11-04</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">要解决的问题</span>
+<ul>
+<li>P6 加了一条规则「label 必须能指向唯一一个物体」，模型据此把「是哪一件」塞进 label。</li>
+<li>结果标签平均 1.8 词涨到 4.3 词，最长 13 词，41% 含相对位置短语（<code>left shoe beside console</code>）。</li>
+<li>这类标签是地址，所指物体一旦被 merge/relabel 就失效；也不符合下游 handoff 契约要的短类别词。</li>
+<li>追溯发现：P6 那条规则的目标（压掉重名）是真实的，v9 的 17 个同名物体却全是<b>正确</b>命名——四只鞋、三处插座、四幅画。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动方向</span>
+<ul>
+<li>把「是什么」与「是哪一个」拆开：label 只说类别，1–3 词。</li>
+<li>同类多实例允许同名，区分交给 <code>object_id</code>；指名道姓写进 <code>reason</code>。</li>
+<li>保留 P6 里对的半句：一个 Object 是一件实体，不是一类。</li>
+<li>代码零改动——<code>state.py</code> 从不检查标签唯一性。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动文件</span>
+<div class="files">
+<div>src/harness/prompt.txt</div>
+<div>src/harness/prompt-v7.txt（新增）</div>
+<div>docs/prompts.html</div>
+<div>docs/scene-understanding-handoff.md</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="entry">
+<div class="entry-head">
+<span class="id">7331041</span>
+<span class="title">deferral 不再随每个窗口重发</span>
+<span class="date">2026-11-04</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">要解决的问题</span>
+<ul>
+<li><code>listing()</code> 把全部无主观测塞进首条消息：末窗 532 条 defer + 18 条 exclude，149 KB。</li>
+<li>其中 <code>exclude</code> 是已结案的决定，语义上不是待办；<code>defer</code> 也没有出路——
+一条观测的 mask 只在自己那窗出现，召回需要按 id 主动 assign 历史观测，500 帧里发生 0 次（8,909 条 assign 全部指向本窗）。</li>
+<li>532 条 defer 被重新认领的也是 0 条。清单只增不减，唯一读者是渲染。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动方向</span>
+<ul>
+<li>停止广播，不是禁止：<code>defer</code> 仍是合法状态，覆盖率检查照旧，<code>state.json</code> 记录全留。</li>
+<li>下游消费者改名：summary 拆成 <code>deferrals</code> / <code>excluded</code>，页面文案改「已搁置」。</li>
+<li>prompt 里「以后还能认领」的承诺一并改掉——它从未兑现。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动文件</span>
+<div class="files">
+<div>src/harness/tools.py</div>
+<div>src/harness/run.py</div>
+<div>src/harness/prompt.txt</div>
+<div>pagegen/build_site.py</div>
+<div>pagegen/templates/result/all500-layout.js</div>
+<div>pagegen/templates/result/harness_result.html</div>
+<div>pagegen/templates/shared/incremental.js</div>
+<div>tools/render_window_input.py</div>
+<div>tests/test_harness.py</div>
+<div>DEVNOTES.md</div>
+<div>docs/pipeline.html</div>
+<div>docs/scene-understanding-handoff.md</div>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+document.getElementById("entryCount").textContent =
+  document.querySelectorAll(".entry").length;
+</script>
+</div></body>
+</html>
