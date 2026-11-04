@@ -34,14 +34,6 @@ def test_tools_block_future_and_unchecked_commit():
  tools=Tools(Data(),initial(),0)
  with pytest.raises(ValueError):tools.observe(['0005:001'])
  with pytest.raises(ValueError):tools.call('commit_update',{'proposal_id':'guess'})
-def test_legacy_modules_are_same_objects():
- import src.pipeline as old
- import src.inference.pipeline as new
- assert old is new
- import src.gpt_labels as old_client
- import src.inference.gpt_labels as new_client
- assert old_client is new_client
-
 def test_duplicate_updates_rejected():
  with pytest.raises(ValueError,match='twice'):
   propose(initial(),{'base_version':0,'actions':[action('defer',observations=['0000:001']),action('repair',observations=['0000:001'])]},OBS,0,E)
@@ -70,6 +62,28 @@ def test_stream_fragments_and_truncation():
  assert body['usage']['total_tokens']==3
  with pytest.raises(ValueError,match='Incomplete'):read_stream(lines[:-1])
 
+def test_new_run_persistence_drops_retired_instance_field(tmp_path):
+ from src.harness.state import save
+ path=tmp_path/'nested.json'
+ save(path, {'observations':[{'instance_id':7,'mask_id':'M07'}],
+             'tool':{'result':{'mask_id':'M07','instance_id':7}},
+             'arguments':json.dumps({'proposal_json':json.dumps({'mask_id':'M07','instance_id':7})})})
+ text=path.read_text()
+ assert 'mask_id' not in text
+ saved=json.loads(text)
+ assert saved['observations']==[{'instance_id':7}]
+ assert saved['tool']=={'result':{'instance_id':7}}
+ assert json.loads(saved['arguments'])=={'proposal_json':json.dumps({'instance_id':7},separators=(',', ':'))}
+
+def test_new_run_persistence_normalizes_retired_token_in_text(tmp_path):
+ from src.harness.state import dumps_sanitized, save
+ path=tmp_path/'text.json'
+ save(path, {'reason':'Compared the old mask_id field with mask_id candidates'})
+ assert 'mask_id' not in path.read_text()
+ assert json.loads(path.read_text())['reason']=='Compared the old instance_id field with instance_id candidates'
+ assert 'mask_id' not in dumps_sanitized({'message':'mask_id'})
+
+
 def test_full_frame_evidence_and_bbox(tmp_path):
  from PIL import Image
  import numpy as np
@@ -81,10 +95,14 @@ def test_full_frame_evidence_and_bbox(tmp_path):
  np.savez(source/'points.npz',points_world=np.array([[0.,0.,0.]]),rgb=np.array([[1,2,3]],np.uint8),mask_bits=np.array([3],np.uint32))
  (source/'manifest.json').write_text(json.dumps({'frames':[{'sequence_index':0,'source_frame_id':0,'npz':'points.npz','original_rgb_image':'rgb.png','instances':[{'instance_id':1,'class_name':'chair','mask_file':'mask.png'},{'instance_id':2,'class_name':'chair','mask_file':'mask.png'}]}]}))
  d=Observations(source,1,out)
- assert d.items['0000:001']['mask_id']=='M01'
- assert d.items['0000:002']['mask_id']=='M02'
+ assert 'mask_id' not in (out/'evidence_policy.json').read_text()
+ assert d.items['0000:001']['instance_id']==1
+ assert 'mask_id' not in d.items['0000:001']
+ assert d.items['0000:002']['instance_id']==2
+ assert 'mask_id' not in d.items['0000:002']
  result2,_=Tools(d,initial(),0).observe(['0000:002'])
- assert result2['observations'][0]['mask_id']=='M02'
+ assert result2['observations'][0]['instance_id']==2
+ assert 'mask_id' not in result2['observations'][0]
  assert d.items['0000:001']['bbox_xyxy']==[30,20,55,40]
  assert d.items['0000:001']['image_size_wh']==[120,80]
  assert d.items['0000:001']['overlay_color_rgb']!=d.items['0000:002']['overlay_color_rgb']
@@ -94,7 +112,7 @@ def test_full_frame_evidence_and_bbox(tmp_path):
  assert 'original RGB' in result['image_order']
  assert result['observations'][0]['id']=='0000:001'
  assert result['observations'][0]['bbox_xyxy']==[30,20,55,40]
- assert not {'image','mask','point_file','mask_bit','instance_id'} & result['observations'][0].keys()
+ assert not {'image','mask','point_file','mask_bit'} & result['observations'][0].keys()
  legacy=tmp_path/'legacy';legacy.mkdir();(legacy/'observations.json').write_text('{}')
  with pytest.raises(ValueError,match='Legacy'):Observations(source,1,legacy)
 
@@ -110,19 +128,6 @@ def test_explicit_label_schema():
  with pytest.raises(ValueError,match='object_label'):
   propose(initial(),{'base_version':0,'actions':[action('create',object_id='Object1',label='toilet')]},OBS,0,E)
 
-
-def test_nested_label_migration_preserves_values():
- from collections import Counter
- from src.harness.migrate_label_fields import migrate
- old={'observations':[{'id':'0000:001','seq':0,'label':'remote control'}],
-      'arguments':json.dumps({'proposal_json':json.dumps({'actions':[{'action':'create','object_id':'Object1','label':'mobile phone','reason':'证据'}]})})}
- counts=Counter();new=migrate(old,counts)
- assert new['observations'][0]['category_label']=='remote control'
- a=json.loads(json.loads(new['arguments'])['proposal_json'])['actions'][0]
- assert a=={'action':'create','object_id':'Object1','object_label':'mobile phone','reason':'证据'}
- assert counts=={'category_label':1,'object_label':1}
- assert migrate(new,Counter())==new
- assert old['observations'][0]['label']=='remote control'
 
 @pytest.mark.parametrize('bad_id', ['O1', 'Object0', 'Object01', 'Object-1', 'Object1.0'])
 def test_object_id_must_use_canonical_object_prefix(bad_id):
@@ -174,3 +179,42 @@ def test_relabel_rejects_retired_object():
  s=first();s['aliases']['Object2']='Object1'
  with pytest.raises(ValueError,match='active'):
   propose(s,{'base_version':1,'actions':[action('relabel',object_id='Object2',object_label='basin')]},OBS,0,E)
+
+
+def _window(count):
+    """A window with `count` observations; test_harness's own OBS has only three."""
+    obs = {f'0000:{i:03d}': {'seq': 0} for i in range(count)}
+    return obs, set(obs)
+
+
+def test_defer_is_per_observation():
+    # A whole-window deferral under one reason used to pass: the window's own ids
+    # are already in evidence, so it needed no inspection and no new image. That
+    # is what turned 34 deferred observations in the P1 run into 535 in P3, with
+    # single actions disposing of 41 at once. See DEVNOTES section 10.
+    from src.harness.state import DEFER_BATCH_LIMIT
+    obs, evidence = _window(DEFER_BATCH_LIMIT + 2)
+    ids = sorted(obs)
+    with pytest.raises(ValueError, match='Defer at most'):
+        propose(initial(), {'base_version': 0,
+                            'actions': [action('defer', observations=ids)]}, obs, 0, evidence)
+
+
+def test_defer_at_the_limit_is_allowed():
+    from src.harness.state import DEFER_BATCH_LIMIT
+    obs, evidence = _window(DEFER_BATCH_LIMIT)
+    ids = sorted(obs)
+    checked = propose(initial(), {'base_version': 0,
+                                  'actions': [action('defer', observations=ids)]}, obs, 0, evidence)
+    assert all(checked['state']['assignments'][i]['status'] == 'defer' for i in ids)
+
+
+def test_assign_batches_are_not_capped():
+    # The ceiling is on deferral, which is a judgement per observation, not on
+    # assignment, where one object legitimately owns many observations.
+    obs, evidence = _window(8)
+    ids = sorted(obs)
+    actions = [action('create', object_id='Object1', object_label='bin'),
+               action('assign', object_id='Object1', observations=ids)]
+    checked = propose(initial(), {'base_version': 0, 'actions': actions}, obs, 0, evidence)
+    assert all(checked['state']['assignments'][i]['object_id'] == 'Object1' for i in ids)

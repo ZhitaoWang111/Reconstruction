@@ -1,15 +1,25 @@
-# Python 3.12; install torch/torchvision from the CUDA 12.8 index first.
-# See README.md for the full setup command and local SAM3 installation.
-torch==2.10.0
-torchvision==0.25.0
-ultralytics==8.4.149
+# Linux x86_64, Python 3.12; SAM3.1 + GPT/Harness + offline tests.
+# Install the local SAM3 package separately, without optional extras.
+-c environments/scene-understanding/constraints.txt
+
+torch @ https://download.pytorch.org/whl/cu128/torch-2.10.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl
+torchvision @ https://download.pytorch.org/whl/cu128/torchvision-0.25.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl
 numpy==1.26.4
-opencv-python==4.11.0.86
-setuptools<81
-Flask>=3.1,<4
-einops
-pycocotools
-psutil
-scipy
-scikit-image
-pytest
+Pillow==12.3.0
+scipy==1.17.1
+# SAM3's declared dependencies.
+timm==1.0.29
+huggingface-hub==1.31.0
+ftfy==6.1.1
+regex==2026.9.10
+iopath==0.1.10
+typing-extensions==4.16.0
+tqdm==4.70.1
+# Imported by SAM3 model code but absent from its base package declaration.
+einops==0.8.2
+pycocotools==2.0.11
+psutil==7.2.2
+# model_builder still imports pkg_resources.
+setuptools==80.10.2
+# Verification of this repository's pipeline and Harness.
+pytest==9.1.1

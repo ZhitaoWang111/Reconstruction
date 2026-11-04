@@ -54,3 +54,49 @@ def test_export_uses_each_window_own_cloud_and_keeps_sources(tmp_path):
     assert text.startswith('window.HARNESS_OBJECT_BBOXES=')
     assert 'window.HARNESS_OBJECT_BBOX_PROVENANCE=' in text
     assert 'window.HARNESS_BBOX_WINDOWS=' in text
+
+
+def test_broad_interior_surface_guides_heading_without_anchoring_face():
+    rng = np.random.default_rng(142)
+    # A well-supported panel with observations on both sides is useful for yaw,
+    # but must not cut the bounding box through the object's interior.
+    panel = np.column_stack((rng.normal(0, .002, 1200),
+                             rng.uniform(-.8, .8, 1200),
+                             rng.uniform(.1, 1.9, 1200)))
+    volume = rng.uniform([-.3, -.8, .1], [.3, .8, 1.9], (800, 3))
+    angle = np.radians(28)
+    rotation = np.array([[np.cos(angle), -np.sin(angle), 0],
+                         [np.sin(angle), np.cos(angle), 0], [0, 0, 1]])
+    points = np.vstack((panel, volume)) @ rotation.T
+    original = points.copy()
+    result = bbox.oriented_bounds(points)
+    assert result['plane_heading_used']
+    assert not result['heading_plane']['boundary_eligible']
+    assert result['plane_faces'] == []
+    assert result['method'] == 'world_z_surface_plane_heading'
+    assert abs(result['heading_deg'] - 28) < 2
+    assert result['size_xyz'][0] > .5
+    np.testing.assert_allclose(result['axes_world'][2], [0, 0, 1])
+    np.testing.assert_array_equal(points, original)
+
+
+def test_no_broad_plane_keeps_geometric_fallback():
+    rng = np.random.default_rng(99)
+    points = rng.normal(size=(2000, 3))
+    result = bbox.oriented_bounds(points)
+    assert not result['plane_heading_used']
+    assert result['method'] == 'world_z_xy_robust_hull_edges'
+    assert result['plane_faces'] == []
+
+
+def test_vertical_exterior_surface_still_anchors_face():
+    rng = np.random.default_rng(81)
+    panel = np.column_stack((np.zeros(1200), rng.uniform(-1, 1, 1200),
+                             rng.uniform(0, 2, 1200)))
+    volume = rng.uniform([.04, -1, 0], [.7, 1, 2], (800, 3))
+    result = bbox.oriented_bounds(np.vstack((panel, volume)))
+    assert result['heading_plane']['boundary_eligible']
+    assert result['method'] == 'world_z_exterior_plane_faces'
+    faces = [f for f in result['plane_faces'] if f['axis'] != 2]
+    assert faces
+    assert result['size_xyz'][0] > .6

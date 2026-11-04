@@ -1,213 +1,188 @@
-# ScanNet 实例识别应用
+# InstanceRecognition
 
-默认方案为 **GPT-5.6 Terra + SAM3.1 Multiplex**：
+增量式场景理解 Harness。2026-10 从旧树重构而来，只做**结构性**调整，不改行为：核心功能代码与两个页面的构建代码移植过来，产物与页面分开存放。
 
-1. 从本地 ScanNet v2 `.sens` 文件按场景和帧编号读取原始 RGB JPEG；
-2. GPT 独立识别可见类别，返回英文 SAM 提示、证据、不确定性与未识别区域；
-3. SAM3.1 逐类别使用文本提示生成实例 mask，保留独立二值 mask 与重叠；
-4. 网页展示原始 RGB、GPT 类别判断和 SAM3.1 mask；
-5. 仅预热 SAM 常驻 worker，GPT 经网关按需调用。
+旧树已于 2026-10-19 移除，只保留一份不含代码与产物的存根在 `../InstanceRecognition_backup/`。
 
-API 客户端、英文 prompt 与认证加载方法位于 `/home/seer/wzt/API/scannet_gpt_sam/`，密钥通过 `/home/seer/wzt/API/.env` 中的 `VIBEG_API_KEY` 加载。默认输出 `runtime/results_gpt/`，避免把旧 YOLOE 缓存当成 GPT 结果。设置 `INSTANCE_RECOGNITION_METHOD=yoloe_sam31` 可运行原基线，原有 YOLOE 结果与 80–140 对比页保留。
+## 四类东西分开存放
 
-`ThirdParty/` 保存官方源码和独立 YOLO/SAM 复现脚本；权重统一从仓库根目录的 `weights/` 读取。运行产生的帧缓存、日志和结果统一保存在 `runtime/`。
+```text
+InstanceRecognition/
+├── src/            ① 功能代码
+├── pagegen/        ② 页面构建代码（含模板）
+├── artifacts/      ③ Pipeline 产物
+└── site/           ④ 生成的页面
+```
 
-## 增量式场景理解 Harness（初版）
+| 类别 | 内容 | 可重定向 |
+|---|---|---|
+| `src/` | Harness 决策循环、几何、共享可视化 helper | — |
+| `pagegen/` | 结果页 / 记录页构建器 + 手写模板 | — |
+| `artifacts/` | 每次运行的 `calls/`、`versions/`、`evidence/`、`config.json`、`summary.json` | `IR_ARTIFACTS_ROOT` |
+| `site/` | `index.html`、`records.html`、`states/`、`objects/`、页面 JS | `IR_SITE_ROOT` |
 
-源码已按职责整理为 `src/data`、`src/inference`、`src/geometry`、`src/visualization`、`src/experiments` 和 `src/harness`，原模块名保留兼容入口。见 [目录说明](src/README.md)。
+**产物与页面分开的意义**：`site/` 里的东西全部可由 `artifacts/` 重新生成，所以一个实验的调用日志可以单独归档或删除，不影响它的页面；反之亦然。此前这两类是混在同一个实验目录里的。
 
-[Harness 执行流程与工具](src/harness/README.md)说明每窗取证、修改单校验、点云重算及断点续跑。独立实验输出在 `runtime/experiments/harness_first30_v1/`，不覆盖既有 mask 和基线。
+## 代码结构
+
+```text
+src/config.py                路径的单一来源（四个根 + 外部依赖）
+src/harness/                 run, publish, client, observations, state, tools,
+                             inputs, history, spatial_context, paths, prompt.txt
+src/geometry/                amb3r_mask_source（唯一的 lifting）,
+                             assemble_perception_source（感知产物 → liftable source）,
+                             backproject_masks（共享 helper）, incremental_objects
+src/inference/               gpt_sam31, label_frames, gpt_labels（感知链路）
+src/visualization/           共享 helper：page_naming, object_bboxes, publish_gpt_viewer
+
+pagegen/build_site.py        页面装配（manifest、states/、objects/、审计页）
+pagegen/build_result.py      结果页
+pagegen/build_records.py     交互记录页
+pagegen/build_viewer.py      渲染器 bundle 装配
+pagegen/build_mask_project.py mask 投影检查页
+pagegen/templates/           result/  records/  mask_project/  shared/
+```
+
+`src/visualization/` 里的两个模块不是页面代码，因此留在了功能侧：`object_bboxes.export_version_objects` 在**决策热路径**上被 `harness/spatial_context.py` 调用；`publish_gpt_viewer.rebase_manifest` 被几何模块调用。
+
+## mask 反投影：方向为什么重要
+
+**旧做法（已删除）**：把整份场景点云投影到每个像素，再查该像素的 mask 归属。这个方向是病态的——一条相机射线上的**所有**点都落到同一个像素，而 2D mask 对深度不可知。实测 frame 0：GT 点云投影后 **42.4% 的点穿到了可见表面之后**，中位穿深 0.54 m。物体背后的书包继承了沙发的标签，这就是遮挡泄漏。更糟的是 `cameras_rgb.json` 没有 `depth_m`，可见性判据退化成**点云自引用**（每点的参考深度就是它自己那个像素），于是恒判可见。
+
+**现在的做法** `amb3r_per_frame_v1`：
+
+```
+对每一帧：
+  1. 读取 AMB3R 的逐帧点图 pts（392×518×3）       ← 网络预测的深度，不是 GT 网格
+  2. GPT/SAM3 mask（1296×968 实例图）→ resize 640×480 → center crop 518×392
+  3. mask 命中且 conf ≥ 0.3 的每个像素：取该像素的 3D 位置，应用 Sim(3)
+```
+
+方向仍是**从像素出发**：一个像素最多得到一个点，所以没有多射线歧义，遮挡者的表面从未被查询。与已删除的 `mesh_first_surface_v1` 的区别只在深度的来源——那套把 GT 网格光栅化出每像素首表面，这套直接用 AMB3R 预测的深度。
+
+选 AMB3R 而不是 GT 网格的理由：GT 网格有重建空洞（黑色椅背、细结构、扫描角度差的区域），那些像素上反投影会落到**相机实际看到的表面之后**的东西上；AMB3R 在这些位置仍给出网络预测的深度。
+
+**已知代价**：`sim3_oracle_scale` 是**对着 GT 相机位姿拟合**的（`alignment_scale = 0.8875`，五厘米 F-score 从 0.099 涨到 0.562），所以这份几何**不能**用作 AMB3R 的独立精度评价，只能作为 mask 反投影的深度来源。另外 AMB3R 的 mask source 只含被 mask 声称的像素（约 12 万/帧），**不含全场景点云**，所以页面背景必须取自 Sim(3) 拟合所用的那份规范点云——`amb3r_mask_source` 会把这份点云编码成 `assets/background.js` 随 source 一起写出。
+
+## 环境
 
 ```bash
-cd /home/seer/wzt/Reconstruction/InstanceRecognition
-taskset -c 0 .venv/bin/python -m src.harness.run
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
-## 启动网页
+依赖只有 **numpy、Pillow、scipy、pytest**（约 254 MB）。感知链路（GPT 出 label、SAM3.1 出 mask）在独立的重依赖环境里跑，见 `requirements-runtime.txt`；本树不含 torch / ultralytics / SAM3 / Flask。
+
+**大构建仍需要 `taskset -c 0`。** 测试（199 项，1.2 s）不固定 CPU 也稳定通过，但完整 publish 构建不加就会 SIGSEGV（实测复现）。旧树的同类现象根因在 torch/ultralytics 一侧，但这个轻量环境里也会触发，所以构建命令一律带上。
+
+素材位置由 `src/config.py` 推导，与旧树同深度，因此 `weights/`、`data/scannet_v2/`、`API/scannet_gpt_sam/` 都沿用仓库级布局，无需额外配置。
+
+## 运行
+
+完整链路是三步：感知阶段产出 label 与 mask，assembler 把两半组装成 liftable source，再 lift 成 Harness 能吃的 source。
+
+**① 感知**（GPT 出 label，SAM3.1 出 mask；需重依赖环境，见 `requirements-runtime.txt`）：
 
 ```bash
-cd InstanceRecognition  # 从仓库根目录执行
-taskset -c 0 ./start.sh
+taskset -c 0 $SAM31_PYTHON -u -m src.inference.label_frames --run gpt_sam31_uniform500
+taskset -c 0 $SAM31_PYTHON -u -m src.inference.gpt_sam31   --run gpt_sam31_uniform500
 ```
 
-当前机器实测需要固定在 CPU 0 启动：未固定时出现过依赖导入阶段的 SIGSEGV / SIGILL，根因尚未定位；固定 CPU 0 后，两次独立的 YOLOE-26 + SAM3.1 两帧推理均通过。GPU 推理仍使用 RTX 5070 Ti。详见 [2026-09-17 实测报告](runtime/docs/SMOKE_TEST_2026-09-17.md)。
+产物落在 `artifacts/experiments/<run>/perception/{labels,masks}/`。`label_frames` 只调网关、不碰 torch，用本树 .venv 也可；`gpt_sam31` 需要 SAM3.1。
 
-启动脚本优先使用本模块 `.venv/bin/python`，不存在时使用当前 `python3`；也可通过 `SCENE_PYTHON=/path/to/python ./start.sh` 指定解释器。
-SAM3.1 worker 默认使用本模块 `.venv`；YOLOE 优先保留已有的 `ThirdParty/yoloe26_prompt_free/.venv`，不存在时共用本模块 `.venv`。没有本模块环境时，worker 回退到当前解释器。
-若模型依赖安装在其他环境，分别设置 `SAM31_PYTHON` 和 `YOLOE_PYTHON`。
-
-浏览器打开：<http://127.0.0.1:8090>
-
-默认只监听本机。如需从局域网其他电脑访问：
+**② 组装 source**（把两个独立目录合成一份带 RGB 与 mask 路径的 source）：
 
 ```bash
-taskset -c 0 ./start.sh --host 0.0.0.0 --port 8090
+.venv/bin/python -u -m src.geometry.assemble_perception_source \
+  --run gpt_sam31_uniform500 \
+  --output artifacts/sources/scene0000_00/gpt_sam31_uniform500_v1 \
+  --frames-dir artifacts/frames --count 20
 ```
 
-## 当前机器的推理环境
+这一步的**全部价值是校验**：每个 mask 记录了它所用 label 文件的 SHA-256，assembler 据此确认两半确实配套——配错的话点云看起来完全正常，只有类别是错的。它同时把上游记录的那条（已被重构作废的）RGB 路径换成 `--frames-dir` 下的真实位置。输出**不含** `lifting_policy`，因为此时还没有几何。
 
-本模块使用独立的 `.venv`，本次实测为 Python 3.12.3、PyTorch 2.10.0 + CUDA 12.8、torchvision 0.25.0。
-PyTorch／torchvision 配对来自 [官方版本说明](https://pytorch.org/get-started/previous-versions/#v2100)。
-YOLOE 使用原来的 Ultralytics 8.4.149；SAM3 从固定版本的本地子模块安装。
-旧 YOLO 示例目录中的 PyTorch 2.4.1 requirements 属于原机器的复现记录，当前 RTX 5070 Ti 使用下面的环境。
-
-在仓库根目录执行（`uv` 在当前机器的位置为 `/home/seer/wzt/tools/uv/uv`）：
+**③ lift 成 Harness source**（mask 像素 → AMB3R 深度 → 世界点）：
 
 ```bash
-/home/seer/wzt/tools/uv/uv venv --python /usr/bin/python3 InstanceRecognition/.venv
-/home/seer/wzt/tools/uv/uv pip install --python InstanceRecognition/.venv/bin/python \
-  'torch @ https://download.pytorch.org/whl/cu128/torch-2.10.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl' \
-  'torchvision @ https://download.pytorch.org/whl/cu128/torchvision-0.25.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl' \
-  -r InstanceRecognition/requirements-runtime.txt -e InstanceRecognition/ThirdParty/SAM3 \
-  --index-url https://mirrors.aliyun.com/pypi/simple
+taskset -c 0 .venv/bin/python -u -m src.geometry.amb3r_mask_source \
+  --npz  /home/seer/wzt/Reconstruction/Video2PointCloud/output/amb3r/vo_uniform500/scene_scene0000_00_uniform500_metric_head_results.npz \
+  --sim3 /home/seer/wzt/Reconstruction/Video2PointCloud/output/amb3r/vo_uniform500/pointcloud_gt_corrected_evaluation.json \
+  --source artifacts/sources/scene0000_00/gpt_sam31_uniform500_v1 \
+  --output artifacts/sources/scene0000_00/scene_amb3r_v1 \
+  --frames-dir artifacts/frames --conf 0.3
 ```
 
-上述 wheel URL 对应 Linux x86_64 / Python 3.12；其他平台应按官方版本说明选择。
-PyTorch wheel 使用官方来源，其余依赖通过 PyPI 镜像获取，以避开当前机器上 NVIDIA 包服务器的连接超时。
-本地已有 YOLOE／SAM3.1 权重，推理无需 Hugging Face 登录。
+`--conf` 是 AMB3R 的置信度阈值（默认 0.3）：低于它的像素即使被 mask 命中也不产点。输出目录必须为空。这一步写出 `manifest.json`（含 `lifting_policy`）、逐帧 npz、逐帧 JS、`assets/background.js`（从 Sim(3) 所用的那张规范点云编码）与 `projection_report.json`。
 
-## 离线查看 YOLOE 基线结果
-
-不启动 Flask 或模型服务，直接打开：
+**④ 跑 Harness**（source 落在默认位置时可省 `--source`）：
 
 ```bash
-google-chrome "file:///home/seer/wzt/Reconstruction/InstanceRecognition/offline/index.html"
+taskset -c 0 .venv/bin/python -u -m src.harness.run \
+  --output harness-v5-amb3r-20frames-YYYYMMDD-HHMM \
+  --frames 20 --window 5 \
+  --model openai/gpt-6-sol --reasoning-effort none
 ```
 
-也可以在文件管理器中双击 `offline/index.html`。页面可以查看每个已处理 scene 的每个已处理帧，包括原始 RGB、YOLOE-26 检测框、SAM3.1 mask 叠加图和实例 ID 图。episode 汇总默认过滤掉 YOLOE 置信度低于 0.50 的检测，并按类别统计检出帧数、帧占比、实例数和平均/最高置信度；置信度与最少检出帧数都可以在页面中调整。
+`--run-dir` / `--site-dir` 可分别覆盖两条输出树。`--prepare-only` 只准备证据、不调模型，适合冒烟。
 
-产生新推理结果后，执行下面的命令刷新离线索引：
+只重建页面（不调模型）：
 
 ```bash
-cd /home/seer/wzt/Reconstruction/InstanceRecognition
-taskset -c 0 .venv/bin/python -m web.build_offline_browser
+# 结果页 + 审计页：读 run 的 config.json 里记的 site_dir，或显式指定
+.venv/bin/python -u -m src.harness.run --publish-only \
+  --output <run-dir> --site-dir <site-dir>
+
+# 交互记录页
+.venv/bin/python pagegen/build_records.py \
+  --run <实验名> --run-dir <run-dir> --site-dir <site-dir>
 ```
 
-索引生成器会扫描所有 `runtime/results/*/frame_*/summary.json`，并在遇到缺失图片或 mask 时失败，避免网页静默漏掉不完整结果。
+理由以模型输出的英文原文呈现，本树不做翻译（此前的中译后处理已移除）。
 
-2026-09-17 当前机器已完成 `scene0000_00` 的 uniform-500 重跑：500/500 帧成功、0 失败，6,790 个 mask，耗时约 18 分 48 秒。离线页保留两张旧测试帧，合计 502 帧、6,822 个 mask。详见 [本次批量结果与验证记录](runtime/docs/BATCH_RESULT_2026-09-17.md)。
+## 两个页面的定位
 
-## GPT 类别提示与 YOLOE 基线对比
+结果页（`index.html`）和交互记录页（`records.html`）生成在 `site/experiments/<实验名>/` 下，互为同级：
 
-已完成原抽样序号 80–140 的 61 帧对比：[离线页面](runtime/comparisons/scene0000_00_0080_0140/index.html)。左侧复用 YOLOE26 框提示结果，右侧为 GPT-5.6 Terra 英文类别文本提示 SAM3.1。两侧共用已有 AMB3R 几何，支持统一选帧、2D mask 与 3D 落点检查。
+- **结果页**：窗口末帧 + 累计物体点云 + 3D bbox 的三维回放；底部链接到同目录的 `audit.html`（窗口归属与纠错记录）。
+- **记录页**：逐窗口的模型调用流水（工具、参数、结果、英文理由）；资源在 `<实验名>/records/`。
 
-基线 792 个 mask，新方案 479 个 mask；125 条 GPT 类别提示未分出 mask。未做人工真值评测，不能将数量差异解释为准确率差异。详见 [实验记录与复现命令](runtime/docs/GPT_SAM_COMPARISON_2026-09-17.md)。API 调用脚本和英文 prompt 位于 `/home/seer/wzt/API/scannet_gpt_sam/`。
+两页顶部的实验切换栏来自仓库共享的 `docs/assets/experiment-navigation.js`，按目录名匹配。**注意它只认 `harness-` 前缀的实验名**——目录名不匹配时导航会静默不显示（脚本 regex 不命中即 return），不是报错。
 
-## 每帧 mask 反投影到 AMB3R 点云
+该脚本必须登记**实验目录相对仓库根的路径**（`path` 字段）。基准以脚本自身位置（`docs/assets/`）锚定仓库根，而不是从页面 URL 反推，因为页面与它引用的产物不在同一个父目录下。自 2026-10-19 起所有实验都在本树 `site/experiments/` 下。新实验登记时 `path` 不能省。
 
-默认离线入口：[`runtime/mask_pointclouds/scene0000_00/amb3r_gt_raw/index.html`](runtime/mask_pointclouds/scene0000_00/amb3r_gt_raw/index.html)。直接打开，无需启动模型或网页服务。
+## 与旧树的关系
 
-2026-09-18 已启用成对类别 prompt：原标签出现 shoe/shoes 的 83 帧重新运行 GPT → SAM，其他 417 帧保留。500 帧当前展示 4,481 张 mask，共保留 4,895 张原始候选，414 张超出每帧 16 张展示预算。成对提示直接交给 SAM，不增加配对或合并后处理。详见 [本次更新报告](runtime/docs/SHOE_PAIR_REVISION_2026-09-18.md)；[2026-09-17 全场景报告](runtime/docs/GPT_SAM_FULL_SCENE_2026-09-17.md) 为历史记录。
+旧树已于 2026-10-19 删除（`src/`、`tests/`、`.venv/`、`runtime/` 共 27 GB），本树不再有任何只读依赖。
 
-- 正式英文 prompt：`/home/seer/wzt/API/scannet_gpt_sam/prompt_en.txt`，冻结版 `prompts/paired_units_v1.txt`；旧版 `prompts/singular_v1.txt`。
-- 83 帧新标签及响应：`/home/seer/wzt/API/scannet_gpt_sam/runs/scene0000_00_shoe_pairs_v1/`。
-- 合并后的 500 帧标签索引：`/home/seer/wzt/API/scannet_gpt_sam/runs/scene0000_00_uniform500_terra_pairs_v1_merged/`；`frame_provenance.json` 逐帧记录新旧 prompt 来源。
-- 新 SAM 结果：`runtime/experiments/gpt_sam31_shoe_pairs_v1/results/`；完整 500 帧引用索引 `merged_results/`。
-- 当前点云数据：`runtime/mask_pointclouds/scene0000_00/gpt_terra_pairs_v1_gt_raw/`；主入口引用此处的 NPZ、PLY 和 JS。
-- 默认在线缓存：`runtime/results_gpt/scene0000_00/`；仅替换受影响的 83 帧，旧缓存另存于本次实验目录。
-- 旧 GPT 页面：[单数版归档](runtime/mask_pointclouds/scene0000_00/gpt_terra_singular_v1_archive/index.html)。原 500 帧 API/SAM 数据仍保留。
-- 原 YOLOE 页面：[归档入口](runtime/mask_pointclouds/scene0000_00/yoloe26_gt_raw/index.html)。原 `amb3r_gt_raw/assets/`、`frames/` 和 canonical 文件继续保存旧基线数据；读取当前结果应跟随 manifest 路径。
+- **`observations.DEFAULT_SOURCE` 只指向本树** `artifacts/sources/scene0000_00/scene_amb3r_v1`，不回退到任何旧 policy 的 source——缺失时显式报错，而不是静默换一套几何。
+- **`resolve_recorded_path()` 只按产物树解析**。它曾回退到旧树根以兼容老 run 的相对路径记录；旧树删除后该回退只会指向不存在的目录，已移除。
+- **v3 / v4 两个实验页面的数据随旧树一起删除**，页面文件仍在但内容缺失；它们使用的 geometry policy 也已在代码中移除。
 
-反投影复用原 AMB3R 点图与 GT Sim(3)，没有再次运行重建。背景仍为 492,555 个点；逐帧 mask 覆盖点合计 43,066,886 个，包含不同帧重复观测，不是融合后的场景点数。
+## 首轮实验（本树产出）
 
-- 原始 mask `1296 × 968` → `640 × 480` → 中心裁剪 `[3, 0, 637, 480]` → `518 × 392`，两次缩放均为最近邻。
-- 独立 mask 的重叠通过 `mask_bits` 保留；第 i 位对应帧 manifest 的 `instances[i]`。NPZ 保存真实 RGB，PLY 的重叠点标紫。
-- 不新增点置信度过滤、形态学处理、去噪、类别归并或跨帧融合。实例 ID 仅在帧内有效。
-- 几何使用已有 GT 修正结果，不使用 GT 深度，也不替换成逐帧 GT 位姿。
+`harness-v4-mesh-sol-20frames-20261014-1558`（**历史 run**，`mesh_first_surface_v1`）：20 帧 / 4 窗口，`openai/gpt-6-sol`，source 是本树网格首表面的 lifted source。4/4 窗口提交，20/20 帧，**28 个物体**，38 次有效调用，无重试窗口，`pending` 1。该 policy 与建它的 `mesh_mask_source` 已被删除，页面仍可查看，但 source 不再能由本树重建。
 
-生成和发布脚本分别为 `src/build_method_comparison.py --primary-only` 与 `src/publish_gpt_viewer.py`。完整命令记录在 `/home/seer/wzt/API/scannet_gpt_sam/README.md`。发布脚本要求 500 帧完整且校验通过，并保留 YOLOE 归档。
+逐窗口耗时（对比可见网关侧波动很大）：
 
-原 AMB3R 重建恢复入口仍为 `bash Video2PointCloud/src/amb3r/restore_mask_viewer.sh`（从仓库根目录执行）；已有 GPT 导出时会优先恢复 GPT 主页面。原始重建记录见 [恢复报告](runtime/docs/MASK_POINTCLOUD_RESTORE_2026-09-17.md)。
+| 窗口 | 耗时 | 调用 |
+|---|---|---|
+| 1 (帧 0-4) | 288 s | 6 |
+| 2 (帧 5-9) | 1359 s | 13 |
+| 3 (帧 10-14) | 1204 s | 14 |
+| 4 (帧 15-19) | 433 s | 5 |
 
-从新版 manifest 指向的某帧 NPZ 提取指定帧内实例：
+第 2、3 窗口各遇到数次读超时重试，是耗时主因；窗口 4 因网关账户余额耗尽（HTTP 402 `budget_exceeded`）中断过一次，充值后续跑完成，产物无损坏。`usage`：prompt 3,447,711 / completion 15,532 / 合计 3,463,243。
 
-```python
-import numpy as np
+校验结果：240 个页面/资源/日志 URL 全部 HTTP 200；两棵树的隔离成立——`artifacts/` 侧 0 个 HTML，`site/` 侧无 `calls/`；Chrome headless 下两页渲染正常，页面几何说明为"真值网格几何；每帧将 mask 像素反投影到该像素的首表面"。
 
-with np.load("frame_000000.npz") as data:
-    bit_index = np.flatnonzero(data["instance_ids"] == 1).item()
-    belongs = (data["mask_bits"] & np.uint32(1 << bit_index)) != 0
-    instance_points = data["points_world"][belongs]
-```
+`harness-v3-sol-20frames-20261014-1313`（**历史 run**，`cluster_pruned_v1`）：20 帧 / 4 窗口，source 指向旧树的 `scene_cloud_visibility_v1_pruned`（只读）。4/4 窗口提交，20/20 帧，27 个物体，35 次有效调用，`pending` 24。其页面几何说明为点云投影口径。该 policy 同样已删除，仅存页面。
 
-## 默认路径
+导航栏已登记本次实验（`V3 · 前 20 帧 / 4 窗口 · 剪枝 mask · 重构树 · GPT-6 Sol · 2026-10-14`）。未登记的实验仍会被自动追加，但 label 只会是目录名本身，且因为拿不到 `path`，跨树跳转会回落到当前页面的基准——所以正式实验都应在 `docs/assets/experiment-navigation.js` 的 `experiments` 数组里登记 `path`。
 
-| 内容 | 路径 |
-| --- | --- |
-| ScanNet 场景 | `../data/scannet_v2`（相对于仓库根目录，当前为 `/home/seer/wzt/data/scannet_v2`） |
-| YOLOE-26 权重 | `../weights/yoloe26_prompt_free/weights/yoloe-26s-seg-pf.pt` |
-| SAM3.1 权重 | `../weights/sam3.1_multiplex.pt` |
-| 动态帧与结果 | `runtime/` |
-
-路径可通过 `SCANNET_ROOT`、`YOLOE_CHECKPOINT`、`SAM31_CHECKPOINT` 和 `INSTANCE_RECOGNITION_RUNTIME` 环境变量覆盖。
-
-权重默认从仓库根目录的 `weights/` 读取，路径由源码位置推导，不依赖启动时的工作目录。
-三个 YOLO 示例脚本也使用根目录下的 `weights/{yoloe26_prompt_free,yolo26_detect,yolo26_seg}/weights/`；
-显式传入 `--model /path/to/checkpoint.pt` 可使用其他位置的权重。
-SAM3 对比脚本使用 `../weights/sam3.pt`（相对于本模块根目录）。
-WeDetect 为独立上游工具，运行时显式传入根目录下 `weights/WeDetect/checkpoints/wedetect_base_uni.pth` 的绝对路径；
-ONNX 推理通过 `--onnx` 指定 `weights/WeDetect/wedetect_anything/onnx_models/wedetect_anything_base.onnx`，
-并通过 `--text-feat` 指定上游目录中的 `wedetect_anything/prompt_free.npy`。
-当前权重目录未包含配套 meta JSON；上游 CLI 支持省略 `--meta` 并使用内置 base 常量，有导出元数据时应通过 `--meta` 指定。
-
-## 文件职责
-
-| 文件 | 作用 |
-| --- | --- |
-| `src/scannet_sens.py` | 校验场景 ID，读取 `.sens`，并单帧或批量提取 RGB JPEG |
-| `src/sampling.py` | 在完整时间范围内均匀选择目标数量的帧 |
-| `src/gpt_labels.py` | 复用外部 API 客户端，独立识别原始 RGB 中的类别 |
-| `src/gpt_sam31.py` | 类别文本提示 SAM3.1；保存所有候选与展示预算 |
-| `src/build_method_comparison.py` | 复用既有几何生成 GPT 点云页或两种方案对比页 |
-| `src/publish_gpt_viewer.py` | 校验完整 500 帧并替换主入口，归档 YOLOE 页面 |
-| `src/import_gpt_batch.py` | 把批量结果接入默认在线缓存，无需再次推理 |
-| `src/yoloe_detect.py` | 第一阶段无文本检测，只保存标签与检测框，不转发原生 mask |
-| `src/sam31_segment.py` | 第二阶段框提示分割，困难框使用中心正点回退 |
-| `src/model_worker.py` | 在各自 Python 环境内常驻模型，并通过 JSON-lines 接收推理请求 |
-| `src/model_service.py` | 管理所选方案的 worker、网页客户端心跳和自动卸载 |
-| `src/pipeline.py` | 调用常驻模型服务、校验契约并缓存结果 |
-| `src/batch_infer.py` | 对一个场景执行可恢复的降采样批量推理 |
-| `web/server.py` | Flask 网页与 JSON/图像 API |
-| `web/build_offline_browser.py` | 扫描所有完整结果并生成离线数据索引 |
-| `web/index.html`、`web/styles.css`、`web/app.js` | 页面、样式和交互逻辑 |
-| `offline/` | 可通过 `file://` 直接打开的静态结果浏览器 |
-
-## 场景批量推理
-
-以下命令对场景完整时间轴做均匀采样，将总帧数控制在 500 帧，逐帧调用 GPT 标签与常驻 SAM3.1 文本分割：
+## 测试
 
 ```bash
-cd /home/seer/wzt/Reconstruction/InstanceRecognition
-taskset -c 0 env HF_HUB_OFFLINE=1 .venv/bin/python -u -m src.batch_infer \
-  --scene-id scene0000_00 \
-  --target-frames 500
+.venv/bin/python -m pytest tests/ -q     # 199 passed
 ```
 
-采样包含首、末帧。默认每帧结果保存在 `runtime/results_gpt/<scene_id>/frame_<index>/`，批次清单保存在 `runtime/batches_gpt/<scene_id>/target_500.json`。指定 `--method yoloe_sam31` 时使用原 `results/` 和 `batches/`。命令中断后可直接重跑，已经完成且通过契约校验的单帧结果会从缓存恢复；只有显式添加 `--force` 才会覆盖计算。
-
-默认 SAM 文本提示阈值为 0.5，每帧按 SAM 分数选最多 16 个 mask 用于页面展示；全部原始候选仍保留在 `raw_masks/`。包括 GPT 不确定类别和未分出 mask 的提示，不做跨类别 NMS、跨帧传播或类别归并。旧基线仍使用最多 16 个 YOLOE 检测框。
-
-页面打开时会异步加载模型，右侧状态显示“模型预热中”或“模型已驻留”。多个标签页共享同一组 worker；只有最后一个页面关闭后才开始 5 秒释放倒计时。页面使用 5 秒心跳，若浏览器崩溃或关闭通知丢失，服务端会在 15 秒心跳超时后触发相同的卸载流程。卸载时终止所选方案的 worker 进程，从而释放权重、CUDA 上下文和相关显存；Flask 网页服务本身继续运行。
-
-可通过接口检查或手动释放：
-
-```bash
-curl http://127.0.0.1:8090/api/models/status
-curl -X POST http://127.0.0.1:8090/api/models/unload
-```
-
-## 验证
-
-```bash
-/home/wzt/.conda/envs/scene/bin/python -m pytest -q tests
-```
-
-原机器历史实测记录（下列时间和计数不代表 2026-09-17 在当前机器上的重跑）：
-
-- 11 项读取器、采样、API 与模型生命周期测试通过；
-- `scene0000_00` 从 5,578 帧均匀采样到 500 帧（包含首帧 0 和末帧 5,577），500/500 帧完成、0 失败，共得到 6,795 个 YOLOE 检测及一一对应的 SAM3.1 mask；批次耗时 802.319 秒，结果占用约 592 MiB；
-- 改造前的冷启动基线 `scene0001_00 / frame 73`：YOLOE 检出 10 个实例、7 类标签，SAM3.1 生成 10 个 mask，总耗时 15.251 秒；
-- 常驻模型实测 `scene0001_00 / frame 74, 75` 两次未缓存端到端推理分别耗时 1.667 秒和 1.020 秒；
-- 最后一个客户端关闭后，YOLOE（666 MiB）与 SAM3.1（5500 MiB）worker 均在 5 秒防抖后退出，相关 GPU 进程消失；
-- `scene0002_01` 的末帧 `7252` 可直接从 `.sens` 加载，验证了长序列尾部索引；
-- 页面在 1600 × 1400 下完成视觉验收，输入、两阶段输出、缓存状态和结构化结果均可读。
+覆盖 Harness 决策循环与页面构建两条链路。`src/web/frontend/` 那棵旧网页源码树、`src/data/` 的 ScanNet reader、`src/inference/` 的推理侧（model_service / pipeline / SAM3）、以及旧树的 22 个兼容 shim 都不在本树的移植范围内。

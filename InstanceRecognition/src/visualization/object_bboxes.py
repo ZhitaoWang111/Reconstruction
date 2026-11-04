@@ -6,6 +6,7 @@ version cloud; later assignments or points never enter earlier windows.
 import hashlib
 import json
 from pathlib import Path
+import scipy
 import numpy as np
 from scipy.spatial import cKDTree
 from scipy.sparse import csr_matrix
@@ -14,8 +15,8 @@ from scipy.sparse.csgraph import connected_components
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
-def exterior_planes(points):
-    """Deterministic RANSAC surfaces; only one-sided, broad support can bind a face.
+def surface_planes(points):
+    """Extract broad upright surfaces independently of exterior-face eligibility.
 
     Plane patches provide normals and offsets, never crop tangential extents.
     All thresholds apply to the filtered observed cloud, not semantic truth.
@@ -62,8 +63,6 @@ def exterior_planes(points):
         spans = np.diff(np.quantile(tangent, [0.05, 0.95], axis=0), axis=0)[0]
         if len(patch) < max(120, 0.08*len(points)) or min(spans) < 0.08 or np.prod(spans) < 0.02:
             continue
-        if outside > 0.02:  # Interior shelves have substantial points on both sides.
-            continue
         if np.mean(signed > tolerance) < np.mean(signed < -tolerance):
             normal = -normal  # Positive side points into the object.
         vertical = abs(normal[2]) <= np.sin(np.radians(10))
@@ -76,13 +75,20 @@ def exterior_planes(points):
             upright_normal /= np.linalg.norm(upright_normal)
         projected = points @ upright_normal
         offset = float(np.median(patch @ upright_normal))
-        if min(float(np.mean(projected < offset-0.025)), float(np.mean(projected > offset+0.025))) > 0.02:
-            continue
+        upright_outside = min(float(np.mean(projected < offset-0.025)),
+                              float(np.mean(projected > offset+0.025)))
         planes.append({'normal': normal, 'center': center, 'points': patch,
                        'kind': 'vertical' if vertical else 'horizontal',
                        'support_points': len(patch), 'outside_fraction': outside,
+                       'upright_outside_fraction': upright_outside,
+                       'boundary_eligible': outside <= 0.02 and upright_outside <= 0.02,
                        'score': float(len(patch)*np.prod(spans))})
     return sorted(planes, key=lambda p: p['score'], reverse=True)
+
+
+def exterior_planes(points):
+    """Compatibility entry point: only surfaces eligible to anchor box faces."""
+    return [p for p in surface_planes(points) if p["boundary_eligible"]]
 
 
 def fit_plane_faces(points, axes, origin, lower, upper, planes):
@@ -91,6 +97,8 @@ def fit_plane_faces(points, axes, origin, lower, upper, planes):
     local = (points-origin) @ axes.T
     occupied = set()
     for plane in planes:
+        if not plane['boundary_eligible']:
+            continue
         dots = axes @ plane['normal']
         axis = int(np.argmax(np.abs(dots)))
         if abs(dots[axis]) < np.cos(np.radians(10)):
@@ -257,7 +265,8 @@ def supported_quantile_bounds(local, axis, bins=32):
 def oriented_bounds(points):
     """Fit a robust upright OBB from plane/hull heading and supported extents.
 
-    World Z is fixed.  A reliable exterior vertical normal fixes the horizontal heading;
+    World Z is fixed. A broad vertical surface can fix the horizontal heading;
+    only an independently verified exterior surface can anchor a boundary. Then
     each final local axis then gets a quantile extent with an additional
     low-density-tail check.  The check acts on the final OBB axes, so it can
     correct a shifted box without changing the proven plane orientation.
@@ -271,8 +280,24 @@ def oriented_bounds(points):
     radial = np.linalg.norm(xy - med, axis=1)
     support = points[radial <= np.quantile(radial, 0.98)]
     candidates = []
-    planes = exterior_planes(points)
-    vertical = next((p for p in planes if p["kind"] == "vertical"), None)
+    planes = surface_planes(points)
+    # Preserve established exterior headings when available. Otherwise retain
+    # broad surface orientation, preferring the most one-sided evidence rather
+    # than discarding it at the boundary's hard 2% threshold. Interior surfaces
+    # may provide orientation, but never gain permission to move a box face.
+    verticals = [p for p in planes if p['kind'] == 'vertical']
+    exterior = [p for p in verticals if p['boundary_eligible']]
+    vertical = exterior[0] if exterior else min(
+        verticals, key=lambda p: (max(p['outside_fraction'], p['upright_outside_fraction']),
+                                 -p['score']), default=None)
+    heading_plane = None if vertical is None else {
+        'normal_world': vertical['normal'].tolist(),
+        'support_points': vertical['support_points'],
+        'outside_fraction': vertical['outside_fraction'],
+        'upright_outside_fraction': vertical['upright_outside_fraction'],
+        'boundary_eligible': vertical['boundary_eligible'],
+        'selection': 'exterior_surface' if exterior else 'broad_surface_most_one_sided',
+    }
     plane_angle = float(np.arctan2(vertical["normal"][1], vertical["normal"][0]) % np.pi) if vertical is not None else None
     if plane_angle is not None:
         candidates.append(plane_angle)
@@ -296,7 +321,7 @@ def oriented_bounds(points):
         candidates = [float(np.arctan2(vectors[1, -1], vectors[0, -1]) % np.pi)]
         method = 'world_z_xy_pca_fallback'
     else:
-        method = 'world_z_exterior_plane_faces' if plane_angle is not None else 'world_z_xy_robust_hull_edges'
+        method = ('world_z_exterior_plane_faces' if exterior else 'world_z_surface_plane_heading') if plane_angle is not None else 'world_z_xy_robust_hull_edges'
     best = None
     for angle in candidates:
         u2 = np.array([np.cos(angle), np.sin(angle)])
@@ -339,7 +364,7 @@ def oriented_bounds(points):
     projected_corners = (corners - origin) @ axes.T
     assert np.allclose(projected_corners.min(axis=0), lower, atol=1e-9)
     assert np.allclose(projected_corners.max(axis=0), upper, atol=1e-9)
-    return {'center_xyz': center.tolist(), 'size_xyz': size.tolist(), 'axes_world': axes.tolist(), 'corners_xyz': corners.tolist(), 'method': method, 'heading_deg': float(np.degrees(angle) % 180), 'fit_area_xy': float(np.prod(size[:2])), 'fit_quantiles': [0.01, 0.99], 'boundary_support': {'axis_u': reviewed[0][2], 'axis_v': reviewed[1][2], 'axis_z': z_notes}, 'plane_heading_used': plane_angle is not None, 'plane_faces': plane_faces}
+    return {'center_xyz': center.tolist(), 'size_xyz': size.tolist(), 'axes_world': axes.tolist(), 'corners_xyz': corners.tolist(), 'method': method, 'heading_deg': float(np.degrees(angle) % 180), 'fit_area_xy': float(np.prod(size[:2])), 'fit_quantiles': [0.01, 0.99], 'boundary_support': {'axis_u': reviewed[0][2], 'axis_v': reviewed[1][2], 'axis_z': z_notes}, 'plane_heading_used': plane_angle is not None, 'heading_plane': heading_plane, 'plane_faces': plane_faces}
 
 
 def keep_dominant_component(points, radius_m=0.08, min_fraction=0.75, min_gap_m=0.05):
@@ -400,7 +425,10 @@ def trim_weak_boundary_points(points, min_points=800, trim_fraction=0.0025):
 
 def export_version_objects(version_dir, state=None, source_root=None):
     version_dir = Path(version_dir).resolve()
-    source_root = Path(source_root).resolve() if source_root else version_dir.parents[2]
+    # source_root anchors the provenance paths. Under the refactor the versions
+    # tree and the site tree are separate, so a caller that knows the records root
+    # should pass it rather than relying on the depth-based fallback.
+    source_root = Path(source_root).resolve() if source_root else version_dir.parents[1]
     if state is None:
         state = json.loads((version_dir / 'state.json').read_text())
     objects = []
@@ -485,12 +513,42 @@ def export_version_objects(version_dir, state=None, source_root=None):
     return objects
 
 
-def export_harness_bboxes(out, states=None):
-    """Write an array of object arrays, indexed by zero-based window_index."""
+def _cached_version_objects(out, version_dir, state, source_root=None):
+    # This cache is only used by visualization export; model spatial context
+    # continues using the same uncached fitting function and input evidence.
+    key = {'schema': 1, 'code_sha256': sha(Path(__file__)),
+           'numpy': np.__version__, 'scipy': scipy.__version__,
+           'state': state, 'state_sha256': sha(version_dir / 'state.json'),
+           'clouds': {oid: sha(version_dir / 'clouds' / f'{oid}.npz')
+                      for oid in state['objects']}}
+    cache_path = out / 'visualization_cache' / 'bboxes' / f'{state["version"]:04d}.json'
+    try:
+        cached = json.loads(cache_path.read_text())
+        encoded = json.dumps(cached['objects'], sort_keys=True, allow_nan=False).encode()
+        if cached['key'] == key and hashlib.sha256(encoded).hexdigest() == cached['objects_sha256']:
+            return cached['objects']
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    objects = export_version_objects(version_dir, state=state, source_root=source_root)
+    encoded = json.dumps(objects, sort_keys=True, allow_nan=False).encode()
+    from src.harness.state import save
+    save(cache_path, {'key': key, 'objects': objects,
+                     'objects_sha256': hashlib.sha256(encoded).hexdigest()})
+    return objects
+
+
+def export_harness_bboxes(out, run_dir=None, states=None):
+    """Write an array of object arrays, indexed by zero-based window_index.
+
+    `out` is the site directory (where the JS and its cache are written);
+    `run_dir` is the pipeline-records directory (where versions/ lives). They are
+    the same directory only for pre-refactor runs.
+    """
     out = Path(out).resolve()
+    run_dir = Path(run_dir).resolve() if run_dir is not None else out
     if states is None:
-        checkpoint = json.loads((out / 'checkpoint.json').read_text())
-        states = [json.loads((out / 'versions' / f'{v:04d}' / 'state.json').read_text())
+        checkpoint = json.loads((run_dir / 'checkpoint.json').read_text())
+        states = [json.loads((run_dir / 'versions' / f'{v:04d}' / 'state.json').read_text())
                   for v in range(1, checkpoint['version'] + 1)]
     windows = []
     provenance = []
@@ -498,8 +556,8 @@ def export_harness_bboxes(out, states=None):
         version = index + 1
         if state['version'] != version:
             raise ValueError(f'Window {index} has unexpected version {state["version"]}')
-        version_dir = out / 'versions' / f'{version:04d}'
-        objects = export_version_objects(version_dir, state=state, source_root=out)
+        version_dir = run_dir / 'versions' / f'{version:04d}'
+        objects = _cached_version_objects(out, version_dir, state, source_root=run_dir)
         windows.append(objects)
         provenance.append({'window_index': index, 'state_version': version,
                            'cutoff_seq': state['cutoff'],

@@ -1,4 +1,16 @@
 __pycache__/
 .pytest_cache/
-runtime/
-tests/__pycache__/
+
+# Pipeline output and generated pages. Both are reproducible from the code and
+# the recorded runs, and they are redirection targets (IR_ARTIFACTS_ROOT /
+# IR_SITE_ROOT), so they must not be treated as source.
+artifacts/
+site/
+
+# Hand-written page templates. Kept out of version control, matching the
+# pre-refactor tree's decision for src/web/frontend/. They live in the working
+# tree only — note that `git clean -fd` will remove them.
+pagegen/templates/
+
+# Local Python environment.
+.venv/

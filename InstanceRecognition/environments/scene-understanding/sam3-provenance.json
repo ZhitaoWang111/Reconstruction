@@ -1,0 +1,13 @@
+{
+  "original_source": "/home/seer/wzt/Reconstruction/Submodule/SAM3",
+  "git_head": "660a5e9e1b8b4c02c0ad97229b88a09a6e4ff5b7",
+  "patched_files_sha256": {
+    "sam3/__init__.py": "0c6d57fa068e5a33add2665b5214fa3f988bc84478605cd5e661abb1f1164ea4",
+    "sam3/model/sam3_base_predictor.py": "1cfcd126ecc9f0a1a26c5245c583d2e9145df5228641a77d27c29c442c8cf3b8"
+  },
+  "installed_version": "0.1.0+scene1",
+  "patch": "environments/scene-understanding/sam3-init-state.patch",
+  "patch_sha256": "7feeecefdbef324a4a3ad3fd6568667f931f00a54590aada1253046ffef69d39",
+  "wheel": "artifacts/environment/scene-understanding/wheels/sam3-0.1.0+scene1-py3-none-any.whl",
+  "wheel_sha256": "1f456495683bef7963c4aea3b8d728abcc1e5ea18739e6ac20cde5cc8b8a1193"
+}

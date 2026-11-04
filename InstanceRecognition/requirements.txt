@@ -1,0 +1,6 @@
+# Harness, page builders and offline perception tests.
+# Actual SAM3.1 inference uses the separate interpreter in requirements-runtime.txt.
+numpy
+Pillow
+scipy
+pytest

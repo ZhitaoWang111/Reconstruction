@@ -2,7 +2,7 @@
 import unittest
 import numpy as np
 from scipy.spatial import cKDTree
-from src.incremental_objects import Associator, voxelize
+from src.geometry.incremental_objects import Associator, voxelize
 
 
 def patch(x=0):

@@ -1,0 +1,34 @@
+--- a/sam3/model/sam3_base_predictor.py
++++ b/sam3/model/sam3_base_predictor.py
+@@ -10,6 +10,7 @@
+ """
+ 
+ import gc
++import inspect
+ import time
+ import uuid
+ from typing import Dict, List, Optional
+@@ -129,6 +130,13 @@
+             offload_video_to_cpu=offload_video_to_cpu,
+             offload_state_to_cpu=offload_state_to_cpu,
+         )
++        # SAM3.1 multiplex does not support state offloading (SAM3 does).
++        parameters = inspect.signature(self.model.init_state).parameters
++        accepts_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values())
++        if "offload_state_to_cpu" not in parameters and not accepts_kwargs:
++            if offload_state_to_cpu:
++                raise ValueError("This SAM model does not support offload_state_to_cpu")
++            init_kwargs.pop("offload_state_to_cpu")
+         if hasattr(self, "async_loading_frames"):
+             init_kwargs["async_loading_frames"] = self.async_loading_frames
+         if hasattr(self, "video_loader_type"):
+--- a/sam3/__init__.py
++++ b/sam3/__init__.py
+@@ -4,6 +4,6 @@
+ 
+ from .model_builder import build_sam3_image_model, build_sam3_predictor
+ 
+-__version__ = "0.1.0"
++__version__ = "0.1.0+scene1"
+ 
+ __all__ = ["build_sam3_image_model", "build_sam3_predictor"]

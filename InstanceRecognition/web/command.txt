@@ -1,3 +1,0 @@
-bash /home/wzt/wzt/CVPR_2027/InstanceRecognition/start.sh
-
-http://127.0.0.1:8090/

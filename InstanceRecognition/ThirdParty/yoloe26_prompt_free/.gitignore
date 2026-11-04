@@ -1,7 +1,0 @@
-.venv/
-.runtime_config/
-.cache/
-__pycache__/
-weights/*.pt
-outputs/*
-!outputs/.gitkeep

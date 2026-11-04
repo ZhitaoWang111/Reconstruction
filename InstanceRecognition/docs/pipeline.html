@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>流水线设计 · SAM/GPT → mask 投影 → harness 框架</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --model:#7c3aed; --model-soft:#f3eefe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr); max-width:1180px; margin:0 auto; padding:0 28px 120px}
+  @media (min-width:1080px){
+    .wrap{grid-template-columns:230px minmax(0,1fr); gap:56px; padding-left:36px; padding-right:36px}
+    .rail{position:sticky; top:0; align-self:start; max-height:100vh; overflow:auto; padding:44px 0}
+  }
+  .rail{display:none}
+  @media (min-width:1080px){ .rail{display:block} }
+  .rail-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px}
+  .rail a{
+    display:block; padding:7px 12px; margin:1px 0; border-radius:6px;
+    color:var(--ink-2); text-decoration:none; font-size:13.5px; border-left:2px solid transparent;
+  }
+  .rail a:hover{background:var(--line-2); color:var(--ink)}
+  .rail a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+  .rail a .n{font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:7px}
+  .rail a.on .n{color:var(--accent)}
+
+  header.top{padding:56px 0 34px; border-bottom:1px solid var(--line); margin-bottom:8px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+  h1{margin:0 0 14px; font-size:clamp(28px,3.6vw,40px); line-height:1.2; letter-spacing:-.022em; font-weight:700}
+  .lede{margin:0; max-width:62ch; color:var(--ink-2); font-size:16.5px}
+  .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+
+  section{padding-top:56px; scroll-margin-top:24px}
+  h2{margin:0 0 6px; font-size:23px; letter-spacing:-.014em; font-weight:700; display:flex; align-items:baseline; gap:12px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; letter-spacing:.04em}
+  .sub{margin:0 0 22px; color:var(--ink-3); font-size:14px; font-family:var(--mono)}
+  h3{margin:34px 0 10px; font-size:16.5px; font-weight:650; letter-spacing:-.006em}
+  h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.8px; line-height:1.65}
+  pre code{background:none; padding:0; color:inherit; font-size:inherit}
+  pre .c{color:#7d8894}
+  pre .k{color:#7dd3fc}
+  pre .s{color:#a5d6a7}
+
+  /* input / output summary at the top of each module */
+  .io{border:1px solid var(--line); border-radius:10px; background:var(--card); margin:0 0 26px; overflow:hidden}
+  .io .row{display:grid; grid-template-columns:76px minmax(0,1fr); gap:16px; padding:13px 18px; border-bottom:1px solid var(--line-2)}
+  .io .row:last-child{border-bottom:none}
+  .io .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:700; padding-top:3px}
+  .io .val{font-size:14.5px; line-height:1.7}
+  .io .val code{font-size:12.8px}
+
+  .flow{display:grid; gap:0; margin:26px 0 8px}
+  .step{display:grid; grid-template-columns:34px minmax(0,1fr); gap:16px; align-items:start}
+  .step .dot{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:13px; font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .step .dot.m{background:var(--model-soft); color:var(--model); border-color:#ddd0fb}
+  .step .body{padding:5px 0 26px; border-bottom:1px dashed var(--line)}
+  .step:last-child .body{border-bottom:none}
+  .step .name{font-weight:650; font-size:15.5px; margin-bottom:3px}
+  .step .io2{font-family:var(--mono); font-size:12.3px; color:var(--ink-3); line-height:1.7}
+  .step .io2 em{font-style:normal; color:var(--ink-2)}
+
+  .marks{display:grid; gap:10px; margin:16px 0}
+  .mark{display:grid; grid-template-columns:74px minmax(0,1fr); gap:14px; padding:12px 15px; border-radius:8px; font-size:14.5px; line-height:1.65}
+  .mark .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding-top:2px}
+  .mark.a{background:var(--accent-soft); border:1px solid #bfe3dd}
+  .mark.a .who{color:var(--accent)}
+  .mark.m{background:var(--model-soft); border:1px solid #ddd0fb}
+  .mark.m .who{color:var(--model)}
+  .mark.w{background:var(--warn-soft); border:1px solid #f2ddb4}
+  .mark.w .who{color:var(--warn)}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; border-bottom:1px solid var(--line); white-space:nowrap}
+  td code{font-size:12.6px}
+  tbody tr:hover{background:#f7f9fa}
+  table.tools td:nth-child(3){font-size:13px; line-height:1.6; color:var(--ink-2)}
+  table.tools td:last-child{white-space:nowrap; font-size:13px}
+  table.tools .q{display:block; font-size:11.5px; color:var(--ink-3); font-weight:400}
+
+
+
+  ul,ol{margin:0 0 16px; padding-left:22px}
+  li{margin:6px 0}
+  li::marker{color:var(--ink-3)}
+
+  .note{border-left:3px solid var(--warn); background:var(--warn-soft); padding:13px 17px; border-radius:0 7px 7px 0; margin:16px 0; font-size:14.5px}
+  .note strong{color:var(--warn)}
+  .stopnote{border-left:3px solid var(--stop); background:var(--stop-soft); padding:13px 17px; border-radius:0 7px 7px 0; margin:16px 0; font-size:14.5px}
+  .stopnote strong{color:var(--stop)}
+
+  .tree{font-family:var(--mono); font-size:12.9px; line-height:1.8; background:var(--card); border:1px solid var(--line); border-radius:9px; padding:17px 20px; overflow-x:auto; white-space:pre; color:#2b333d}
+  .tree b{color:var(--accent); font-weight:600}
+  .tree i{color:var(--ink-3); font-style:normal}
+
+  /* figures: three views of the same mask, side by side where they fit.
+     The 2D image is portrait and the clouds are landscape, so the columns are
+     sized by hand -- an equal split leaves the captions at wildly different
+     heights and the 2D shot dwarfs the two point clouds it is meant to explain. */
+  /* Figures: three views of the same mask. Equal boxes keep the captions on one
+     baseline; the 2D shot is portrait and the clouds are landscape, so it is
+     contained inside its box rather than cropped, which would cut the chair. */
+  .figs{display:grid; gap:16px; margin:22px 0 24px; align-items:start}
+  @media (min-width:820px){
+    .figs{grid-template-columns:1.18fr 1fr 1fr}
+  }
+  .fig{margin:0}
+  .fig .frame{
+    height:250px; border-radius:8px; border:1px solid var(--line);
+    background:#12161b; overflow:hidden; display:flex; align-items:center; justify-content:center;
+  }
+  .fig .frame.photo{background:#1b2127; padding:6px}
+  .fig img{width:100%; height:100%; object-fit:cover; display:block}
+  .fig .frame.photo img{object-fit:contain; height:100%; width:auto; border-radius:5px}
+  /* Stacked on narrow screens the fixed height would crop most of each image
+     away, so the boxes go back to their natural ratio there. */
+  @media (max-width:819px){
+    .fig .frame{height:auto; aspect-ratio:16/10}
+    .fig .frame.photo{aspect-ratio:4/3}
+    /* With the box sized by aspect-ratio rather than a height, `height:100%`
+       on the image resolves against nothing and it overflows. Contain keeps
+       the whole frame visible here instead. */
+    .fig img{object-fit:contain}
+    .fig .frame.photo img{width:100%; height:100%; object-fit:contain}
+  }
+  .fig figcaption{margin-top:9px; font-size:12.5px; line-height:1.6; color:var(--ink-3)}
+  .fig figcaption b{color:var(--ink-2); font-weight:650}
+
+  /* Vertical flow chart: one rounded node per step, colour-coded by who acts.
+     The connector is a plain div so it stays crisp at any zoom; the arrowhead is
+     a CSS triangle rather than a glyph, which would vary by font. */
+  .chain{display:flex; flex-direction:column; align-items:center; margin:26px 0 24px}
+  .node{
+    width:min(100%,540px); border:2px solid var(--line); border-radius:12px;
+    background:var(--card); padding:14px 18px; text-align:center;
+  }
+  .node .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-bottom:5px}
+  .node .t{font-weight:650; font-size:15px; line-height:1.45}
+  .node .d{font-size:13px; color:var(--ink-2); margin-top:6px; line-height:1.65}
+  .node .d code{font-size:11.8px}
+  .node.b{background:#eef4ff; border-color:#3b82f6}
+  .node.b .k{color:#2563eb}
+  .node.g{background:#ecfbf0; border-color:#22a552}
+  .node.g .k{color:#15803d}
+  .node.y{background:#fefbe8; border-color:#eab308}
+  .node.y .k{color:#a16207}
+  .node.r{background:#fdeeee; border-color:#dc2626}
+  .node.r .k{color:#b91c1c}
+  .node.p{background:#f4f0fd; border-color:#7c3aed}
+  .node.p .k{color:#6d28d9}
+  .arrow{width:2px; height:28px; background:#9aa4b2; position:relative}
+  .arrow::after{
+    content:""; position:absolute; left:50%; bottom:-2px; transform:translateX(-50%);
+    border-left:6px solid transparent; border-right:6px solid transparent; border-top:9px solid #9aa4b2;
+  }
+  /* The round-1 node shows what each of the three messages contributes: the
+     request, the record it returns, and the image that arrives with it. The raw
+     payloads stay in the log; repeating them here only buries the structure. */
+  .node.wide{width:min(100%,880px); text-align:left}
+  .node.wide .k,.node.wide .t{text-align:center}
+  .msg{margin-top:12px; border:1px solid var(--line); border-radius:8px; background:#fff; overflow:hidden}
+  .msg .role{font:10.5px var(--mono); letter-spacing:.14em; text-transform:uppercase; font-weight:700;
+    padding:5px 12px; background:var(--line-2); color:var(--ink-3); border-bottom:1px solid var(--line)}
+  .msg.assistant .role{color:#6d28d9}
+  .msg.tool .role{color:#15803d}
+  .msg.user .role{color:#1d4ed8}
+  .msg .body{padding:10px 12px 12px}
+  .msg .body p{margin:0 0 6px; font-size:13px; line-height:1.7; color:var(--ink-2)}
+  .msg .body p:last-child{margin-bottom:0}
+  .msg .body p b{color:var(--ink)}
+  .msg img{width:100%; height:auto; display:block; border-radius:6px; margin-top:8px}
+
+  .node.wide table.obs{margin:14px 0 0; font-size:12.5px}
+  .node.wide table.obs th{padding:6px 10px; font-size:10.5px}
+  .node.wide table.obs td{padding:6px 10px; border-bottom:1px solid var(--line-2)}
+  .node.wide table.obs tbody tr:last-child td{border-bottom:none}
+  .node.wide table.obs td code{font-size:11.8px}
+  .node.wide .shots4{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px}
+  @media (max-width:700px){ .node.wide .shots4{grid-template-columns:minmax(0,1fr)} }
+  .node.wide .shots4 figure{margin:0; border:1px solid var(--line); border-radius:7px; overflow:hidden; background:#12161b}
+  .node.wide .shots4 figure img{width:100%; height:auto; display:block}
+  .node.wide .shots4 figcaption{padding:5px 8px; font-size:11px; color:var(--ink-3); background:var(--card)}
+  .node.wide .foot{margin:12px 0 0; font-size:12px; line-height:1.65; color:var(--ink-3)}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="rail" id="rail">
+  <div class="rail-title">流水线</div>
+  <a href="#overview"><span class="n">00</span>总览</a>
+  <a href="#perception"><span class="n">01</span>SAM / GPT 出 mask</a>
+  <a href="#projection"><span class="n">02</span>mask 投影到 3D</a>
+  <a href="#harness"><span class="n">03</span>harness 框架</a>
+  <a href="#contracts"><span class="n">04</span>契约与失效</a>
+  <a href="#run"><span class="n">05</span>证据边界</a>
+  <a href="#commands"><span class="n">06</span>运行命令</a>
+</nav>
+
+<main>
+
+<header class="top">
+  <div class="eyebrow">InstanceRecognition · Pipeline Design</div>
+  <h1>从一张 RGB 图到一个跨帧物体</h1>
+  <p class="lede">
+    GPT 判断画面里有什么，SAM3.1 按这些判断切出 mask，投影器把每个 mask 像素落成三维点，
+    Harness 再逐窗口决定这些点属于哪个物体。三个模块，前两个产出数据，第三个消费数据。
+  </p>
+  <div class="meta">
+    <span class="tag">核对源码 <b>2026-10-19</b></span>
+    <span class="tag">投影策略 <b>amb3r_per_frame_v1</b></span>
+    <span class="tag">默认模型 <b>openai/gpt-6-sol</b></span>
+    <span class="tag">数据基准 <b>gpt_sam31_uniform500 · 500 帧</b></span>
+    <span class="tag">harness 基准 <b>v5 · 150 帧 / 30 窗</b></span>
+  </div>
+</header>
+
+<!-- ============ 00 ============ -->
+<section id="overview">
+  <h2><span class="no">00</span>总览</h2>
+  <p class="sub">三个模块 · 两次模型调用 · 一次纯本地投影</p>
+
+  <div class="flow">
+    <div class="step">
+      <div class="dot m">01</div>
+      <div class="body">
+        <div class="name">SAM / GPT 出 mask</div>
+        <div class="io2"><em>输入</em> 一批 RGB 帧 &nbsp;→&nbsp; <em>输出</em> 每帧一组带类别信息的二值 mask</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">02</div>
+      <div class="body">
+        <div class="name">mask 投影到 3D</div>
+        <div class="io2"><em>输入</em> 上一步的 mask + AMB3R 逐帧点图 &nbsp;→&nbsp; <em>输出</em> 每帧一份带归属位的三维点</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">03</div>
+      <div class="body">
+        <div class="name">harness 框架 · 跨帧关联</div>
+        <div class="io2"><em>输入</em> 上一步的三维点 &nbsp;→&nbsp; <em>输出</em> 物体身份、累计点云、可回放的页面</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark m"><div class="who">模型</div><div>01 调用两个外部模型：GPT 读图写字，SAM 只做图像分割。二者都不理解跨帧身份。</div></div>
+    <div class="mark a"><div class="who">程序</div><div>02 是纯本地计算：哈希核对、坐标变换、位图打包。不调用任何模型。</div></div>
+    <div class="mark m"><div class="who">模型</div><div>03 是多轮工具调用循环，每窗口最多 14 次往返，模型自己决定看什么、改什么。</div></div>
+  </div>
+
+  <p>
+    模块之间靠文件衔接，不靠函数调用。每个模块的输出是一份目录，下一个模块只读它——
+    所以可以单独重跑任意一段，也可以拿别的工具产出的目录替换其中一段。
+  </p>
+</section>
+
+<!-- ============ 01 ============ -->
+<section id="perception">
+  <h2><span class="no">01</span>SAM / GPT 出 mask</h2>
+  <p class="sub">src/inference/label_frames.py · gpt_sam31.py · sam31_segment.py</p>
+
+  <div class="io">
+    <div class="row"><div class="lbl">输入</div><div class="val">
+      一批原始 RGB 帧（JPEG），加一份列出帧号的 batch JSON。
+      <b>不含</b>任何 mask、深度或时间上下文。
+    </div></div>
+    <div class="row"><div class="lbl">输出</div><div class="val">
+      每帧一组二值 mask PNG，外加一份把 mask 与类别、置信度、来源哈希绑在一起的
+      <code>predictions.json</code>。mask 是帧内局部的，没有跨帧身份。
+    </div></div>
+    <div class="row"><div class="lbl">命令</div><div class="val">
+      <code>python -m src.inference.label_frames</code> →
+      <code>python -m src.inference.gpt_sam31</code>（两步，顺序执行）
+    </div></div>
+  </div>
+
+  <h3>两步分工<span class="h">先 GPT，后 SAM</span></h3>
+  <p>
+    GPT 那一步只看图，说出画面里有哪些类别、每类该用什么提示词去分割。
+    SAM 那一步消费这些提示词，把文字落到像素上。两步分开是因为它们失败的模式不同：
+    类别判断错要换 prompt 重跑，分割错要换阈值或权重重跑，重跑范围不一样。
+  </p>
+
+  <h4 style="margin:24px 0 8px;font-size:14.5px;font-weight:650;color:var(--ink-2)">1.1 · GPT 请求的形状</h4>
+  <pre><code>{
+  <span class="k">"model"</span>: <span class="s">"openai/gpt-6-sol"</span>,
+  <span class="k">"messages"</span>: [
+    {<span class="k">"role"</span>:<span class="s">"system"</span>, <span class="k">"content"</span>: &lt;prompt_en.txt&gt;},
+    {<span class="k">"role"</span>:<span class="s">"user"</span>, <span class="k">"content"</span>:[{<span class="k">"type"</span>:<span class="s">"image_url"</span>,
+       <span class="k">"image_url"</span>:{<span class="k">"url"</span>:<span class="s">"data:image/jpeg;base64,…"</span>, <span class="k">"detail"</span>:<span class="s">"high"</span>}}]}
+  ],
+  <span class="k">"response_format"</span>: {<span class="k">"type"</span>:<span class="s">"json_schema"</span>, <span class="k">"strict"</span>:true, …}
+}
+
+<span class="c">// 模型必须返回这两个数组，其余字段一律不允许</span>
+{ <span class="k">"categories"</span>: [ … ], <span class="k">"unresolved_regions"</span>: [ … ] }</code></pre>
+  <p>
+    <code>strict json_schema</code> 是在解码时约束输出，不是"请返回 JSON"的口头要求。
+    每条 category 固定六个字符串字段：<code>category</code>、<code>sam_prompt</code>、
+    <code>certainty</code>（clear/uncertain）、<code>visible_scope</code>（whole/partial/unclear）、
+    <code>evidence</code>、<code>ambiguity</code>。
+  </p>
+  <p>
+    代码随后用 <code>validate()</code> 再验一遍，且比 schema 更严：
+    <code>category</code> 与 <code>sam_prompt</code> 不能为空或纯空白，
+    <code>category</code> 大小写折叠后<b>不能重复</b>。<code>unresolved_regions</code> 每项固定
+    <code>location</code> 与 <code>reason</code> 两个字段。
+  </p>
+
+  <h4 style="margin:24px 0 8px;font-size:14.5px;font-weight:650;color:var(--ink-2)">1.1.1 · 标签 prompt 实际约束了什么</h4>
+  <p>
+    prompt（<code>src/inference/prompts/prompt_en.txt</code>，13 行）不是泛泛的"描述这张图"，而是给
+    SAM 写提示词的规则，几条硬约束值得记住：
+  </p>
+  <ul>
+    <li><b>一个类别只列一次</b>，即使画面里有多个实例——实例数由 SAM 决定，GPT 不返回计数、框或 mask。</li>
+    <li>优先整体物体而非附着部件；<b>排除墙、地板、天花板</b>。</li>
+    <li>成对可见的鞋必须标成 <code>pair of shoes</code>，且不许再单列成员；只有一只时用
+      <code>unpaired shoe</code>。手套同理。</li>
+    <li><code>evidence</code> 必须描述可见形状或外观，不能复述类别名；无歧义时 <code>ambiguity</code> 留空。</li>
+  </ul>
+
+  <h4 style="margin:24px 0 8px;font-size:14.5px;font-weight:650;color:var(--ink-2)">1.2 · SAM 如何把提示词变成 mask</h4>
+  <pre><code><span class="c"># 权重整个 run 只加载一次；每帧开一个会话，逐条提示词调用</span>
+response = predictor.handle_request({
+    <span class="k">'type'</span>: <span class="s">'add_prompt'</span>, <span class="k">'session_id'</span>: session, <span class="k">'frame_index'</span>: 0,
+    <span class="k">'text'</span>: category[<span class="s">'sam_prompt'</span>], <span class="k">'output_prob_thresh'</span>: 0.5,
+})[<span class="s">'outputs'</span>]
+<span class="c"># → out_binary_masks, out_probs, out_boxes_xywh</span>
+
+<span class="c"># 一个提示词可以返回多张 mask（两把椅子 = 两条候选）</span>
+<span class="c"># 全部候选保留成 PNG → 按 sam_score 取前 16 → 重编号 instance_id = 1,2,3…</span></code></pre>
+  <p>
+    <code>instance_id</code> 是<b>每帧局部</b>的，只在当前帧有意义。
+    跨帧身份是 03 才建立的东西，两者不能混用。
+  </p>
+
+  <div class="note">
+    <strong>预算筛选只决定"哪些入选"，不决定编号顺序。</strong>
+    实现在 <code>sam31_segment.select_within_budget</code>：先按 <code>sam_score</code> 降序取前
+    <code>max_masks</code>，再<b>按原始候选顺序</b>重新排一遍才赋 <code>instance_id</code>。
+    所以 <code>instance_id</code> 小不代表分数高——实测 frame 11 的 8 个实例里，
+    id 5（shoe, 0.801）排在 id 4（curtain, 0.770）之前，就是原始顺序，不是分数序。
+    落选者记在 <code>excluded_by_budget</code>，其二值 mask 仍然写盘，只是不进 <code>instances</code>。
+  </div>
+
+  <p>
+    另一处容易误读：<code>max_num_objects</code> 与 <code>multiplex_count</code> 在
+    <code>load_predictor</code> 里被<b>写死为 16</b>（<code>DEFAULT_MAX_MASKS</code>），
+    与命令行 <code>--max-masks</code> 无关。<code>--max-masks</code> 只控制入选并写入
+    <code>instances</code> 的数量，上限 32（uint32 位图容量），不改变模型侧容量。
+  </p>
+
+
+  <h3>500 帧实测的规模</h3>
+  <p>
+    下面这几个数来自 <code>artifacts/experiments/gpt_sam31_uniform500/perception/</code> 的实际产物，
+    用来校准"一帧大概出多少东西"的直觉；换场景或换 prompt 都会变。
+  </p>
+  <table>
+    <thead><tr><th>指标</th><th>值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>GPT 类别 / 帧</td><td>中位 8，范围 2–17</td><td>500 帧共 3990 条提示词</td></tr>
+      <tr><td>入选 mask / 帧</td><td>中位 9，总 4632</td><td><code>instances</code> 数组长度</td></tr>
+      <tr><td>原始候选 / 帧</td><td>总 5046</td><td>含被预算筛掉的 414 个</td></tr>
+      <tr><td>提示词落空</td><td>1090 / 3990（27.3%）</td><td>该提示词一个非空 mask 都没返回</td></tr>
+      <tr><td>触到 16 上限的帧</td><td>67</td><td>这些帧里有真候选被 <code>excluded_by_budget</code> 丢掉</td></tr>
+      <tr><td><code>unresolved_regions</code></td><td>总 473，中位 1/帧</td><td>GPT 自己承认无法防御性标注的区域</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <strong><code>unresolved_regions</code> 目前是死数据。</strong>
+    它被写进 <code>predictions.json</code>，但从装配器到 Harness 没有任何一处读取它。
+    也就是说"GPT 认为这块区域说不清"这条信息<b>不会到达模型</b>。
+    这不一定是缺陷（Harness 只看 mask 与几何），但改 prompt 时不要指望它能影响下游。
+  </div>
+
+  <h3>产物目录结构</h3>
+  <div class="tree">artifacts/experiments/<b>&lt;run&gt;</b>/perception/
+├── labels/                          <i>第一步（GPT）</i>
+│   ├── config.json                  <i>整批输入清单：模型、prompt 哈希、batch 哈希、每帧路径与哈希</i>
+│   ├── labels/0000.json             <i>单帧结果</i>
+│   ├── responses/                   <i>每次尝试的原始响应</i>
+│   ├── errors/                      <i>最终失败的帧</i>
+│   ├── summary.json                 <i>完成 / 失败计数</i>
+│   └── experiment_summary.json
+└── masks/                           <i>第二步（SAM）</i>
+    ├── frame_XXXXXX/sam31/
+    │   ├── predictions.json         <i>本帧全部候选、入选实例、provenance、policy</i>
+    │   ├── raw_masks/*.png          <i>每张二值 mask</i>
+    │   ├── annotated.jpg            <i>着色 + 编号 + 框</i>
+    │   └── instance_id_map.png      <i>逐像素实例图</i>
+    └── summary.json                 <i>每帧的实例数与路径</i></div>
+  <p>
+    帧目录名用的是<b>源帧号</b>（<code>frame_000011</code>），不是采样序号。
+    目录里 <code>frame_000000</code> 与 <code>frame_000011</code> 相邻，是因为抽样等间隔，不是缺帧。
+  </p>
+
+  <h3>产物信息类别</h3>
+  <table>
+    <thead><tr><th>类别</th><th>包含什么</th><th>能否丢</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>权威数据</b></td>
+        <td><code>raw_masks/*.png</code>、<code>labels/NNNN.json</code> 的 categories 数组</td>
+        <td>否，下游全部从它们出发</td>
+      </tr>
+      <tr>
+        <td>溯源</td>
+        <td><code>config.json</code>、<code>provenance</code>（RGB 哈希、label 哈希、权重大小与 mtime）、<code>artifact_sha256</code></td>
+        <td>否，删了就失去复用与校验能力</td>
+      </tr>
+      <tr>
+        <td>显示</td>
+        <td><code>annotated.jpg</code>、<code>instance_id_map.png</code></td>
+        <td>可以，随时从 PNG 重新生成</td>
+      </tr>
+      <tr>
+        <td>过程</td>
+        <td><code>responses/</code>、<code>errors/</code>、<code>summary.json</code>、<code>excluded_by_budget</code></td>
+        <td>可以，但排查问题时最先用到</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <strong>重叠是有意保留的。</strong>
+    两个物体的 mask 可以覆盖同一像素——不做跨类别 NMS，也不做时间传播。
+    合并像素会丢失"这里的归属存在争议"这个信息，而下游需要它。
+  </div>
+
+  <div class="stopnote">
+    <strong><code>instance_id_map.png</code> 只是显示图，不能当数据用。</strong>
+    它用 <code>uint16</code> 逐像素记编号，<b>后写的实例覆盖先写的</b>，重叠关系在这里已经丢失。
+    权威数据只有 <code>raw_masks/*.png</code> 这批独立二值 mask。
+    几何侧读 mask 时走的是 <code>backproject_masks.instance_masks()</code>，它明确只读
+    <code>mask_file</code> 指向的二值 PNG，不碰这张 ID 图。
+  </div>
+
+</section>
+
+<!-- ============ 02 ============ -->
+<section id="projection">
+  <h2><span class="no">02</span>mask 投影到 3D</h2>
+  <p class="sub">src/geometry/assemble_perception_source.py · amb3r_mask_source.py</p>
+
+  <div class="io">
+    <div class="row"><div class="lbl">输入</div><div class="val">
+      01 产出的 <code>perception/</code> 目录，加 AMB3R 的逐帧点图与位姿（<code>vo_uniform500</code>）。
+    </div></div>
+    <div class="row"><div class="lbl">输出</div><div class="val">
+      一份可被 Harness 直接消费的 source 目录：每帧一份 npz（世界坐标点 + 归属位图），
+      一份 <code>manifest.json</code>，加页面用的 JS asset。
+    </div></div>
+    <div class="row"><div class="lbl">命令</div><div class="val">
+      <code>python -m src.geometry.assemble_perception_source</code> →
+      <code>python -m src.geometry.amb3r_mask_source</code>
+    </div></div>
+  </div>
+
+  <h3>原理</h3>
+  <p>
+    AMB3R 对每一帧预测一张<b>逐像素深度图</b>：图上每个像素都对应一个三维点，
+    世界坐标由「该像素的深度 + 该帧的相机位姿」直接算出来。投影要做的只有一件事——
+    把 mask 覆盖到的那些像素挑出来，取出它们已经算好的三维点。
+  </p>
+  <p>
+    所以这一步没有射线投射，也不需要判断「这条视线先撞到哪个表面」：
+    深度是逐像素给定的，一个像素最多对应一个点，遮挡关系在 AMB3R 里已经解过了。
+    投影器只负责对齐网格、筛选像素、把点搬到世界坐标系。
+  </p>
+
+  <div class="figs">
+    <figure class="fig">
+      <div class="frame photo"><img src="assets/mask_overlay.png" alt="选定 mask 在 2D 图像上的覆盖"></div>
+      <figcaption><b>2D</b> · 选定 mask 覆盖的像素。绿色是成为点云的部分，红色是 mask 声称但该处没有几何的部分。</figcaption>
+    </figure>
+    <figure class="fig">
+      <div class="frame"><img src="assets/projection_front.png" alt="相机视角下的投影点云"></div>
+      <figcaption><b>相机视角</b> · 同一个 mask 落在三维空间里的点。深色为整帧场景点云，黄色为选中的 mask 点。</figcaption>
+    </figure>
+    <figure class="fig">
+      <div class="frame"><img src="assets/projection_side.png" alt="侧方视角下的投影点云"></div>
+      <figcaption><b>侧方视角</b> · 转约 90° 后同一点云。椅背与五爪底座的高度差在这个方向才看得出来。</figcaption>
+    </figure>
+  </div>
+
+  <p>
+    三张图是同一个 mask、同一帧。2D 图给出像素范围，相机视角图证明这些像素落回原位，
+    侧方视角图给出它们的空间形状——如果深度错了，椅子会被拉成一片贴在墙上的平面。
+  </p>
+
+  <h3>两步分工<span class="h">先装配，后投影</span></h3>
+  <p>
+    装配器<b>不投影任何点</b>。它只把 01 的两半（labels 与 masks）对齐成一份可投影的清单，
+    并证明它们确实属于同一次推理。投影器再读这份清单，把像素落成三维点。
+    分开是因为校验很便宜（秒级），投影很贵（全量重算），失败的判定应该在便宜的那一步做。
+  </p>
+  <p>装配器校验四道，任何一道不过就整批停住：</p>
+  <ul>
+    <li><b>帧对齐</b>——labels 与 masks 的 <code>sequence_index</code> 与 <code>source_frame_id</code>
+      必须同时相等。两半按不同的键索引（labels 按采样序号，masks 按源帧号），这是最容易错配的地方。</li>
+    <li><b>标签一致</b>——mask 记录的 <code>provenance.labels_sha256</code>，必须等于当前 label 文件重算的
+      SHA-256；不等说明 mask 是另一批 label 生成的。</li>
+    <li><b>图像一致</b>——batch、labels、predictions 三方记录的 RGB 哈希，都要等于从
+      <code>--frames-dir</code> 重新算出的图哈希。</li>
+    <li><b>模型唯一</b>——所有帧的 <code>gpt_model</code> 必须只有一个值。</li>
+  </ul>
+  <p>
+    另外两条硬约束：实例数必须等于 <code>instance_count</code>，且每帧不超过
+    <b>32</b>（uint32 位图容量）；采样序号必须是<b>从 0 起的连续整数</b>，否则观测 ID 会错位。
+  </p>
+  <p>
+    装配器<b>不复制 mask</b>：写进 manifest 的是相对输出目录的路径，原地引用
+    <code>perception/</code> 里的文件。所以 source 目录和感知产物必须一起保留。
+  </p>
+
+  <div class="stopnote">
+    <strong>装配产物故意没有 <code>lifting_policy</code>。</strong>
+    Harness 只接受它认识的那个 policy；缺这个字段，Harness 直接拒绝。
+    如果装配完就能被 Harness 吃下，说明有人跳过了投影，模型看到的将是没有三维证据的观测。
+  </div>
+
+  <h3>投影时做的四件事</h3>
+  <ol>
+    <li>
+      <b>对齐网格。</b>原始 RGB 与 mask 是 1296×968，AMB3R 输出 392×518。中间两步：
+      先缩放到 640×480，再按 518:392 的比例中心裁剪成 <b>634×480</b>，左边裁掉
+      <b>3 像素</b>（<code>(640 − 634) // 2</code>），最后缩到 518×392。
+      这三步用<b>最近邻</b>，保住二值归属；mask、RGB 采样、页面底图必须走完全相同的变换，
+      否则每帧偏几像素。
+    </li>
+    <li>
+      <b>筛像素。</b>只保留「属于某个 mask」且「AMB3R 置信度 ≥ 0.3」的像素。
+      这批数据上丢弃<b>不是</b>接近 0——实测帧 0 丢 1.42%（1776/125496 网格像素），
+      帧 75 丢 4.93%（5496/111373），帧 149 只丢 0.02%。帧间差异很大，
+      低置信区集中在低纹理或远距离处。
+    </li>
+    <li>
+      <b>搬到世界坐标。</b>用评测文件里的 <code>sim3_oracle_scale</code> 把点从 AMB3R 坐标
+      变换到与 GT 对齐的世界坐标（<code>P_world = s·R·P_amb3r + t</code>，当前
+      <code>s = 0.8875</code>）。同一个变换也把背景点云带到同一个坐标系，两者才能叠在一起看。
+    </li>
+    <li>
+      <b>记归属。</b>每个像素可能同时属于多个 mask，所以用一个 32 位整数记「属于哪几个」，
+      而不是记单个编号。
+    </li>
+  </ol>
+
+  <p>每帧写出一份 npz，六个键：</p>
+  <table>
+    <thead><tr><th>键</th><th>形状</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code>points_world</code></td><td>(K, 3) float32</td><td>世界坐标</td></tr>
+      <tr><td><code>rgb</code></td><td>(K, 3) uint8</td><td>原图采样色</td></tr>
+      <tr><td><code>mask_bits</code></td><td>(K,) uint32</td><td><b>第 i 位表示属于第 i 个 mask</b></td></tr>
+      <tr><td><code>pixel_indices</code></td><td>(K,) int64</td><td>该点在 518×392 网格里的扁平序号</td></tr>
+      <tr><td><code>grid_shape_hw</code></td><td>(2,)</td><td>(392, 518) —— 注意是 h, w</td></tr>
+      <tr><td><code>sequence_index</code></td><td>标量</td><td>采样序号</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <strong><code>mask_bits</code> 用位而不是编号，是为了保住重叠。</strong>
+    两个 mask 在同一像素重叠时，这个点会有两位同时为 1。
+    换成"每点记一个 instance_id"就必然丢弃其中一方。viewer 用洋红色显示这些重叠点。
+  </div>
+
+  <div class="stopnote">
+    <strong>这份几何是"对着 GT 拟合"的，不能当作 AMB3R 的独立精度。</strong>
+    <code>sim3_oracle_scale</code> 使用 GT 相机位姿求解，所以同一份评测文件里两个口径差很多：
+    自尺度 <code>se3_native_scale</code> 的 ATE 为 <b>0.257 m</b>、五厘米 F-score 为 <b>0.099</b>；
+    对 GT 拟合后 ATE 降到 <b>0.091 m</b>、F-score 升到 <b>0.562</b>。
+    提升里有一大半是 GT 的功劳。投影链路只把这份几何当作"够用的逐像素深度"，
+    任何页面文案都不得暗示独立精度。要评价 AMB3R 本身，必须改走 <code>se3_native_scale</code>
+    或 <code>pts + pose</code> 自洽重建（npz 里的 <code>metric_scale</code> 可能是入口，尚未验证）。
+  </div>
+
+  <div class="note">
+    <strong><code>projection_report.json</code> 量不了置信度筛掉了多少。</strong>
+    报告里的 <code>claimed_pixels</code> 等于该帧各实例的 <code>point_count</code> 之和，
+    也就是<b>筛完之后</b>的点数；<code>pixels_without_surface</code> 是写死的 <code>0</code>。
+    所以想复核"conf 阈值丢了几个像素"，得自己按上面 §02 的流程重算（用 <code>align_mask</code>
+    取并集、再与 <code>conf ≥ 0.3</code> 比较）。只读报告会得出"几乎没丢"的错误结论。
+  </div>
+
+  <p>
+    尺寸有<b>两套</b>，分属两个页面，别混用：
+    <code>assets/frame_XXXXXX.js</code> 自带 <code>width: 518</code> 与 <code>height: 392</code>
+    （<b>w, h</b> 两个标量）；而已发布的 <code>site/mask_project/meta.js</code> 里，每帧记的是
+    <code>grid_shape_hw = [392, 518]</code>（<b>h, w</b>）、<code>rgb_shape_hw = [968, 1296]</code>
+    与 <code>rgb_crop</code>（裁剪偏移，供 2D 底图对齐）。
+    代码里 <code>AMBR3R_SIZE = (518, 392)</code> 也是 <b>w, h</b> 顺序，
+    而 npz 的 <code>grid_shape_hw</code> 是 <b>h, w</b>——同一套尺寸在三个地方出现三种写法，
+    是这块最容易写反的地方。
+  </p>
+
+
+  <h3>产物目录结构</h3>
+  <div class="tree">artifacts/sources/&lt;scene&gt;/<b>&lt;name&gt;</b>/
+├── manifest.json          <i>帧清单：每帧的 npz / RGB / mask / 类别；投影后补上 lifting_policy</i>
+├── assembly_report.json   <i>装配时的三道校验结果、输入哈希</i>
+├── projection_report.json <i>投影参数：conf 阈值、Sim(3) 来源、背景点云哈希</i>
+├── frames/0000.npz        <i>每帧的三维点 + 归属位图</i>
+└── assets/
+    ├── background.js      <i>背景点云（与 Sim(3) 同一个评测文件）</i>
+    └── frame_000000.js    <i>每帧的页面数据，四个 base64 键缺一不可</i></div>
+
+  <h3>产物信息类别</h3>
+  <table>
+    <thead><tr><th>类别</th><th>包含什么</th><th>能否丢</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>权威数据</b></td>
+        <td><code>frames/*.npz</code> 的 <code>points_world</code> 与 <code>mask_bits</code></td>
+        <td>否，Harness 的全部输入</td>
+      </tr>
+      <tr>
+        <td>索引</td>
+        <td><code>manifest.json</code> 的 frames 数组、<code>lifting_policy</code></td>
+        <td>否，缺了 Harness 拒绝启动</td>
+      </tr>
+      <tr>
+        <td>溯源</td>
+        <td><code>assembly_report.json</code>、<code>projection_report.json</code>（Sim(3)、背景哈希、conf 阈值）</td>
+        <td>否，决定这份几何能否复现</td>
+      </tr>
+      <tr>
+        <td>页面数据</td>
+        <td><code>assets/*.js</code></td>
+        <td>可以，从 npz 重新生成（约 55 秒 / 500 帧）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <strong>每个 JS asset 必须带四个 base64 键。</strong>
+    <code>positions_f32_base64</code>、<code>colors_u8_base64</code>、
+    <code>mask_bits_u32_base64</code>、<code>pixel_indices_u32_base64</code>。
+    消费方是 <code>pagegen/templates/shared/viewer.js</code> 的 <code>loadFrame</code>：
+    它按 manifest 里的 <code>frame.asset</code> 动态插入 script，再从 registry 取回 payload 逐个
+    <code>atob()</code> 解码。缺任何一个都会在解码处抛 <code>InvalidCharacterError</code>，
+    整帧的点云与 overlay 一起不渲染——不是降级显示。
+  </div>
+
+  <h3>自己核对一份 source</h3>
+  <p>
+    怀疑某帧投影不对时，不必读源码，<code>pagegen/build_mask_project.py</code> 生成的检查页
+    就是为此存在的（<code>site/mask_project/</code>）：
+  </p>
+  <pre><code>.venv/bin/python -m pagegen.build_mask_project \
+  --amb3r-source artifacts/sources/scene0000_00/scene_amb3r_v1 \
+  --output site/mask_project --count 20</code></pre>
+  <p>
+    它对每个 mask 画两侧：左边是该 mask 在 RGB 上的覆盖，右边是它反投影出的三维点。
+    2D 侧用两种颜色区分<b>声称且投影成功</b>与<b>声称但没有几何</b>的像素——
+    后者不产生任何点，在纯点云视图里是隐形的，只有这个页面才看得见。
+    注意这个页面用的是<b>另一套编码</b>（u16 量化坐标 + 位打包），与 source 里的
+    <code>assets/*.js</code> 无关，两者各自独立生成、互不读取。
+  </p>
+  <p>
+    要复核置信度损耗（§02 里报告缺失的那个量），直接算：
+    <code>align_mask</code> 把每个 mask 对齐到 392×518 后取并集，再与
+    <code>npz['conf'] &gt;= 0.3</code> 比较，差值就是被丢掉的像素。
+  </p>
+</section>
+
+
+<!-- ============ 03 ============ -->
+<section id="harness">
+  <h2><span class="no">03</span>harness 框架</h2>
+  <p class="sub">src/harness/ · 逐窗口的模型决策循环</p>
+
+  <div class="io">
+    <div class="row"><div class="lbl">输入</div><div class="val">
+      02 产出的 source 目录（每帧一堆带归属位的三维点）。
+    </div></div>
+    <div class="row"><div class="lbl">输出</div><div class="val">
+      物体身份与归属（版本化状态）、每个物体的累计点云、两套可回放的页面。
+    </div></div>
+    <div class="row"><div class="lbl">命令</div><div class="val">
+      <code>python -m src.harness.run</code>；已完成的结果用 <code>--publish-only</code> 只重建页面
+    </div></div>
+  </div>
+
+  <p>
+    到这里，数据是「每帧一堆带归属位的三维点」。还缺的是<b>身份</b>：
+    第 0 帧的椅子、第 3 帧的椅子、第 7 帧的椅子，是不是同一把。这件事由模型通过工具循环决定。
+  </p>
+
+  <h3>窗口</h3>
+  <p>
+    帧被切成固定大小的窗口（默认 5）。每个窗口是一笔事务：模型看这一窗，
+    决定这些观测归给哪些物体，提交，然后进入下一窗。开始时模型拿到的是当前窗口每帧的
+    RGB 与 overlay、每条观测的类别与几何摘要、全部已归档物体的文字记录与 3D 框。
+  </p>
+  <div class="note">
+    <strong>历史图片一开始不发。</strong>
+    只有文字与几何。要确认某个历史物体长什么样，模型得主动调
+    <code>inspect_object</code> 或 <code>inspect_observations</code>。
+  </div>
+
+  <h3>一个窗口的初始输入<span class="h">按 inputs.py 的组装顺序</span></h3>
+  <div class="tree">一个窗口的初始输入
+├── 1. 窗口状态与历史物体    <i>一条 text 块，最先发送</i>
+│   ├── 窗口范围 [first, cutoff]、state.version、max_calls
+│   ├── 已归档物体档案：每个 Object 一条
+│   │   ├── Object 编号、object_label
+│   │   ├── created_at、status（<b>恒为 provisional</b>，见 §05）
+│   │   ├── label_history：发生过 relabel 才有
+│   │   ├── observation_count、observation_ids
+│   │   └── representative_observation_id
+│   ├── 全局空间信息：每个 Object 的 3D OBB
+│   │   ├── center_xyz              <i>框中心</i>
+│   │   ├── size_xyz                <i>三个方向的尺寸</i>
+│   │   └── axes_world              <i>局部轴在世界坐标里的朝向</i>
+│   ├── aliases                     <i>merge 后的旧编号映射</i>
+│   └── pending                     <i>尚未归属的观测（defer / repair 后的）</i>
+│
+├── 2. 当前观测             <i>每帧一组，逐帧发送</i>
+│   ├── 图片：每帧 2 张
+│   │   ├── 完整原始 RGB
+│   │   └── 完整 mask overlay
+│   │       └── 不同颜色的 mask + mask 编号 + 2D bbox
+│   └── 文字：每条观测一条记录
+│       ├── id、seq、source_frame_id、instance_id
+│       ├── category_label          <i>上游给这条观测的类别提示，不是物体身份</i>
+│       ├── bbox_xyxy、image_size_wh、overlay_color_rgb
+│       ├── point_count、centroid、bounds   <i>反投影点云摘要</i>
+│       └── spatial_candidates：至多 3 个
+│           └── rank、object_id、object_label、median_surface_distance_m
+│
+└── 3. 历史访问说明          <i>最后一条 text</i>
+    └── 初始不含历史代表观测的文字与图片；取用走 inspect_object / inspect_observations</div>
+  <p>
+    窗口范围内共 <code>window</code> 帧，每帧恒定 2 张图，所以图片数 = 帧数 × 2，
+    与物体数量无关。历史越长，增加的是文字档案，不是图片。
+  </p>
+
+  <h3>一个窗口的生命周期<span class="h">run.py · process_window</span></h3>
+  <p>
+    窗口是 Harness 里唯一的事务单位。它跑完只有两种结局：<b>提交成功</b>，或
+    <b>抛错、检查点原样保留</b>。下面是源码顺序，不是示意图。
+  </p>
+  <div class="flow">
+    <div class="step">
+      <div class="dot">1</div>
+      <div class="body">
+        <div class="name">组装输入</div>
+        <div class="io2"><em>inputs.build_window_content</em> → 一条状态 text、逐帧「观测 text + RGB + overlay」、一条历史访问说明。
+        同时把本窗观测登记进可引用的证据集合，并写 <code>window_inputs/NNNN_context.json</code> 审计。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">2</div>
+      <div class="body">
+        <div class="name">工具循环</div>
+        <div class="io2"><em>最多 <code>max_calls</code> 轮。</em>每轮模型可调任意工具（<code>parallel_tool_calls: false</code>，一次一个）。
+        工具返回的图片作为<b>下一条 user 消息</b>补进会话，不是塞进 tool 消息里。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">3</div>
+      <div class="body">
+        <div class="name">预算警告</div>
+        <div class="io2"><em>第 <code>max_calls−2</code> 轮之前插入。</em>追加一条 user 文本，要求立刻产出完整提案并提交；
+        从这一轮起 <code>tool_choice</code> 被强制成 <code>propose_update</code>，模型不能再去看证据。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">4</div>
+      <div class="body">
+        <div class="name">提交与落盘</div>
+        <div class="io2"><em>commit_update 成功才写盘。</em>先写 <code>versions/.NNNN.tmp</code>，算完该版本所有点云再原子改名；
+        然后写 <code>checkpoint.json = {version, cutoff}</code>。失败不碰旧版本。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">5</div>
+      <div class="body">
+        <div class="name">耗尽即失败</div>
+        <div class="io2"><em>用到 <code>max_calls</code> 轮仍未提交</em> → 抛 <code>RuntimeError</code>，
+        整进程停下，检查点仍指向上一个窗口。重跑同一命令从该窗口继续。</div>
+      </div>
+    </div>
+  </div>
+  <p>
+    网络错误与这个预算分开算：单个请求失败会按指数退避重试
+    <code>--network-retries</code> 次；若仍失败，<code>--window-network-retries</code> 允许
+    「保留整段会话、只重发这一条请求」再来几批，每批间隔 30 s。两者都不会消耗轮次。
+  </p>
+
+  <h3>实例：窗口 8（帧 35–39）的完整流程图</h3>
+  <p>
+    下面不是示意，是把 <code>calls/</code> 里那一窗的 6 次往返原样摊开。
+    选它是因为它同时含<b>历史纠错</b>、<b>新建 5 个物体</b>、<b>两次被校验拒绝</b>，
+    又只有 6 轮，不靠极端情况撑场面。
+  </p>
+  <div class="chain">
+
+    <div class="node b">
+      <div class="k">窗口开始 · 磁盘状态</div>
+      <div class="t">checkpoint = {version: 7, cutoff: 34}</div>
+      <div class="d">已归档物体 <b>36</b> 个 · 历史 <code>defer</code> 若干<br>
+        本窗新观测 <b>65</b> 条：帧 35→13、36→10、37→12、38→14、39→16</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node b">
+      <div class="k">① 组装输入 · 纯本地</div>
+      <div class="t">inputs.build_window_content</div>
+      <div class="d"><a href="window-input-window8.html">窗口 8 实际输入 →</a></div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node g wide">
+      <div class="k">② 工具循环 · 轮 1/6</div>
+      <div class="t">inspect_object(Object29)</div>
+      <div class="msg"><div class="role">assistant</div><div class="body">
+        <p>一句话说明它要核对哪些家具，然后发出调用：工具名 <code>inspect_object</code>，
+        参数只有 <code>{"object_id": "Object29"}</code>。它只能指定看<b>哪个物体</b>，
+        指定不了看哪一帧。</p></div></div>
+      <div class="msg"><div class="role">tool</div><div class="body">
+        <p>返回 Object29 的档案：历史标签 <code>shelving unit</code>、创建于窗口 24、
+        14 条观测 ID、代表观测是 <code>0027:002</code>。</p>
+        <p>再加上这条代表观测的全部字段——序列 27、源帧 302、上游类别 <code>desk</code>、
+        2D 框 <code>[10, 501, 382, 959]</code>、8,518 个点、质心与包围盒。
+        同一份内容在 <code>observations</code> 里又重复了一遍。</p>
+        <p>图片的字节不在 tool 消息里，只有一个指向 <code>evidence/</code> 下 JPEG 的路径字段；
+        图要等紧接的下一条 user 消息才真正编码进会话。</p></div></div>
+      <div class="msg"><div class="role">user</div><div class="body">
+        <p>一行文本说明这是 inspect_object 的视觉证据，附上这条观测的 id 与 kind，
+        然后才是图片。图片按下一条 user 消息补进会话，不塞进 tool 消息。</p>
+        <img src="../artifacts/experiments/harness-v5-amb3r-150frames-20261016-1550/evidence/history_bbox_efeb35ba77054fcb3c80.jpg" alt="inspect_object 返回的整帧 RGB 加 mask 框">
+      </div></div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node y">
+      <div class="k">模型判断</div>
+      <div class="t">这不是货架，是床头柜</div>
+      <div class="d">Object29 的标签需要修正</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node g wide">
+      <div class="k">② 工具循环 · 轮 2/6</div>
+      <div class="t">inspect_observations(4 条观测)</div>
+      <div class="d" style="text-align:center">一次传入 4 个观测 ID：<code>{"ids": ["0035:002", "0037:002", "0039:002", "0037:010"]}</code>
+        · 返回 4 条记录 + 4 张 overlay · 51,576 tok</div>
+      <table class="obs">
+        <thead><tr><th>观测</th><th>序列 / 源帧</th><th>上游类别</th><th>2D 框</th><th>点数</th></tr></thead>
+        <tbody><tr><td><code>0035:002</code></td><td>35 / 391</td><td><code>pillow</code></td><td><code>[10, 98, 207, 295]</code></td><td>5,041</td></tr><tr><td><code>0037:002</code></td><td>37 / 414</td><td><code>pillow</code></td><td><code>[29, 369, 250, 433]</code></td><td>812</td></tr><tr><td><code>0039:002</code></td><td>39 / 436</td><td><code>pillow</code></td><td><code>[11, 525, 225, 708]</code></td><td>4,646</td></tr><tr><td><code>0037:010</code></td><td>37 / 414</td><td><code>mouse pad</code></td><td><code>[906, 590, 1066, 654]</code></td><td>954</td></tr></tbody>
+      </table>
+      <div class="shots4"><figure><img loading="lazy" src="../artifacts/experiments/harness-v5-amb3r-150frames-20261016-1550/evidence/0035_002.jpg" alt="0035:002 的 target overlay"><figcaption><code>0035:002</code> · pillow · 5,041 点</figcaption></figure><figure><img loading="lazy" src="../artifacts/experiments/harness-v5-amb3r-150frames-20261016-1550/evidence/0037_002.jpg" alt="0037:002 的 target overlay"><figcaption><code>0037:002</code> · pillow · 812 点</figcaption></figure><figure><img loading="lazy" src="../artifacts/experiments/harness-v5-amb3r-150frames-20261016-1550/evidence/0039_002.jpg" alt="0039:002 的 target overlay"><figcaption><code>0039:002</code> · pillow · 4,646 点</figcaption></figure><figure><img loading="lazy" src="../artifacts/experiments/harness-v5-amb3r-150frames-20261016-1550/evidence/0037_010.jpg" alt="0037:010 的 target overlay"><figcaption><code>0037:010</code> · mouse pad · 954 点</figcaption></figure></div>
+      <p class="foot">4 张原始 RGB 窗口输入里已经发过，这次只补 target overlay（<code>reused_images</code> 记的就是被跳过的那 4 张）。
+      每条记录还有 <code>centroid</code>、<code>bounds</code>、<code>instance_id</code>、<code>overlay_color_rgb</code>，字段集与上一轮 <code>inspect_object</code> 一致。</p>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node y">
+      <div class="k">模型判断</div>
+      <div class="t">新建 5 个物体 · 修正 1 个标签</div>
+      <div class="d">pillow、mouse pad、3 幅各自独立的 wall picture<br>
+        同时把本窗 65 条观测全部定状态</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node r">
+      <div class="k">③ 校验拒绝 · 轮 3/6</div>
+      <div class="t">propose_update ✗ JSON 语法错</div>
+      <div class="d"><code>Expecting ':' delimiter: line 1 column 1284</code><br>
+        59,202 tok · 提案没解析成功，<b>磁盘仍是 version 7</b></div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node r">
+      <div class="k">③ 校验拒绝 · 轮 4/6</div>
+      <div class="t">propose_update ✗ 覆盖不全</div>
+      <div class="d"><code>missing: ['0039:004']</code> —— 25 个动作只覆盖 64/65 条观测<br>
+        61,056 tok · 上一份待提交提案同时作废</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node p">
+      <div class="k">③ 校验通过 · 轮 5/6</div>
+      <div class="t">propose_update ✓ 26 个动作</div>
+      <div class="d"><code>proposal_id = 958e9102f3b33147cb5b</code> · affected 19 个物体<br>
+        62,914 tok（其中 58,752 命中前缀缓存）<br><b>只在内存里生成新状态，磁盘未动</b></div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node p">
+      <div class="k">④ 提交 · 轮 6/6</div>
+      <div class="t">commit_update(958e9102…)</div>
+      <div class="d">66,902 tok · 全程未触发预算警告（6/14 轮）</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node p">
+      <div class="k">④ 落盘 · 程序完成，模型不参与</div>
+      <div class="t">versions/0008/ ← 41 个物体</div>
+      <div class="d">affected 的 19 个物体重新 <code>voxelize(0.02 m)</code>，其余 22 个硬链接上一版本<br>
+        写 <code>state.json</code> / <code>transaction.json</code> 后原子改名<br>
+        <code>checkpoint.json ← {version: 8, cutoff: 39}</code></div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node y">
+      <div class="k">本窗 26 个动作</div>
+      <div class="t">relabel 1 · create 5 · assign 19 · defer 1</div>
+      <div class="d">relabel：<code>Object29: shelving unit → nightstand</code><br>
+        create：<code>Object37</code> pillow · <code>Object38</code> mouse pad ·
+        <code>Object39/40/41</code> wall picture<br>
+        assign：19 个动作覆盖 <b>63</b> 条观测（按帧批量）<br>
+        defer：<code>0038:013</code>、<code>0038:014</code> —— 与平板/鼠标垫/纸张都太近，不猜<br>
+        63 + 2 = 65，与本窗观测总数严格相等</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node b">
+      <div class="k">⑤ 进入窗口 9</div>
+      <div class="t">41 个物体 · checkpoint 停在 cutoff 39</div>
+      <div class="d">下一窗重新组装输入：OBB 全部重拟合，历史图片再次不发</div>
+    </div>
+
+  </div>
+
+  <div class="legend" style="display:flex;flex-wrap:wrap;gap:8px 20px;margin:0 0 24px;font-size:12.5px;color:var(--ink-3)">
+    <span><b style="color:#2563eb">■</b> 输入 / 磁盘状态</span>
+    <span><b style="color:#15803d">■</b> 工具调用</span>
+    <span><b style="color:#a16207">■</b> 模型判断与动作内容</span>
+    <span><b style="color:#b91c1c">■</b> 校验拒绝</span>
+    <span><b style="color:#6d28d9">■</b> 通过并落盘</span>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">要点</div><div>
+      两次 <code>propose_update</code> 失败都<b>没有留下任何磁盘痕迹</b>——
+      <code>propose()</code> 是纯函数，失败只返回 error，文件系统仍是 version 7。
+      这就是"先校验、后提交"的全部意义。
+    </div></div>
+    <div class="mark a"><div class="who">要点</div><div>
+      失败提案会<b>作废上一份待提交提案</b>（代码先清 <code>pending</code> 再校验）。
+      所以模型不能在轮 3 攒一份、轮 5 再拿回来用，必须重新给出完整提案。
+    </div></div>
+    <div class="mark m"><div class="who">成本</div><div>
+      这一窗 6 轮共 <b>355,103</b> prompt token（约 35.5 万）；轮 5 的 58,752 命中前缀缓存。
+      新增的 5 个物体让窗口 9 的初始档案从 36 条涨到 41 条——历史是<b>累积的文字</b>，
+      不发图。对照：窗口 1（冷启动，无历史）也要 66.4 万，因为 10 张图与 54 条观测都在里面。
+    </div></div>
+  </div>
+
+  <h3>模型看到的观测字段<span class="h">observations.model_observation</span></h3>
+  <p>
+    每条观测落盘时有很多字段（mask 路径、位号、源图路径），但只有下面 11 个会进入模型上下文。
+    这是一份<b>白名单</b>，新增字段不会自动暴露——要进上下文必须改 <code>MODEL_FIELDS</code>。
+  </p>
+  <table>
+    <thead><tr><th>字段</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code></td><td><code>0042:003</code> —— 采样序号:帧内实例号</td></tr>
+      <tr><td><code>seq</code> / <code>source_frame_id</code></td><td>采样序号 / 原始视频帧号</td></tr>
+      <tr><td><code>category_label</code></td><td>上游给的类别提示，<b>不是</b>物体身份</td></tr>
+      <tr><td><code>bbox_xyxy</code> / <code>image_size_wh</code></td><td>原始 RGB 像素坐标，左上原点，xmax/ymax 开区间</td></tr>
+      <tr><td><code>overlay_color_rgb</code></td><td>该 mask 在 overlay 上的颜色（仅用于对齐图与文字）</td></tr>
+      <tr><td><code>instance_id</code></td><td>帧内编号，与 overlay 上的短数字对应</td></tr>
+      <tr><td><code>point_count</code></td><td>该 mask 反投影成功的点数</td></tr>
+      <tr><td><code>centroid</code> / <code>bounds</code></td><td>已观测表面在世界坐标里的质心与包围盒（米）</td></tr>
+    </tbody>
+  </table>
+  <p>
+    不在白名单里的：<code>mask</code>、<code>point_file</code>、<code>mask_bit</code>、
+    <code>bbox_convention</code>、<code>image</code>。它们只进 <code>observations.json</code> 审计。
+  </p>
+
+  <h3>窗口开始时的空间提示<span class="h">spatial_context.py</span></h3>
+  <ol>
+    <li>对<b>上一个已提交版本</b>的每个物体，用 <code>versions/NNNN/clouds/*.npz</code> 重新拟合
+      直立 OBB：RANSAC 找主平面定朝向、平面吸附修正边界、分位数定尺寸、再做低密度尾检查。</li>
+    <li>对本窗每条观测，用 KD 树算它的点到每个物体点云的最近距离，取<b>中位数</b>；按这个中位数排序取前 3，
+      记为 <code>spatial_candidates</code>。</li>
+    <li>全部结果冻结在窗口开始那一刻（<code>base_version</code> / <code>cutoff</code>），
+      窗口内不再刷新——即便模型改了归属。</li>
+  </ol>
+  <div class="note">
+    <strong>这一步没有缓存，而且不便宜。</strong>
+    <code>build_spatial_context</code> 直接调 <code>export_version_objects</code>（无缓存版），
+    每次窗口开始都把<b>全部历史物体</b>重新拟合一遍。实测：34 个物体约 5.6 s，
+    51 个约 18.7 s，70 个约 30.9 s（≈ 0.16→0.44 s/物体）。
+    按 30 个窗口累计，光这一项就是十几分钟——在 2.9 小时的 run 里不算大头，但它是纯本地空转。
+    页面侧的同类计算有缓存（<code>visualization_cache/bboxes</code>），模型侧刻意不缓存，
+    以保证模型看到的证据可以由代码与点云完全复现。
+  </div>
+
+
+  <h3>五个工具</h3>
+  <p>
+    五个工具按副作用从小到大分三档。<b>取证</b>：<code>inspect_observations</code> /
+    <code>inspect_object</code> / <code>compare_geometry</code> 只读，但看过的观测 ID 会登记为可引用证据，
+    这是提案里 <code>evidence</code> 字段的唯一来源。<b>校验</b>：<code>propose_update</code>
+    只改内存里的待提交提案，失败不留任何磁盘痕迹。<b>提交</b>：<code>commit_update</code>
+    是唯一写盘的调用。所有工具都是纯同步调用，没有并行（<code>parallel_tool_calls: false</code>）。
+  </p>
+  <p class="small">
+    注意"事务"在本页只指<b>一个窗口的完整提交</b>（见上文「窗口是 Harness 里唯一的事务单位」），
+    不指某一类工具。早先版本把 <code>propose_update</code> / <code>commit_update</code> 合称"事务工具"，
+    那与窗口级的含义冲突，且掩盖了两者"一个改内存、一个写磁盘"的区别，已改。
+  </p>
+  <table class="tools">
+    <thead><tr>
+      <th>工具</th><th>回答什么问题</th><th>返回什么（人话）</th><th>150 帧实跑</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><code>inspect_observations</code></td>
+        <td>这几个 mask 的画面再给我看看</td>
+        <td>每条观测一行元数据（类别、2D 框、点数、质心、包围盒、overlay 颜色），
+            再附 2 张图（整帧 RGB + 该 mask 的 target overlay）。上限 4 条。<b>已经发过的图会跳过</b>，
+            只在 <code>reused_images</code> 里留个记录。</td>
+        <td><b>93</b> 次 <span class="q">393 张图</span></td>
+      </tr>
+      <tr>
+        <td><code>inspect_object</code></td>
+        <td>之前建的这个物体长什么样？</td>
+        <td>物体档案 + 一条<b>代表观测</b>的完整字段 + 段历史里挑出来的那张图
+            （整帧 RGB，画上原始 mask 框与 Object ID）。只给一条，不给整段历史。</td>
+        <td><b>56</b> 次 <span class="q">每次 1 张图</span></td>
+      </tr>
+      <tr>
+        <td><code>compare_geometry</code></td>
+        <td>这两片点云在三维里有多近？</td>
+        <td>两条观测采样点云之间的最近距离、双向中位距离、各自落在对方 5 cm 内的点的比例。
+            返回值自带一句限定：<i>只是子采样的可见表面，不是可见性证明，也不能证明是同一个物体</i>。</td>
+        <td><b>0</b> 次 <span class="q">从未使用</span></td>
+      </tr>
+      <tr>
+        <td><code>propose_update</code></td>
+        <td>我准备这样改，先检查能不能执行</td>
+        <td>校验通过的提案摘要：提案 ID、影响到的物体集合、动作条数、改完后的物体数、
+            还剩多少条未归属观测。失败则只返回 <code>{"error": "..."}</code>，
+            <b>上一份待提交提案同时作废</b>。</td>
+        <td><b>54</b> 次 <span class="q">22 次报错</span></td>
+      </tr>
+      <tr>
+        <td><code>commit_update</code></td>
+        <td>把检查通过的改正式保存</td>
+        <td>先返回 <code>{"ready_to_commit": true}</code>，随后由宿主代码完成落盘并返回
+            <code>{"committed": N, "cutoff": M}</code>——版本号与截止帧。这是唯一改磁盘的调用。</td>
+        <td><b>30</b> 次 <span class="q">= 30 个窗口</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <strong>次数怎么读</strong>：213 次 API 往返里一共 233 次工具调用（204 轮 1 次，
+    3 轮 2 次，1 轮 3 次，5 轮 4 次），说明模型偶尔会把几条取证并进同一轮。
+    <code>propose_update</code> 的 54 次里只有 30 次通过——剩下 24 次中 22 次是校验报错、
+    2 次是通过后又重新提交。两张取证工具合计 149 次、449 张图，占全部调用的 64%：
+    <b>这个流程的绝大部分开销是"再看一眼"</b>，不是推理。
+  </div>
+
+  <h3>六种动作</h3>
+  <table>
+    <thead><tr><th>动作</th><th>做什么</th></tr></thead>
+    <tbody>
+      <tr><td><code>create</code></td><td>给新物体建档，本身不带观测</td></tr>
+      <tr><td><code>assign</code></td><td>把一条观测归给某个物体</td></tr>
+      <tr><td><code>relabel</code></td><td>修正物体的类别名，保留身份与归属</td></tr>
+      <tr><td><code>defer</code></td><td>证据不足，暂缓决定</td></tr>
+      <tr><td><code>repair</code></td><td>标记 mask 本身有问题（如混入无关物体）</td></tr>
+      <tr><td><code>merge</code></td><td>两份档案其实是同一个物体</td></tr>
+    </tbody>
+  </table>
+  <p>
+    <code>defer</code> 与 <code>repair</code> 都不参与点云融合。它们是观测的状态，不是物体的状态。
+  </p>
+
+  <h3>事务校验规则<span class="h">state.propose</span></h3>
+  <p>
+    <code>propose_update</code> 不写盘，只在内存里跑一遍纯函数 <code>propose()</code>。
+    任何一条不过就返回 <code>error</code>，上一份待提交提案<b>同时作废</b>（代码先清 <code>pending</code> 再校验）。
+    实际生效的规则：
+  </p>
+  <table>
+    <thead><tr><th>规则</th><th>违反时的报错（原文）</th></tr></thead>
+    <tbody>
+      <tr><td><code>base_version</code> 必须等于当前版本</td><td><code>Stale base_version</code></td></tr>
+      <tr><td>每个动作都要有非空 <code>reason</code>，且 <code>evidence</code> 必须是非空、<b>已实际取用</b>过的 ID</td><td>—（抛 <code>Every action needs a reason and accessible evidence IDs</code>）</td></tr>
+      <tr><td>对象编号必须是规范的 <code>Object&lt;n&gt;</code>，n&gt;0，不复用活动或已退役编号</td><td><code>Object ID already used or not canonical</code></td></tr>
+      <tr><td><code>relabel</code> 只许改 <code>object_label</code>，且必须真的改变</td><td><code>relabel only changes object_label…</code></td></tr>
+      <tr><td>同一条观测在<b>一份提案内</b>只能出现一次（assign/defer/repair 合并计）</td><td><code>Observation changed twice in one proposal</code></td></tr>
+      <tr><td>截止到本窗口，<b>所有可见观测</b>都必须有 assigned/defer/repair 状态</td><td><code>Every visible observation needs … status; missing: […]</code></td></tr>
+      <tr><td>提交后每个物体至少拥有 1 条观测</td><td><code>Empty object ObjectN; assign observations or merge it</code></td></tr>
+      <tr><td><code>merge</code> 只能保留 target 的 label，source 退成 alias</td><td><code>Invalid merge endpoints</code></td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <strong>最后一条最容易踩。</strong>"所有可见观测"指<b>从第 0 帧到本窗口截止</b>的全部观测，
+    不是只指本窗新观测。已经处理过的历史观测不必重复列出，但它们必须有状态——
+    所以 <code>defer</code>/<code>repair</code> 过的观测也要留在 <code>assignments</code> 里。
+    实测 150 帧 run 的 213 次调用里有 <b>22 次</b> <code>propose_update</code> 失败重试，
+    其中绝大多数就是这一条（漏了某条观测）。
+  </div>
+
+  <h3>150 帧实跑里的调用分布</h3>
+  <p>
+    数字来自 <code>harness-v5-amb3r-150frames-20261016-1550/calls/</code>，
+    用来判断"预算够不够"这类问题。
+  </p>
+  <table>
+    <thead><tr><th>指标</th><th>值</th></tr></thead>
+    <tbody>
+      <tr><td>每窗 API 轮次</td><td>中位 <b>6</b>，最少 3，最多 13（上限 14）；5 轮的窗口最多（10 个）</td></tr>
+      <tr><td><code>propose_update</code> 调用</td><td>54 次 → 30 次提交 + 24 次重试（22 次报错）</td></tr>
+      <tr><td>取证工具</td><td><code>inspect_observations</code> 93 次，<code>inspect_object</code> 56 次</td></tr>
+      <tr><td><code>compare_geometry</code></td><td>0 次</td></tr>
+      <tr><td>每窗输入 token</td><td>中位约 42.8 万；首窗 66.4 万；最重窗口（窗 12，帧 55–59）82.6 万</td></tr>
+    </tbody>
+  </table>
+  <p>
+    两个结论值得记住：<b>预算不是瓶颈</b>（中位只用了 6/14 轮），
+    <b>模型很少用几何比较</b>——身份判断几乎全靠图片。
+    原先还有第六个工具 <code>list_objects</code>，2026-10-23 已删除：窗口首条消息里的
+    <code>state</code> 就是它的返回值，而 state 在提交前不会变，所以在窗口内调它恒等于重读已有内容。
+  </p>
+
+  <h3>产物目录结构</h3>
+  <div class="tree">artifacts/experiments/<b>&lt;run&gt;</b>/          <i>流程记录</i>
+├── config.json          <i>本次运行的全部参数（含 source 路径、窗口、模型）</i>
+├── checkpoint.json      <i>{"version": N, "cutoff": M} 续跑锚点</i>
+├── input_audit.json     <i>每个输入文件的哈希；变了就拒绝续跑</i>
+├── observations.json    <i>每条观测的模型可见元数据</i>
+├── evidence_policy.json <i>取证图片的取舍规则</i>
+├── run_options/         <i>当次命令行参数快照</i>
+├── window_inputs/       <i>每窗实际发给模型的输入记录</i>
+├── code_versions/       <i>运行时各模块的哈希</i>
+├── versions/NNNN/
+│   ├── state.json       <i>该版本的对象与归属</i>
+│   ├── transaction.json <i>模型提交的原始动作</i>
+│   ├── timing.json
+│   └── clouds/          <i>每个物体的累计点云</i>
+├── calls/               <i>每次 API 往返：*_request / *_response / *_meta / *_toolNN</i>
+├── evidence/            <i>每次取证生成的图片</i>
+├── summary.json
+└── run.lock             <i>单进程互斥，崩溃自动释放</i>
+
+site/experiments/<b>&lt;run&gt;</b>/               <i>生成的页面</i>
+├── index.html           <i>三维回放</i>
+├── audit.html           <i>窗口归属与纠错</i>
+├── records.html         <i>逐窗口 Agent 交互记录（独立一步生成）</i>
+├── manifest.js / result_data.js
+├── states/              <i>每窗的状态快照 + 点云</i>
+├── objects/             <i>每个物体一个 PLY</i>
+├── records/             <i>记录页的分窗口数据</i>
+├── visualization_cache/
+└── *.js / *.css         <i>viewer、incremental、布局与样式</i></div>
+  <p>
+    <code>index.html</code> 与 <code>audit.html</code> 由 <code>--publish-only</code> 生成；
+    <code>records.html</code> 是独立一步，用 <code>pagegen/build_records.py --run &lt;name&gt;</code>。
+    两者可以分开重跑——只改页面样式时不需要碰已有结果。
+  </p>
+</section>
+
+<!-- ============ 04 ============ -->
+<section id="contracts">
+  <h2><span class="no">04</span>契约与失效</h2>
+  <p class="sub">改哪一段，会让哪一段失效</p>
+
+  <p>
+    模块之间不靠命名约定松耦合，而是靠哈希与计数硬校验。上游任何实质改动都会在下游明确失败，
+    而不是悄悄产生错误结果。
+  </p>
+
+  <table>
+    <thead><tr><th>契约</th><th>位置</th><th>违反后果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>label 文件哈希</td>
+        <td><code>predictions.provenance.labels_sha256</code></td>
+        <td>改 prompt 或重跑 GPT → SAM 拒绝复用，报"mask 由另一批 label 生成"</td>
+      </tr>
+      <tr>
+        <td>RGB 哈希</td>
+        <td>batch / labels / predictions 三方 + 重算</td>
+        <td>换图或换帧 → 装配器拒绝</td>
+      </tr>
+      <tr>
+        <td>权重一致性</td>
+        <td>checkpoint 路径 + 大小 + mtime</td>
+        <td>换 SAM 权重 → 要求换一个新的 <code>--run</code></td>
+      </tr>
+      <tr>
+        <td>每帧 32 mask</td>
+        <td>uint32 位图</td>
+        <td>超过 → 装配器与 Harness 都报错，不截断</td>
+      </tr>
+      <tr>
+        <td>单一模型</td>
+        <td>装配时汇总 <code>gpt_model</code></td>
+        <td>混模型 → 拒绝</td>
+      </tr>
+      <tr>
+        <td><code>lifting_policy</code></td>
+        <td>harness 框架启动校验</td>
+        <td>缺省或未知 → 拒绝启动并提示投影命令</td>
+      </tr>
+      <tr>
+        <td>asset 四个 base64 键</td>
+        <td>页面解码</td>
+        <td>缺一个 → <code>atob(undefined)</code>，整帧白屏</td>
+      </tr>
+      <tr>
+        <td>连续采样序号</td>
+        <td>装配器</td>
+        <td>非 0 起连续 → 观测 ID 错位，拒绝</td>
+      </tr>
+      <tr>
+        <td>取证策略版本</td>
+        <td><code>evidence_policy.json</code>（policy version 5）</td>
+        <td>与当前代码不一致 → 拒绝复用旧目录，要求新 <code>--output</code></td>
+      </tr>
+      <tr>
+        <td>输入文件哈希</td>
+        <td><code>input_audit.json</code>（manifest、逐帧 npz、RGB、mask）</td>
+        <td>任一变化 → <code>Input changed; cannot resume</code></td>
+      </tr>
+      <tr>
+        <td>运行配置</td>
+        <td><code>config.json</code>（source、窗口、模型、prompt 哈希、几何描述）</td>
+        <td>已有目录但配置不同 → <code>Resume config changed; use new output</code>（只有网络重试类参数可改）</td>
+      </tr>
+      <tr>
+        <td>发布完整性</td>
+        <td><code>--publish-only</code> 检查</td>
+        <td>未跑到最后一帧、或 checkpoint 与 state 不一致 → 拒绝发布</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    续跑还有一条容易忽略的：检查点 <code>{version, cutoff}</code> 与磁盘上的
+    <code>versions/NNNN/state.json</code> 是<b>两处独立记录</b>。<code>--publish-only</code> 会显式比对
+    二者的 <code>cutoff</code> 与 <code>version</code>，不一致直接报
+    <code>Checkpoint and committed state disagree</code>。
+  </p>
+  <p>
+    而 <code>input_audit.json</code> 覆盖的是<b>整个 source 的前 N 帧</b>（npz + RGB + 每个 mask），
+    不是抽样。实测这 150 帧共 1697 个文件，重算哈希约 <b>0.1 s</b>，150 份 npz 载入约 <b>0.6 s</b>——
+    所以准备阶段的成本几乎全在别处（取证图生成），哈希本身可以放心每次全算。
+  </p>
+
+
+  <h3>想做这几件事时，要重跑哪些</h3>
+  <table>
+    <thead><tr><th>改动</th><th>需要重跑</th></tr></thead>
+    <tbody>
+      <tr><td>改 GPT 的 system prompt</td><td>01 全部 → 02 全部 → 03</td></tr>
+      <tr><td>换 GPT 模型</td><td>01 全部 → 02 全部 → 03</td></tr>
+      <tr><td>只改 SAM 阈值或 <code>--max-masks</code></td><td>01 的 SAM 步 → 02 全部 → 03</td></tr>
+      <tr><td>换 SAM 权重</td><td>01 的 SAM 步 → 02 全部 → 03</td></tr>
+      <tr><td>改置信度阈值（投影）</td><td>02 的投影步 → 03</td></tr>
+      <tr><td>换 Sim(3) 或换背景点云</td><td>02 的投影步 → 03</td></tr>
+      <tr><td>只改 harness 框架的窗口大小或帧数</td><td>03（这是实验变量，不是实现细节；旧 run 不能续）</td></tr>
+      <tr><td>改 <code>MODEL_FIELDS</code> 或 <code>inputs.py</code> 的组装顺序</td><td>03，<b>且没有校验门</b>：<code>input_policy</code> 是硬编码字符串，不随代码变；改了它仍可续跑旧 run，等于前后窗口喂了不同输入。必须手动改 <code>--output</code></td></tr>
+      <tr><td>改 <code>prompt.txt</code></td><td>03，且必须新开 run 目录（<code>prompt_sha256</code> 参与续跑比对）</td></tr>
+      <tr><td>只改页面样式</td><td>仅重新发布页面（<code>--publish-only</code>）</td></tr>
+      <tr><td>改 <code>build_spatial_context</code> 的候选数或距离口径</td><td>03，且要同步改 <code>input_policy</code> 字符串，否则审计描述会撒谎</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <strong>harness 框架的 <code>pending</code> 不是错误。</strong>
+    没被归属的观测会以 <code>defer</code> 收尾，占总数的几个百分点是正常的——
+    它代表模型在证据不足时选择不猜，这比强行分配要好。
+  </div>
+</section>
+
+<!-- ============ 05 ============ -->
+<section id="run">
+  <h2><span class="no">05</span>证据边界</h2>
+  <p class="sub">这份流水线能证明什么、不能证明什么</p>
+
+  <p>
+    前三节描述的是"数据怎么走"。这一节记的是读源码与产物时发现的<b>限制与不成立的说法</b>——
+    写报告、做对比、改代码之前先看这里，避免把系统的某个副产品当成另一个东西的证据。
+  </p>
+
+  <h3>几何</h3>
+  <ul>
+    <li><b>坐标系是对着 GT 拟合的。</b><code>sim3_oracle_scale</code> 用了 GT 相机位姿，
+      详见 §02 的 <code>stopnote</code>。它不能用于评价 AMB3R 的独立精度。</li>
+    <li><b>只有一份 source 被建立。</b><code>artifacts/sources/scene0000_00/scene_amb3r_v1</code>，
+      覆盖 <code>scene0000_00</code> 的 500 帧、4632 个 mask。没有第二个场景，
+      所以任何"跨场景泛化"的说法目前都没有数据。</li>
+    <li><b>页面背景与 lifted 点同一坐标系</b>，背景取自 <code>sim3_ply</code>。装配器虽然也写过一份
+      <code>assets/background.js</code>（来自 <code>pointcloud_gt_corrected_rgb.ply</code>），
+      但投影器会把同名文件<b>整个覆盖</b>，装配器那份不进入最终 source。</li>
+    <li><b>跨帧去重对当前 source 不生效。</b><code>Observations.fused()</code> 有一个按
+      <code>scene_point_ids</code> 去重的分支，但 <code>amb3r_mask_source</code> 写 npz 时
+      <b>不写这个键</b>。所以累计点云只靠 2 cm voxel 合并——同一个物理表面在多帧被多次采样时，
+      是 voxel 把它们压过去的，不是精确的同点去重。</li>
+  </ul>
+
+  <h3>身份与语义</h3>
+  <ul>
+    <li><b>没有准确率评估。</b><code>summary.json</code> 里 <code>accuracy_evaluated: false</code>，
+      也没有任何与 GT 实例标签比对的代码。72 个物体是"模型建出来的档案"，
+      <b>不是</b>"场景里物体的正确清单"。重复建档、漏建档都还没有被量化。</li>
+    <li><b>物体级 <code>status</code> 是死的。</b><code>propose()</code> 建对象时写
+      <code>status: 'provisional'</code>，之后没有任何代码路径修改它——150 帧 run 的 72 个物体
+      全部停在 <code>provisional</code>。真正有含义的状态在 <code>assignments</code> 上
+      （<code>assigned</code> / <code>defer</code> / <code>repair</code>）。
+      这个字段当前会原样发给模型，读的时候别把它当成"是否置信"的信号。</li>
+    <li><b><code>category_label</code> 不是身份。</b>同一物体在不同帧可能拿到不同类别提示，
+      不同物体也可能同类别。prompt 明确禁止用类别相等来判定同一物体。</li>
+    <li><b>merge 在实跑里从没被用过。</b>150 帧 run 的 <code>aliases</code> 为空，只有 2 次
+      <code>relabel</code>。所以"重复建档会不会被合并回去"这件事，目前没有实验证据。</li>
+  </ul>
+
+  <h3>输入侧的已知损耗</h3>
+  <ul>
+    <li>GPT 承认说不清的区域（<code>unresolved_regions</code>）<b>不会</b>到达 Harness。</li>
+    <li>27.3% 的提示词一个 mask 都没切出来；67/500 帧触到了 16 个实例的预算上限，
+      有 414 个候选因此没进 <code>instances</code>。</li>
+    <li>置信度筛选在个别帧会丢掉最多约 5% 的 mask 像素（帧 75），但
+      <code>projection_report.json</code> 不记录这个量。</li>
+  </ul>
+
+  <h3>代码里的遗留物</h3>
+  <ul>
+    <li><code>src/geometry/incremental_objects.py</code> 的 <code>Associator</code> 是 Harness
+      之前的手写关联原型，<b>已无生产调用方</b>（只有测试在用）。harness 只从该模块借用
+      <code>voxelize</code>。</li>
+    <li><code>src/visualization/publish_gpt_viewer.py</code> 的 <code>main()</code> 是旧 500 帧
+      发布器的入口，写死了 <code>gpt-5.6-terra</code> 与 500 帧，<b>当前不可用</b>；
+      但同文件的 <code>rebase_manifest</code> 仍被页面构建调用，所以模块本身不能删。</li>
+    <li><code>artifacts/sources/scene0000_00/scene_mesh_first_surface_v1</code> 仍在磁盘上，
+      但其 lifting policy 已不在白名单，Harness 会直接拒绝，代码也无法重建它。</li>
+    <li><code>run.py</code> 的 <code>--publish-only</code> 分支里有一句重复的 <code>return</code>；
+      <code>README.md</code> 的测试数仍写 199，实际 <b>205</b>。</li>
+  </ul>
+</section>
+
+<!-- ============ 06 ============ -->
+<section id="commands">
+  <h2><span class="no">06</span>运行命令</h2>
+  <p class="sub">顺序执行，前一步失败不要进入下一步</p>
+
+  <pre><code><span class="c"># 环境：SAM 需要 torch，用 conda 环境；其余用轻量 .venv</span>
+conda activate scene-understanding
+
+<span class="c"># 01 · GPT 出类别（每帧一次调用）</span>
+<span class="k">$SAM31_PYTHON</span> -u -m src.inference.label_frames \
+  --run gpt_sam31_uniform500 \
+  --batch artifacts/batches/scene0000_00/target_500.json \
+  --frames-dir artifacts/frames --workers 3
+
+<span class="c"># 01 · SAM3.1 出 mask（权重只加载一次）</span>
+<span class="k">$SAM31_PYTHON</span> -u -m src.inference.gpt_sam31 --run gpt_sam31_uniform500
+
+<span class="c"># 02 · 装配成 source（纯本地）</span>
+.venv/bin/python -u -m src.geometry.assemble_perception_source \
+  --run gpt_sam31_uniform500 \
+  --output artifacts/sources/scene0000_00/gpt_sam31_uniform500_v1
+
+<span class="c"># 02 · 投影到三维（纯本地，约 55 秒 / 500 帧）</span>
+.venv/bin/python -u -m src.geometry.amb3r_mask_source \
+  --source artifacts/sources/scene0000_00/gpt_sam31_uniform500_v1 \
+  --output artifacts/sources/scene0000_00/scene_amb3r_v1 \
+  --conf 0.3
+
+<span class="c"># 03 · harness 框架</span>
+.venv/bin/python -u -m src.harness.run \
+  --source artifacts/sources/scene0000_00/scene_amb3r_v1 \
+  --output harness-v5-amb3r-150frames-20261016-1550 \
+  --frames 150 --window 5 --max-calls 14 \
+  --model openai/gpt-6-sol --timeout 600</code></pre>
+
+  <p>
+    所有重计算都应加 <code>taskset -c 0</code>：本机的 torch 在多核调度下偶发段错误。
+    这只影响本地计算，与模型调用无关。
+  </p>
+
+  <h3>harness 参数速查<span class="h">run.py</span></h3>
+  <table>
+    <thead><tr><th>参数</th><th>默认</th><th>影响什么</th></tr></thead>
+    <tbody>
+      <tr><td><code>--output</code></td><td>必填</td><td>实验名（不是路径）。记录写 <code>artifacts/experiments/&lt;name&gt;</code>，页面写 <code>site/experiments/&lt;name&gt;</code>；两者可用 <code>--run-dir</code>/<code>--site-dir</code> 各自覆盖</td></tr>
+      <tr><td><code>--source</code></td><td><code>scene_amb3r_v1</code></td><td>几何来源；<code>lifting_policy</code> 不在白名单直接拒绝启动</td></tr>
+      <tr><td><code>--frames</code> / <code>--window</code></td><td>30 / 5</td><td><b>实验变量</b>：改变模型每窗看到的历史长度。150 帧 run 用的是 150 / 5</td></tr>
+      <tr><td><code>--max-calls</code></td><td>14</td><td>每窗 API 轮次上限；至少 4。实测中位只用到 6 轮</td></tr>
+      <tr><td><code>--voxel</code></td><td>0.02</td><td>物体累计点云的合并尺度（米）</td></tr>
+      <tr><td><code>--timeout</code></td><td>120</td><td>单次网关读超时（秒）；150 帧 run 用的是 600</td></tr>
+      <tr><td><code>--model</code> / <code>--reasoning-effort</code></td><td><code>gpt-6-sol</code> / <code>none</code></td><td>非 Astra 模型<b>只允许</b> <code>none</code>；Astra 要求至少 <code>low</code></td></tr>
+      <tr><td><code>--prepare-only</code></td><td>—</td><td>只取证与校验输入，不调模型；改完代码先跑这个</td></tr>
+      <tr><td><code>--skip-publish</code></td><td>—</td><td>只存记录，事后用 <code>--publish-only --output &lt;run-dir&gt;</code> 建页</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <strong>续跑是默认行为，不是选项。</strong>目录已存在且 <code>config.json</code> 与
+    <code>input_audit.json</code> 完全一致时，<code>run</code> 从 <code>checkpoint.json</code>
+    指向的下一个窗口继续；任何输入或配置变化都会拒绝启动并要求新 <code>--output</code>。
+    想从头再来就换名字，不要删文件。
+  </div>
+
+  <h3>规模参考（500 帧实测）</h3>
+  <table>
+    <thead><tr><th>步骤</th><th>耗时</th><th>主要成本</th></tr></thead>
+    <tbody>
+      <tr><td>01 · GPT 出类别</td><td>约 43 分钟（3 并发）</td><td>500 次 API 调用</td></tr>
+      <tr><td>01 · SAM 出 mask</td><td>约 12 分钟</td><td>本地 GPU，平均 1.4 秒/帧</td></tr>
+      <tr><td>02 · 装配</td><td>秒级</td><td>哈希与路径</td></tr>
+      <tr><td>02 · 投影</td><td>约 55 秒</td><td>CPU，4258 万点</td></tr>
+      <tr><td>03 · harness 框架（150 帧 / 30 窗）</td><td>约 2.9 小时</td><td>213 次 API 调用，约 1560 万 token</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  核对基准：<code>InstanceRecognition/</code> 源码与 <code>artifacts/</code> 产物，2026-10-19。
+  文中所有"实测"数字均可由标注的文件重新算出。
+  相关文档：<a href="../../../docs/scene-reconstruction-design.html">harness 框架设计（历史稿）</a> ·
+  <a href="../DEVNOTES.md">DEVNOTES</a> ·
+  <a href="../README.md">README</a> ·
+  <a href="../HANDOFF.md">HANDOFF</a>。
+</footer>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+  var targets = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+  function sync(){
+    var y = window.scrollY + 120, best = 0;
+    for (var i = 0; i < targets.length; i++){
+      if (targets[i] && targets[i].offsetTop <= y) best = i;
+    }
+    links.forEach(function(a, i){ a.classList.toggle('on', i === best); });
+  }
+  window.addEventListener('scroll', sync, {passive:true});
+  sync();
+})();
+</script>
+</body>
+</html>

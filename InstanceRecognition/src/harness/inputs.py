@@ -24,14 +24,11 @@ def build_window_content(data, tools, first, cutoff, max_calls):
                         {'type': 'text', 'text': f'Current sampled sequence {seq}: full-frame colored mask overlay'}, image(data.view(seq))])
     tools.sent_images.update(str(p) for seq in range(first,cutoff+1) for p in (data.rgb_view(seq),data.view(seq)))
     audit_representatives = []
-    model_representatives = []
     for obj in tools.listing()['objects']:
         record = tools.representative(obj['id'])
         audit_representatives.append(record)
-        model_representatives.append(tools.public_representative(obj['id']))
     content.append({'type':'text','text':json.dumps({
-        'historical_representatives':model_representatives,
-        'history_access':'Metadata only, not visual evidence. Call inspect_object(object_id) for one representative RGB+bbox image; inspect_observations(ids) for additional views. The representative image is full-frame RGB with the original SAM3 mask bbox and Object ID.'},ensure_ascii=False)})
+        'history_access':'Archived object records and global geometry only; individual historical representative metadata and images are not included. Call inspect_object(object_id) for representative observation metadata and one RGB+bbox image; inspect_observations(ids) for additional views. The representative image is full-frame RGB with the original SAM3 mask bbox and Object ID.'},ensure_ascii=False)})
     save(data.out/'window_inputs'/f'{first:04d}_context.json',
          {'base_version': state['version'], 'window': [first, cutoff], 'global_object_geometry': scene,
           'spatial_candidates': candidates, 'historical_representatives': audit_representatives})

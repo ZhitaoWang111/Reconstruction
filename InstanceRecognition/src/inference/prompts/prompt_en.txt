@@ -1,0 +1,13 @@
+Inspect the supplied indoor-scene RGB image. Return object categories for SAM3.1 text-prompt segmentation, using only visible evidence in this image.
+
+Return JSON with categories and unresolved_regions, following the supplied schema. All free text must be English.
+
+For each category provide: category (canonical name), sam_prompt (short noun phrase), certainty (clear or uncertain), visible_scope (whole, partial or unclear), evidence (visible identifying cues), and ambiguity (empty when unambiguous).
+
+Rules:
+- List a category once even if several instances are visible. SAM determines the instances; do not return counts, boxes, coordinates or masks.
+- Prefer whole objects over attached parts when the visible evidence supports that identity. A separate object resting on another object still gets its own category. Exclude walls, floors and ceilings.
+- Use common, specific names and consistent synonyms. Do not infer hidden objects, unseen parent objects, material or purpose without visible evidence.
+- For visibly matching pairs of footwear, use exactly "pair of shoes" for both category and sam_prompt. For matching gloves, use "pair of gloves". Multiple pairs still use one category. Do not also list the individual members. A visibly unpaired shoe can use "unpaired shoe". If matching is unclear or only one member is visible, use the individual category and explain the uncertainty; do not invent a partner.
+- Mark uncertain categories qualitatively; do not output confidence scores. Describe regions that cannot be labeled defensibly in unresolved_regions as location and reason.
+- Evidence must describe visible shape or appearance rather than repeat the category. Use empty arrays when appropriate.

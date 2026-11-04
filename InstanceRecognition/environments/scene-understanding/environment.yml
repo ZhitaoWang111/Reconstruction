@@ -1,0 +1,10 @@
+name: scene-understanding
+channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - nodefaults
+dependencies:
+  - python=3.12.15
+  - pip=26.2.1
+  - wheel=0.47.0
+variables:
+  PYTHONNOUSERSITE: "1"

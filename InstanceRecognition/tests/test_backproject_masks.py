@@ -8,14 +8,13 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.backproject_masks import (
+from src.geometry.backproject_masks import (
     align_mask,
     apply_sim3,
     crop_box,
     display_colors,
     membership_bits,
     read_point_ply,
-    select_source_ply_pixels,
     write_ply,
 )
 
@@ -114,37 +113,6 @@ class BackprojectMaskUnitTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "Nonfinite Sim"):
             apply_sim3(np.zeros((1, 3), dtype=np.float32), transform)
-
-    def test_select_source_ply_pixels_replays_rng_choice_order(self):
-        pointmap = np.arange(30, dtype=np.float32).reshape(2, 5, 3)
-        confidence = np.array([[0.0, 0.9, 0.8, 0.7, 0.6], [0.5, 0.4, 0.95, 0.2, 0.99]], dtype=np.float32)
-        expected_rng = np.random.default_rng(123)
-        expected = expected_rng.choice(np.array([1, 2, 3, 4, 7, 9]), 4, replace=False)
-
-        selected = select_source_ply_pixels(
-            pointmap,
-            confidence,
-            threshold=0.6,
-            limit=4,
-            rng=np.random.default_rng(123),
-        )
-
-        np.testing.assert_array_equal(selected, expected)
-
-    def test_select_source_ply_pixels_filters_nonfinite_points_and_confidence(self):
-        pointmap = np.zeros((1, 4, 3), dtype=np.float32)
-        pointmap[0, 1, 0] = np.nan
-        confidence = np.array([[0.7, 0.9, np.inf, 0.2]], dtype=np.float32)
-
-        selected = select_source_ply_pixels(
-            pointmap,
-            confidence,
-            threshold=0.5,
-            limit=10,
-            rng=np.random.default_rng(1),
-        )
-
-        np.testing.assert_array_equal(selected, np.array([0]))
 
     def test_write_ply_round_trips_binary_vertex_attributes(self):
         points = np.array([[1.5, 2.5, 3.5], [4.5, 5.5, 6.5]], dtype=np.float32)
