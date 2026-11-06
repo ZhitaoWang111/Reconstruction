@@ -112,13 +112,15 @@ class Amb3r:
             "frames": records,
         }))
 
-        # AMB3R's point maps are (N, 392, 518, 3) positions and (N, 392, 518) conf.
+        # AMB3R's point maps are (N, 392, 518, 3) positions and (N, 392, 518) conf,
+        # plus (N, 4, 4) camera-to-world poses.
         shape = (frames, lift.AMBR3R_SIZE[1], lift.AMBR3R_SIZE[0])
         rng = np.random.default_rng(0)
         np.savez(
             self.root / "pointmaps.npz",
             pts=rng.normal(scale=2.0, size=shape + (3,)).astype(np.float32),
             conf=np.full(shape, conf, dtype=np.float32),
+            pose=np.tile(np.eye(4, dtype=np.float32), (frames, 1, 1)),
         )
 
     def build(self, output, **kwargs):

@@ -126,6 +126,48 @@ def _apply_sim3(points: np.ndarray, transform: dict) -> np.ndarray:
     return (s * (points.astype(np.float64) @ R.T) + t).astype(np.float32)
 
 
+def _apply_sim3_to_pose(pose: np.ndarray, transform: dict) -> np.ndarray:
+    """Transform a camera-to-world 4x4 from AMB3R coords into the scan frame.
+
+    The Sim(3) scale corrects distances, not orientations, so the rotation
+    block is re-rotated but not rescaled; only the translation takes the scale.
+
+        R_scan = R_sim3 @ R_amb3r
+        t_scan = s * (R_sim3 @ t_amb3r) + t_sim3
+    """
+    R = np.asarray(transform["alignment_rotation"], dtype=np.float64)
+    t = np.asarray(transform["alignment_translation_m"], dtype=np.float64)
+    s = float(transform["alignment_scale"])
+    pose = np.asarray(pose, dtype=np.float64).reshape(4, 4)
+    out = np.eye(4, dtype=np.float64)
+    out[:3, :3] = R @ pose[:3, :3]
+    out[:3, 3] = s * (R @ pose[:3, 3]) + t
+    return out.astype(np.float32)
+
+
+def _load_intrinsic_color(sim3_path: Path) -> list | None:
+    """Read the RGB intrinsics from the ScanNet extraction manifest.
+
+    The extraction manifest sits at ``<Video2PointCloud>/data/scannet/<scene>/manifest.json``.
+    The VO output directory is ``<Video2PointCloud>/output/amb3r/...``, so the
+    project root is four levels up from the sim3 evaluation file. None is
+    returned when the manifest is not found so the build continues without
+    intrinsics rather than failing.
+    """
+    # The sim3 file is at <root>/output/amb3r/<run>/pointcloud_gt_corrected_evaluation.json
+    project_root = sim3_path.resolve().parents[3]
+    candidates = sorted(project_root.glob("data/scannet/*/manifest.json"))
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate.read_text())
+            val = data.get("intrinsic_color")
+            if val:
+                return val
+        except Exception:
+            continue
+    return None
+
+
 def build(
     npz_path: Path,
     sim3_path: Path,
@@ -159,6 +201,7 @@ def build(
     amb3r = np.load(str(npz_path), mmap_mode="r")
     pts_all = amb3r["pts"]    # (N, 392, 518, 3), AMB3R coordinates
     conf_all = amb3r["conf"]  # (N, 392, 518)
+    pose_all = amb3r["pose"]  # (N, 4, 4), camera-to-world in AMB3R coords
 
     out_frames = []
     total_points = 0
@@ -218,6 +261,12 @@ def build(
             })
             total_masks += 1
 
+        # The AMB3R pose for this frame, transformed into the scan coordinate
+        # frame the points live in. Downstream uses it for back-projection and
+        # viewpoint comparison without re-running the Sim(3) fit.
+        pose_frame = np.array(pose_all[seq]).reshape(4, 4)
+        camera_to_world = _apply_sim3_to_pose(pose_frame, transform)
+
         # Write NPZ (the schema the Harness and the page builders read).
         np.savez_compressed(
             output / "frames" / f"{seq:04d}.npz",
@@ -227,6 +276,7 @@ def build(
             pixel_indices=pixel_indices,
             grid_shape_hw=np.array([AMBR3R_SIZE[1], AMBR3R_SIZE[0]], dtype=np.int32),
             sequence_index=np.int64(seq),
+            camera_to_world=camera_to_world,
         )
 
         # Write JS asset (used by viewer).
@@ -319,6 +369,11 @@ def build(
         },
         "conf_threshold": conf_threshold,
         "sim3_source": str(sim3_path),
+        # RGB camera intrinsics (1296×968).  Stored here so downstream never has
+        # to locate a separate manifest.  Read from the ScanNet extraction manifest
+        # that lives beside the sim3 evaluation file; None if not found so the
+        # build does not fail when that manifest is absent.
+        "intrinsic_color": _load_intrinsic_color(sim3_path),
     }
     write_json(output / "manifest.json", manifest)
 
