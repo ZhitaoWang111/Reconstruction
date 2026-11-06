@@ -49,7 +49,7 @@ def process_window(data, state, first, cutoff, args, prompt, out, client):
     tools=Tools(data,state,cutoff)
     content=build_window_content(data,tools,first,cutoff,args.max_calls)
     messages=[{'role':'system','content':prompt},{'role':'user','content':content}]
-    committed=False;tick=time.monotonic();run_tag=str(time.time_ns())
+    committed=False;tick=time.monotonic();run_tag=str(time.time_ns());verify_rounds=0;MAX_VERIFY_ROUNDS=2
     for step in range(args.max_calls):
         if step==args.max_calls-2:
             # The count is in rounds, and one round may carry a single tool call.
@@ -110,9 +110,33 @@ def process_window(data, state, first, cutoff, args, prompt, out, client):
                 for descriptor,path in zip(result['visual_images'],images,strict=True):
                     visual.extend([{'type':'text','text':json.dumps(descriptor,ensure_ascii=False)},image(path)])
                 evidence_messages.append({'role':'user','content':visual})
+            # Post-proposal verify: the model must look at the rendered checks
+            # before committing.  Append a user turn with the verify text and
+            # images so the model can react.  Verify rounds are counted
+            # separately from max_calls; after MAX_VERIFY_ROUNDS the host forces
+            # the proposal through.
+            if name=='propose_update' and isinstance(result,dict) and result.get('status')=='verify_required':
+                verify_rounds+=1
+                if verify_rounds>MAX_VERIFY_ROUNDS:
+                    # Force-allow commit: the model has seen the evidence twice
+                    # and not acted on it; record and continue.
+                    save(out/'verify'/f'{tag}_force.json',{'reason':'max_verify_rounds_exceeded',
+                        'checks':result.get('checks',[])})
+                    result={'proposal_id':result['proposal_id'],
+                            'forced_after_verify':True}
+                    messages.append({'role':'tool','tool_call_id':call['id'],
+                        'content':json.dumps(result,ensure_ascii=False)})
+                else:
+                    verify_visual=[{'type':'text','text':result.get('verify_message','Verify required.')}]
+                    for descriptor,path in zip(result.get('visual_images',[]),images,strict=True):
+                        verify_visual.append({'type':'text','text':json.dumps(descriptor,ensure_ascii=False)})
+                        verify_visual.append(image(path))
+                    evidence_messages.append({'role':'user','content':verify_visual})
             outcome=('ERROR '+result['error'] if 'error' in result else
                      'HELD '+','.join(sorted({c['object_id'] for c in result.get('checks',())}))
-                     if result.get('status')=='verification_required' else 'OK')
+                     if result.get('status')=='verification_required' else
+                     'VERIFY '+str(verify_rounds)
+                     if isinstance(result,dict) and result.get('status')=='verify_required' else 'OK')
             print(f'WINDOW {first}-{cutoff} call {step+1}: {name} {outcome}',flush=True)
             if committed:break
         messages.extend(evidence_messages)

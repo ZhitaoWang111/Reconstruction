@@ -21,6 +21,41 @@ TOOLS=[tool('inspect_observations','Inspect up to 4 observations in full-frame R
        tool('commit_update','Commit the checked proposal at current version',{'proposal_id':STRING})]
 
 
+
+def _object_geometry(data, state, object_id):
+    """Centroid and axis-aligned bounds from the object's held point cloud.
+
+    Uses only held observations (status 'held' or pre-rename 'assigned'), so
+    the geometry reflects what the harness actually committed. With at most five
+    held observations the computation is fast enough for a tool call.
+    Returns None when the object has no valid points.
+    """
+    held = [k for k, a in state['assignments'].items()
+            if a.get('object_id') == object_id
+            and a.get('status') in ('held', 'assigned')]
+    if not held:
+        return None
+    import numpy as _np
+    points_map = getattr(data, 'points', None)
+    if points_map is None:
+        return None
+    parts = [points_map[k] for k in held if k in points_map and len(points_map[k])]
+    if not parts:
+        return None
+    pts = _np.concatenate(parts)
+    pts = pts[_np.isfinite(pts).all(axis=1)]
+    if not len(pts):
+        return None
+    centroid = pts.mean(axis=0)
+    mn, mx = pts.min(axis=0), pts.max(axis=0)
+    return {
+        'centroid': [round(float(v), 3) for v in centroid],
+        'bounds_min': [round(float(v), 3) for v in mn],
+        'bounds_max': [round(float(v), 3) for v in mx],
+        'size_xyz': [round(float(v), 3) for v in (mx - mn)],
+        'geometry_scope': 'held observations only (max 5); axis-aligned',
+    }
+
 class Tools:
     def __init__(self,data,state,cutoff):
         self.data,self.state,self.cutoff=data,state,cutoff
@@ -100,7 +135,9 @@ class Tools:
             # decision needs; an id is reached through inspect_object, which records
             # it as evidence. The representative chosen for that call is still
             # written in full to window_inputs/*_context.json for audit.
-            objects.append({'id':oid,**obj,'observation_count':len(ids)})
+            geo = _object_geometry(self.data, self.state, oid)
+            centroid = geo['centroid'] if geo else None
+            objects.append({'id':oid,**obj,'observation_count':len(ids),'centroid':centroid})
         # `pending` used to be re-sent here on every window: every assignment with
         # no owner, full record, `reason` and `evidence` included. Two things made
         # that dead weight. First, `exclude` is a closed decision - "this mask
@@ -159,8 +196,10 @@ class Tools:
                         if cd is not None:
                             meta['camera_distance_m'] = cd
                     obs_meta.append(meta)
+                geo=_object_geometry(self.data,self.state,object_id)
                 return {'object':obj,'object_id':object_id,
                         'observations':obs_meta,'held_count':len(held_ids),
+                        'geometry':geo,
                         'note':'All held observations returned; cite the observation you intend to evict in the hold action evict field.',
                         'visual_images':descriptors,'reused_images':reused},images
             else:
@@ -170,21 +209,33 @@ class Tools:
                 self.attach_image(path,{'observation_id':oid,'object_id':object_id,'kind':'historical_rgb_bbox'},images,descriptors,reused)
                 self.evidence.add(oid)
                 public_record=self.public_representative(object_id)
+                geo=_object_geometry(self.data,self.state,object_id)
                 return {'object':obj,**public_record,'observations':[public_record['observation']],
-                        'visual_images':descriptors,'reused_images':reused},images
+                        'geometry':geo,'visual_images':descriptors,'reused_images':reused},images
         if name=='propose_update':
             self.pending=None
             checked=propose(self.state,json.loads(args['proposal_json']),self.data.items,self.cutoff,self.evidence)
             self.pending=checked
-            checks=self.reidentification_checks(checked)
-            if checks:
-                # The proposal is valid and stays pending: the model inspects the
-                # named objects and resubmits it unchanged. Keeping `pending` also
-                # keeps the budget warning from asking for a proposal it already has.
+            reid_checks=self.reidentification_checks(checked)
+            if reid_checks:
                 return {'status':'verification_required','proposal_id':checked['id'],
                         'proposal_held':True,
                         'note':'The proposal is valid and remains pending; it was not rejected. Before committing, call inspect_object for each object_id listed in checks and confirm the assignment against its archived appearance. Then resubmit the same proposal; resubmitting it unchanged is allowed, and so is changing the decision after inspecting.',
-                        'checks':checks,'base_version':self.state['version']},images
+                        'checks':reid_checks,'base_version':self.state['version']},images
+            # Post-proposal verify: back-projection and overlap checks.
+            from .verify import build_checks, format_verify_message
+            verify_checks, verify_images = build_checks(checked, self.data, self.state)
+            fail_checks = [c for c in verify_checks if c.get('verify_fail')]
+            if fail_checks:
+                verify_descriptors = []
+                for vimg in verify_images:
+                    self.attach_image(vimg, {'kind': 'verify', 'object_id': fail_checks[0]['object_id']},
+                                      [], verify_descriptors, [])
+                return {'status': 'verify_required', 'proposal_id': checked['id'],
+                        'verify_message': format_verify_message(verify_checks),
+                        'checks': fail_checks,
+                        'visual_images': verify_descriptors,
+                        'base_version': self.state['version']}, verify_images
             return {'proposal_id':checked['id'],'affected':checked['affected'],'object_count':len(checked['state']['objects']),
                     'actions':checked['proposal']['actions'],'base_version':self.state['version']},images
         if name=='commit_update':

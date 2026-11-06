@@ -64,7 +64,7 @@ The same label rule applies to `relabel`: an archived Object named by an address
 
 ## HOW TO GET MORE INFORMATION
 
-`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it. Pass `all_observations: true` to see every held observation (up to 5) with its own image; use this when the object already holds five and you need to decide which to evict. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
+`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it, plus a geometry summary (centroid, size, axis-aligned bounds) computed from its held observations. Pass `all_observations: true` to see every held observation (up to 5) with its own image; use this when the object already holds five and you need to decide which to evict. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
 
 `inspect_observations(ids)` returns one to four observations, current or archived, as metadata plus a full-frame RGB and a per-mask overlay. Use it when a decision turns on what a mask actually covers.
 
@@ -94,6 +94,8 @@ The host checks structure and rejects with a specific message. Read it literally
 
 A validated proposal is not yet committed. `commit_update(proposal_id)` writes it, using the id `propose_update` returned; nothing else writes, and this call ends the window.
 
+`propose_update` may return `verify_required` instead of a proposal id. The proposal is valid and held; the host has rendered back-projection images and overlap checks for the actions that change objects (hold, create, merge). Read the verify message and the images it names. If the evidence confirms the decisions, call `commit_update` immediately. If something looks wrong, call `propose_update` again with a corrected proposal (change an object_id, add a discard, or add an evict). Two verify rounds are allowed; after that the host allows commit regardless.
+
 ## ORDER OF WORK
 
 The window runs in one order. Read this once; the sections above say what each step means.
@@ -104,7 +106,7 @@ The window runs in one order. Read this once; the sections above say what each s
 
 3. Decide each observation, one at a time: `hold`, `create` with its `hold`, `discard`, or `exclude`. Decide identity first, label second - the label is a short English noun phrase for what you decided the thing is, and does not have to be unique. `merge` and `relabel` are for a mistake an inspection has already exposed, not for this window's decisions.
 
-4. Before sending, walk the window frame by frame and confirm every id of every frame appears exactly once. A proposal that stops at the fourth frame is rejected whole. Then send the whole window as one `proposal_json` through `propose_update`. Read what comes back: an error names a defect to fix, and `verification_required` names Objects to inspect before you try again.
+4. Before sending, walk the window frame by frame and confirm every id of every frame appears exactly once. A proposal that stops at the fourth frame is rejected whole. Then send the whole window as one `proposal_json` through `propose_update`. Read what comes back: an error names a defect to fix; `verification_required` names Objects to inspect before you try again; `verify_required` gives rendered images to check before committing.
 
 5. `commit_update` with the proposal id from step 4. That call ends the window.
 
