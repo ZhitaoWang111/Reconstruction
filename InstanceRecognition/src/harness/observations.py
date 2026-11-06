@@ -24,12 +24,27 @@ def digest(path):
 
 
 MODEL_FIELDS = ('id', 'seq', 'source_frame_id', 'category_label', 'bbox_xyxy',
-                'image_size_wh', 'overlay_color_rgb', 'instance_id', 'point_count', 'centroid', 'bounds')
+                'image_size_wh', 'overlay_color_rgb', 'instance_id', 'point_count', 'centroid', 'bounds',
+                'bbox_truncated')
+
+
+def _bbox_truncated(bbox, image_size_wh, margin: int = 5) -> bool:
+    """True when the bounding box touches the frame edge within ``margin`` pixels.
+
+    A mask whose bbox reaches the border likely belongs to a larger object that
+    extends beyond the camera's view. Downstream can use this flag to lower the
+    eviction priority for partially-visible observations.
+    """
+    if bbox is None or image_size_wh is None:
+        return False
+    x0, y0, x1, y1 = bbox
+    w, h = image_size_wh
+    return x0 <= margin or y0 <= margin or x1 >= w - margin or y1 >= h - margin
 
 
 def model_observation(observation):
     """Keep storage/provenance fields in the audit, outside model context."""
-    return {key: observation[key] for key in MODEL_FIELDS}
+    return {key: observation[key] for key in MODEL_FIELDS if key in observation}
 
 
 class Observations:
@@ -81,7 +96,8 @@ class Observations:
                     'overlay_color_rgb':color,
                     'point_file':str(path),'mask_bit':i,'point_count':len(p),
                     'centroid':p.mean(0).tolist() if len(p) else None,
-                    'bounds':[p.min(0).tolist(),p.max(0).tolist()] if len(p) else None}
+                    'bounds':[p.min(0).tolist(),p.max(0).tolist()] if len(p) else None,
+                    'bbox_truncated': _bbox_truncated(bbox, image_size)}
         audit_path=self.out/'input_audit.json'
         if audit_path.exists() and json.loads(audit_path.read_text()) != self.audit:
             raise ValueError('Input changed; cannot resume')

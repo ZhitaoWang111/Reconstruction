@@ -4,6 +4,7 @@ from .state import propose
 from .observations import model_observation
 from .history import choose_representative, historical_bbox_view
 from .reid_gate import verify_reidentification
+from .view_params import ViewParams
 
 
 def tool(name,description,properties):
@@ -25,10 +26,9 @@ class Tools:
         self.data,self.state,self.cutoff=data,state,cutoff
         self.evidence=set();self.pending=None
         self.representatives={};self.sent_images=set()
-        # Set by the caller once the window is nearly out of API rounds. A hold
-        # that cannot be paid for would cost the whole window, so the gate stands
-        # down and the review is deferred to the next window's history.
         self.gate_relaxed=False
+        _frames = getattr(data, 'source', None)
+        self._vp = ViewParams(_frames / 'frames') if _frames else None
 
     def reidentification_checks(self,checked):
         """Holds that still need the archived object looked at, empty if none."""
@@ -134,11 +134,31 @@ class Tools:
             return_all=all_obs or len(held_ids)>=HOLD_LIMIT
             if return_all:
                 descriptors=[];reused=[];obs_meta=[]
+                obj_c = None
+                for o_id, o_obj in self.state['objects'].items():
+                    if o_id == object_id:
+                        members = [k for k,a in self.state['assignments'].items()
+                                   if a.get('object_id')==o_id]
+                        cents = [self.data.items[m].get('centroid') for m in members
+                                 if m in self.data.items and self.data.items[m].get('centroid')]
+                        if cents:
+                            import numpy as _np
+                            obj_c = _np.mean(cents, axis=0).tolist()
+                        break
                 for oid in held_ids:
                     path=historical_bbox_view(self.data,object_id,oid)
                     self.attach_image(path,{'observation_id':oid,'object_id':object_id,'kind':'historical_rgb_bbox'},images,descriptors,reused)
                     self.evidence.add(oid)
-                    obs_meta.append(model_observation(self.data.items[oid]))
+                    meta=dict(model_observation(self.data.items[oid]))
+                    if self._vp is not None:
+                        seq = self.data.items[oid]['seq']
+                        vd = self._vp.view_direction(seq, obj_c)
+                        cd = self._vp.camera_distance(seq, obj_c)
+                        if vd is not None:
+                            meta['view_direction'] = vd
+                        if cd is not None:
+                            meta['camera_distance_m'] = cd
+                    obs_meta.append(meta)
                 return {'object':obj,'object_id':object_id,
                         'observations':obs_meta,'held_count':len(held_ids),
                         'note':'All held observations returned; cite the observation you intend to evict in the hold action evict field.',

@@ -23,6 +23,17 @@ Candidates are then selected:
   4. Extend with objects ranked 9th and beyond whose gap < 0.5 m,
      up to a total of 15 (handles dense clusters like a shoe rack).
 
+Each candidate also carries the viewpoint of the current observation
+relative to that object:
+
+  view_direction   unit vector from the object's centroid toward the
+                   camera, in scan-frame coordinates.
+  camera_distance  distance from camera to centroid in metres.
+
+These come from the per-frame ``camera_to_world`` written by
+``amb3r_mask_source.py``.  Sources that predate the field (e.g.
+``scene_amb3r_v1``) silently omit these two fields per candidate.
+
 The object's cloud is built only from its held observations (status
 'held' or the pre-rename 'assigned').  Using the full history would let
 a single wrong hold inflate the object's cloud and make it look closer
@@ -30,6 +41,7 @@ than it is, which is what caused the stool-76 error in v11.
 """
 import numpy as np
 from scipy.spatial import cKDTree
+from .view_params import ViewParams
 
 _GAP_TOL = 0.10    # overlap tolerance, metres
 _GAP_CUTOFF = 2.0  # objects beyond this are not candidates
@@ -63,6 +75,11 @@ def build_spatial_context(data, state, observations):
     candidates = {o['id']: [] for o in observations}
     if not state['objects']:
         return {}, candidates
+
+    # ViewParams loads camera positions from the source's frame npz files.
+    # Sources that predate camera_to_world silently return None per lookup.
+    _frames_dir = (getattr(data, 'source', None) or getattr(data, 'out', None))
+    vp = ViewParams(_frames_dir / 'frames') if _frames_dir else None
 
     # Pre-compute per-object centroid from held observations' metadata.
     obj_centroid = {}
@@ -110,9 +127,20 @@ def build_spatial_context(data, state, observations):
         base = scored[:_CAP_BASE]
         extra = [r for r in scored[_CAP_BASE:] if r[0] < _DENSE_BAND]
         selected = (base + extra)[:_CAP_TOTAL]
-        candidates[oid] = [
-            {'object_id': r[2], 'object_label': r[3],
-             'gap_m': round(r[0], 3), 'overlap': round(r[4], 3)}
-            for r in selected]
+        obs_seq = data.items.get(oid, {}).get('seq') if hasattr(data, 'items') else None
+        result = []
+        for r in selected:
+            entry = {'object_id': r[2], 'object_label': r[3],
+                     'gap_m': round(r[0], 3), 'overlap': round(r[4], 3)}
+            if vp is not None and obs_seq is not None:
+                obj_c = obj_centroid.get(r[2])
+                vd = vp.view_direction(obs_seq, obj_c)
+                cd = vp.camera_distance(obs_seq, obj_c)
+                if vd is not None:
+                    entry['view_direction'] = vd
+                if cd is not None:
+                    entry['camera_distance_m'] = cd
+            result.append(entry)
+        candidates[oid] = result
 
     return {}, candidates
