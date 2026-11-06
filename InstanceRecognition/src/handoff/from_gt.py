@@ -53,6 +53,7 @@ SOURCE = config.ARTIFACTS_ROOT / "sources/scene0000_00/scene_amb3r_v1"
 FRAMES = config.ARTIFACTS_ROOT / "frames/scene0000_00"
 DEFAULT_SCENE = config.SCANNET_ROOT / "scene0000_00"
 DEFAULT_OUTPUT = config.ARTIFACTS_ROOT / "handoff/scene0000_00/gt"
+DEFAULT_GT_INPUT = config.WORKSPACE / "Video2PointCloud/data/scannet/scene0000_00_uniform500/input"
 
 # Separation thresholds, tried in order until three views are found. Objects flat
 # against a wall cannot reach the first one - a clock on a wall spans 4 degrees in
@@ -294,7 +295,8 @@ def select_keyframes(candidates: list[dict], structural: bool = False) -> list[d
     return chosen
 
 
-def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAMES) -> None:
+def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAMES,
+         gt_input: Path = DEFAULT_GT_INPUT) -> None:
     scene, output = scene.resolve(), output.resolve()
     source_root = source.resolve()
     frame_root = frames.resolve()
@@ -308,6 +310,17 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
     points, rgb = read_vertex_ply(scene / f"{scene.name}_vh_clean_2.ply")
     owner, labels = load_objects(scene, points)
     centres = camera_centres(len(sequence))
+    # Per-frame GT camera-to-world poses (4x4, scan frame). Used directly because
+    # this handoff is GT-derived; no AMB3R or Sim(3) is involved.
+    gt_poses = {}
+    gt_input_dir = Path(gt_input).resolve()
+    if gt_input_dir.is_dir():
+        for seq_idx in range(len(sequence)):
+            npz_path = gt_input_dir / f"{seq_idx:04d}.npz"
+            if npz_path.is_file():
+                with np.load(npz_path) as z:
+                    if "camera_pose" in z.files:
+                        gt_poses[seq_idx] = z["camera_pose"].astype(np.float64)
 
     instance_zip = scene / f"{scene.name}_2d-instance.zip"
     with zipfile.ZipFile(instance_zip) as archive:
@@ -426,6 +439,8 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
                 "visibility": round(entry.get("visibility", 1.0), 4),
                 "touches_border": entry["touches_border"],
                 "camera_center": entry.get("camera_center"),
+                "camera_to_world_gt": gt_poses.get(entry["seq"]).tolist()
+                                     if entry["seq"] in gt_poses else None,
                 "view_angle_deg": angle,
                 "role": schema.KEYFRAME_ROLES[min(index, 2)],
             })
@@ -493,10 +508,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scene", type=Path, default=DEFAULT_SCENE)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--gt-input", type=Path, default=DEFAULT_GT_INPUT,
+                        help="Directory of per-frame GT npz files (NNNN.npz) with camera_pose")
     parser.add_argument("--source", type=Path, default=SOURCE)
     parser.add_argument("--frames", type=Path, default=FRAMES)
     args = parser.parse_args()
-    build(args.scene, args.output, args.source, args.frames)
+    build(args.scene, args.output, args.source, args.frames, args.gt_input)
 
 
 if __name__ == "__main__":
