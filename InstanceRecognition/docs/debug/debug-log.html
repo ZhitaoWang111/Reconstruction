@@ -57,6 +57,10 @@ li{margin:5px 0}
    unnumbered marker until the cause is found. Numbering waits for the fix. */
 .entry.issue .entry-head{background:#fdf3f2}
 .entry.issue .entry-head .id{color:var(--bad)}
+/* A plan is a decision record, not a defect: accent head instead of the issue red. */
+.entry.plan .entry-head{background:var(--accent2)}
+.entry.plan .entry-head .id{color:var(--accent)}
+.entry-body .blk>p>b:only-child{display:block;margin-top:6px}
 .entry-body p{margin:0 0 10px;font-size:14px}
 /* Screenshot slot. Left as a dashed box so a missing file reads as "not yet
    supplied" rather than as a broken image in a finished page. */
@@ -101,25 +105,191 @@ figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:7px;di
 <code>docs/debug/evidence_img/&lt;编号&gt;-&lt;说明&gt;.png</code>。加新问题时随机生成一个六位编号，
 避开 <code>0</code>/<code>o</code>/<code>1</code>/<code>l</code>/<code>i</code> 这些容易看错的字符。</p>
 
+<div class="entry plan">
+<div class="entry-head">
+<span class="id">1105-v1</span>
+<span class="title">下一步改动计划：系统改为以物体为中心</span>
+<span class="date">2026-11-05</span>
+</div>
+<div class="entry-body stacked">
+<div class="blk">
+<span class="h">为什么改</span>
+<p>场景理解要交付的是<b>物体清单</b>：每个物体一个类别、一份占据点云、最多 3 张供下游生成用的代表图。
+v11 的做法是给每一条观测找归属：4632 条观测，100 个窗口逐条判断。结果物体平均背 20 条观测（最多 467 条），
+下游只用到其中 7.9%；而且观测越多物体越脏，纯度从 1–5 条时的 1.000 降到 51 条以上的 0.894。
+kj9b68 的鞋和凳子就是在这种负担下出的错。</p>
+<p>本计划把系统的工作对象从观测换成物体。已完成的 <code>7331041</code>（deferral 不再每窗重发）和
+<code>4d95fa9</code>（标签只写类别）是它的基础。</p>
+</div>
+<div class="blk">
+<span class="h">原则</span>
+<ul>
+<li>系统面对的是物体，观测只是物体的证据。</li>
+<li>规则提供参考值，模型结合任务背景做决定：保留哪条观测、归给谁、要不要放弃。</li>
+<li>判断「是不是同一个」靠视觉和几何配合。几何是证据之一，不是主要依据，更不是硬规则。</li>
+<li>一条观测值不值得留，看它能否帮助下游把这个物体重建出来。</li>
+<li>只有准备持有的观测才需要认真判身份。discard 的观测不归给任何物体，下游用不到它，给它判身份是白费的工作。</li>
+</ul>
+</div>
+<div class="blk">
+<span class="h">改动项</span>
+<p><b>1. 每个物体最多持有 5 条观测，持有即归属</b></p>
+<ul>
+<li>每条观测只有三种结局：<b>持有</b>（进入某个物体的 5 个证据位，等于 assign）、<b>discard</b>（不保留，不归给任何物体，附简短理由）、
+<b>exclude</b>（一张 mask 横跨多个物体）。不设「归属但不持有」：已知物体的一张差视图（比如沙发只露出一角）直接 discard，
+不必先证明它是沙发。</li>
+<li>这样错误的性质也变了：错误的持有会把别的东西写进物体，但最多占一个证据位，之后可以被替换；
+错误的 discard 只是漏了一张图，更好的视图来了还能补上。v11 里错误归属会永久留在物体里，而且物体观测越多越脏。</li>
+<li>新观测进来时，宿主给出参考值：目标在画面中的大小（可见像素）、清晰度、是否被画面边缘截断、观察方位、
+与已持有观测的视角间隔、相机距离，以及<b>它能给物体点云新增多少表面</b>（照顾大物体的覆盖）。
+模型据此决定持有、替换或 discard，并在 reason 里说明。证据位满了要写明换掉哪一条，被换下的观测转为 discard。</li>
+<li>物体的占据点云只由持有的观测构成。v11 实测（88 个物体，干净观测中位 22 条，只留 5 条视角分散的）：
+点云范围保留中位 <b>0.96</b>（p10 0.76），表面体素覆盖保留中位 0.57。范围决定摆放和尺度，基本保住了；
+损失大的是大物体（墙柜 0.74、窗户 0.43），这是加「新增表面」这一项参考值的原因。</li>
+<li><code>inspect_object</code> 返回物体持有的全部观测（最多 5 张图），替代现在的一张代表图。</li>
+<li>持有一条观测之前，必须在同一窗口里查看目标物体（<code>inspect_object</code>）和这条观测；持有动作的 evidence 里要有查看过的物体持有观测 id，证据检查不满足就拒绝。</li>
+<li>涉及：<code>state.py</code>（物体记录加持有列表与上限校验）、<code>observations.py</code> / <code>history.py</code>
+（参考值计算，可复用 <code>src/handoff/from_gt.py</code> 的 <code>frame_clarity</code>、<code>camera_centres</code> 与视角分离逻辑）、
+<code>tools.py</code>、<code>prompt.txt</code>。</li>
+</ul>
+<p><b>2. 观测带投影点云，视觉与几何配合判断归属</b></p>
+<ul>
+<li>现状：模型拿到的几何有四样，分别是全局 OBB（<code>global_object_geometry</code>）、每条观测的 <code>point_count</code>/<code>centroid</code>/<code>bounds</code>、
+最近 3 个物体的 <code>spatial_candidates</code>（中位表面距离），以及 <code>compare_geometry</code> 工具（观测对观测）。v11 里几何几乎没被当作证据：
+992 次归给已有物体的 assign 中，reason 明确提到几何的只占 3.7%，<code>compare_geometry</code> 全程只调用过 3 次；
+但 94% 的归属选的是第 1 名候选，排名实际决定了模型去 <code>inspect_object</code> 看哪个物体。</li>
+<li><b>删除 <code>compare_geometry</code></b>，连同 prompt 里关于它的说明和 <code>geometry:a:b</code> 证据键。它比较的是两条观测，回答不了「这条观测是不是这个物体」。</li>
+<li><b>删除全局 OBB</b>，连同 <code>geometry_scope</code>、<code>bbox_convention</code> 等说明字段。它列出全场景每个物体，和当前判断关系不大，又占体积。</li>
+<li><b><code>spatial_candidates</code> 保留并扩大</b>，删掉上面两项后，它就是输入里唯一的几何：
+  <ul>
+  <li>候选集：按间隙排序，至少列出最近的 <b>10</b> 个物体；第 10 名之后间隙仍 &lt; <b>0.5 m</b> 的也列出（物体扎堆处不截断）。
+  鞋在第 185 窗认错，原因之一是正确的物体被 top-3 截掉了。</li>
+  <li>每个候选给两个数，代替现在的中位距离：<b>重叠比例</b> = 新观测的点中，到该物体点云距离 ≤ <b>10 cm</b> 的比例；
+  <b>间隙</b> = 新观测各点到该物体点云最近距离的第 5 百分位（不取最小值，避免 mask 边缘一个飘点决定结果）。另附 object_label。</li>
+  <li>物体点云只取它持有的 ≤5 条观测（依赖第 1 项），不再用全历史合并点云，否则一次错归属会让「最近」自我证实（凳子 76）。</li>
+  </ul></li>
+<li>阈值的取法：每帧相对 GT 的整体平移误差中位 6.6 cm、p90 13.1 cm、最大 20.6 cm，相邻帧相对误差中位 0.3 cm。
+10 cm 容差能吸收大部分跨帧误差，又小于 0.4–0.74 m 的凳子间距；0.5 m 间隙约为两帧各自最大误差之和（约 0.4 m）再留余量。
+两个数都要按「验证」里的离线测试校准。</li>
+<li>不加同类候选彼此之间的间隙。</li>
+<li>prompt 里不再一概说几何不可信（现第 15、69、73 行一带），改为讲清分辨力：同一次到访之内可靠；跨帧差距在十几厘米以内几何分不开，
+比如相距约 9 cm 的同一双鞋，这时要靠视觉；够分开相距 0.5 m 的凳子，此时重叠比例可以作为证据写进 reason。</li>
+<li>保留每条观测自身的 <code>centroid</code>、<code>bounds</code>、<code>point_count</code>。</li>
+<li>外观相同的物体，不许用同组的另一个做参照（「一双里左边那只」「前面那个」），改用不属于这组的固定物和三维位置。</li>
+<li>涉及：<code>spatial_context.py</code>（候选计算、删 OBB）、<code>inputs.py</code>（删 <code>global_object_geometry</code>、改 history_access 说明）、
+<code>tools.py</code>（删 <code>compare_geometry</code>）、<code>prompt.txt</code>（第 5、15、69、90、102 行一带）、
+<code>tools/render_window_input.py</code>、<code>docs/input.html</code>、测试。</li>
+</ul>
+<p><b>3. defer 改为 discard（舍弃）</b></p>
+<ul>
+<li><code>defer</code>（暂缓，以后再认领）改为 <code>discard</code>：这条观测不保留，也不归给任何物体。名字说结果、不说意图，
+和当初 <code>repair</code> 改 <code>exclude</code> 的理由一样：v11 的 532 条 defer 一条都没被认领过，「暂缓」从未兑现。
+不用 <code>abandon</code>：「不如已持有的观测」和「证据位满了被换下」都不是放弃。</li>
+<li>每个条目的观测上限从 4 提到 10，仍需简短理由。</li>
+<li>判断标准：这条观测的信息能否支持下游把物体重建出来。目标太小、太远、看不清的可以 discard；
+一个新出现的小物体如果所有观测都不够重建，就不建物体。</li>
+<li>discard 会成为最常见的结局（v11 估算约九成观测），所以要写起来便宜：理由一句话即可，不需要证明它属于谁。</li>
+<li>理由里写清是哪一种：认不出是谁；认得出但不够重建；或者不如该物体已持有的观测。</li>
+<li>与 <code>exclude</code> 分清：exclude 是 mask 本身坏了（横跨多个物体）；discard 是 mask 没问题，只是对任何物体都没用。prompt 里要写明。</li>
+<li>改名照 <code>repair</code> → <code>exclude</code> 的做法：输入仍接受 <code>defer</code>，内部统一转成 <code>discard</code>，新写入的数据只用新名字。</li>
+<li>涉及：<code>state.py</code>（动作名、status、<code>DEFER_BATCH_LIMIT</code>）、<code>prompt.txt</code>（DEFER 段）、
+<code>run.py</code>（summary 的 <code>deferrals</code>）、<code>pagegen/build_site.py</code> 与页面上的「已搁置观测」、测试。</li>
+</ul>
+<p><b>4. 恢复路径</b></p>
+<ul>
+<li>持有观测有上限后，改错的成本变低：允许把持有观测从一个物体移到另一个物体，或拆出一个新物体。</li>
+<li>模型新建同类物体时（如 v11 帧 450 的 112/113），提示它检查同类已有物体的持有观测里有没有该归新物体的。</li>
+<li>涉及：<code>state.py</code>、<code>tools.py</code>、<code>prompt.txt</code>，以及测试。</li>
+</ul>
+<p><b>5. 提交后 verify：模型逐条检查改变物体的动作</b></p>
+<ul>
+<li>流程：<code>propose_update</code> → 证据检查 → <b>verify</b> → <code>commit_update</code>。verify 由模型做，宿主只算数值、出图，不设规则阈值。</li>
+<li>触发：按动作逐条检查，每个持有、<code>create</code>、<code>merge</code> 都检查。一次 propose 里所有动作的检查结果合成一条 user 消息发给模型，不是每个动作各占一轮。</li>
+<li>不检查 <code>discard</code>、<code>exclude</code>、<code>relabel</code>：这三种不往物体里写入观测，出错的代价小。</li>
+<li><b>持有</b>：把目标物体持有观测的点云反投影到这条观测所在帧的 RGB 上，和这条观测的 mask 一起给模型看。
+每张图只投一个物体，不会出现一帧里投影太多分不清的问题。限制：跨帧误差中位 6.6 cm，
+相距约 9 cm 的同一双鞋，模型分不清投影错位是归错还是误差；凳子这种 0.4 m 以上的间距没有问题。</li>
+<li><b>create</b>：检查新物体和已有物体的重叠，宿主给重叠数值和图。图用 3D 渲染两团点云，还是反投影到 RGB，待定。</li>
+<li><b>merge</b>：确认两个物体是同一个；合并后最多可能有 10 条持有观测，超过上限 5 条，模型还要决定保留哪 5 条。</li>
+<li>不通过：宿主把问题写成 user 消息追加到本窗口，模型修改 proposal 重新 propose，或确认无误后 commit，不消耗新窗口、不回退版本。
+verify 单独计数（<code>max_verify_rounds = 2</code>，不计入 <code>max_calls</code>）；连续 2 次不通过就记日志、允许 commit，继续下一窗口。</li>
+<li>成本：几乎每个窗口都会触发，每次 propose 多 1 轮，重新 propose 再多 1 轮。持有有上限后 hold 次数会少很多，
+按 114 个物体 × 5 条加上替换估算，每窗约 6 次 hold，这是估算，未实测。</li>
+<li>出图在 Python 宿主里做（matplotlib 或离屏渲染），结果页的 Three.js 渲染器用不上。</li>
+<li>涉及：<code>tools.py</code>（propose 后生成检查项）、新增 <code>src/harness/verify.py</code>（算数值、出图、拼 verify 消息）、
+<code>run.py</code>（工具循环里加 verify 分支）、<code>state.py</code>（为未提交的提案临时构建物体点云）、<code>prompt.txt</code>（说明 verify 流程）、测试。</li>
+</ul>
+<p><b>6. SAM 阶段按面积过滤过小的 mask</b></p>
+<ul>
+<li>为什么改：下游重建一个物体至少要 3 张代表观测，画面占比很小的 mask 提供不了多少表面。v11 的 114 个物体里，
+最佳视图仍不足画面 1% 的有 36 个（32%），不足 0.3% 的有 16 个（14%）。这些物体从观测里拿不到能支撑重建的信息，
+却照样占用 harness 的判断预算和下游的物体名额。在 SAM 阶段直接不出这些 mask，比让 harness 逐条 discard 便宜。</li>
+<li>实测（v11 的 source，500 帧，1296×968，4632 张 mask，中位面积 2.27%，p10 0.241%）：
+≥0.3% 丢 603（13%）；≥0.5% 丢 883（19%）；≥1.0% 丢 1372（30%）。按 0.5% 算，丢掉的里面主要是鞋 134、音箱 84、
+遥控器 79、书 57、开关 55、纸 50——多数是小物体本身，不是分割噪声。</li>
+<li>物体层面的连带损失：没有任何一条观测 ≥0.3% 的物体 16 个（14%），≥0.5% 的 25 个（22%），≥1.0% 的 36 个（32%）。
+最小的几个：肥皂瓶 0.04%、墙面插座 0.08%、书架上的书 0.09%。</li>
+<li>过滤放在 <code>segment()</code> 的候选循环里，<code>mask_pixels</code> 算出来之后。GPT 那一层只给类别清单，不产生实例，
+面积要到 SAM 分割完才有。每帧 mask 数最多 16 张，没有一帧触及上限，现有的 <code>excluded_by_budget</code> 实际几乎没丢过东西。</li>
+<li>阈值用<b>占画面比例</b>，不用绝对像素：前景和远景的物体大小差得太多，绝对像素等于只对小物体不公平地生效。
+起始值 <b>0.3%</b>（约 3766 像素）。</li>
+<li><b>碰边的 mask 不按面积丢</b>：面积小于阈值但 bbox 触及画面边缘的保留，那可能是大物体只露出一角。</li>
+<li>被丢的候选照常写进结果，新字段 <code>excluded_by_size</code>，与现有的 <code>excluded_by_budget</code> 并列。
+原始 mask 文件和 <code>raw_candidates</code> 都保留。影响范围：这 500 帧的观测数（4632）、物体数（114），
+以及所有引用过这两个数的页面与文档要重算；v11 的结论作为对照基线保留，不覆盖。</li>
+<li>涉及：<code>src/inference/sam31_segment.py</code>（过滤与 <code>policy</code>）、<code>src/inference/gpt_sam31.py</code>（参数透传）、
+<code>docs/pipeline.html</code> 与 <code>docs/input.html</code>（说明）、<code>docs/debug/debug-log.html</code>、测试。</li>
+</ul>
+</div>
+<div class="blk">
+<span class="h">待定</span>
+<ul>
+<li>交给下游的 3 张代表图，从 5 条持有观测里由规则选还是由模型选。</li>
+<li>discard 的三种原因用字段区分，还是只写在 reason 里。</li>
+<li>每条目上限 10 是否够用：每窗 20–45 条观测，若九成 discard，每窗需要 2–5 个条目。</li>
+<li>鞋排是 4 只还是 6 只（几何上有 6 个固定位置），要先看帧 185 原图确认，它决定这一排的评估标准。</li>
+<li>持有动作的英文名：沿用 <code>assign</code>，还是改为 <code>hold</code>。</li>
+<li>create 的 verify 图：3D 渲染两团点云，还是反投影到 RGB。</li>
+<li>第 6 项的 0.3% 是起始值，最终值要按物体层面能接受损失多少来定，开关、插座、纸这类算不算场景里的物体是产品判断。</li>
+</ul>
+</div>
+<div class="blk">
+<span class="h">验证</span>
+<ul>
+<li>先离线、不调模型：对 v11 的每个物体按参考值挑出 ≤5 条观测，和 GT handoff 的关键帧比可见像素与视角，检验参考值本身是否可靠。</li>
+<li>同样离线校准第 2 项的两个阈值：用 GT 映射，统计正确物体落进候选集的比例与候选数分布；
+比较「正确物体」和「同类错误物体」的重叠比例能否分开（凳子、鞋分开看）。分不开就不值得做这一项。</li>
+<li>再按新方案跑一次。指标：持有观测的 GT 配对精确率（v11 全部已归属观测的基线是 0.785）；每个 GT 物体是否有对应物体、
+是否被拆成多个；物体数；鞋排与凳子排的身份是否稳定；discard 的条数与原因分布；首条消息体积与 token。</li>
+<li>第 6 项先对 v11 的 source 套用新阈值，重算观测数、物体数、每物体最佳视图占比分布，再跑一次完整流程，看物体清单里少了哪些类别、每个物体的代表图是否仍然可用。</li>
+<li>帧数：鞋第二次到访在帧 185，凳子到帧 450 才四个同框，验证需要接近完整的 500 帧。</li>
+</ul>
+</div>
+</div>
+</div>
+
 <div class="entry issue">
 <div class="entry-head">
 <span class="id">kj9b68</span>
-<span class="title">两只「鞋」的点云几乎完全重叠</span>
+<span class="title">外观相同的物体按相对位置认身份，造成归类错误（鞋、凳子）</span>
 <span class="date">2026-11-04</span>
 </div>
 <div class="entry-body stacked">
 <div class="blk">
 <span class="h">现象</span>
-<p><code>Object12</code>（<code>left gray shoe beside console</code>）与 <code>Object13</code>
-（<code>right gray shoe beside console</code>）在结果页选中后，两个点云和两个 OBB 基本重合，
-肉眼分不出是两只鞋。</p>
+<p>两处同一类问题：一排外观相同的东西，结果里的几个物体点云互相压在一起。</p>
+<ul>
+<li>鞋：<code>Object12</code>（<code>left gray shoe beside console</code>）与 <code>Object13</code>
+（<code>right gray shoe beside console</code>）两个点云和 OBB 基本重合，见下图。</li>
+<li>凳子：<code>Object76 / 77</code> 与 <code>Object112 / 113</code> 两两重叠，见案例二。</li>
+</ul>
 <figure class="shot">
-<div class="ph">图片占位 · 待放置<br><code>evidence_img/kj9b68-*.png</code></div>
+<a href="evidence_img/kj9b68-001.png" target="_blank" rel="noopener"><img src="evidence_img/kj9b68-001.png" alt="v11 结果页同时选中 Object 012 与 013，两个点云和 3D bbox 基本重合" loading="lazy"></a>
 <figcaption>v11 末版结果页，同时选中 Object 012 / 013。</figcaption>
 </figure>
 </div>
 <div class="blk">
-<span class="h">实测</span>
+<span class="h">实测（鞋）</span>
 <ul>
 <li>中心距 <b>5.7 cm</b>（1.551, 2.211, 0.152）vs（1.547, 2.268, 0.148）。</li>
 <li>包围盒几乎相同：A <code>[1.33,1.89,0.08]–[1.77,2.55,0.23]</code>，
@@ -130,23 +300,170 @@ B <code>[1.33,1.89,0.07]–[1.76,2.61,0.23]</code>。</li>
 </ul>
 </div>
 <div class="blk">
+<span class="h">案例一：鞋（Object12 / 13 / 17 / 18）</span>
+<p><b>这不是「一个物体拆成两个」，也不是「两只鞋靠得太近」。</b>
+console 旁的地面上是<b>一排四只鞋</b>（一双灰、一双黑），对应四个物体：</p>
+<ul>
+<li><code>Object12</code> left gray shoe beside console · <code>Object13</code> right gray shoe beside console</li>
+<li><code>Object17</code> left black shoe of rightmost pair · <code>Object18</code> right black shoe of rightmost pair</li>
+</ul>
+<p>这个区域的 170 条观测全部归在这四个物体上。<b>问题在于身份在帧与帧之间被来回换。</b>
+四只鞋同时可见的 28 帧里，把每帧四条观测按位置排序，身份顺序出现了 <b>6 种排列</b>：</p>
+<table>
+<thead><tr><th>沿排的方向，从一端到另一端</th><th>帧数</th><th>例</th></tr></thead>
+<tbody>
+<tr><td><code>17-18-12-13</code></td><td>8</td><td>185–191</td></tr>
+<tr><td><code>13-12-18-17</code></td><td>6</td><td>208–214</td></tr>
+<tr><td><code>12-13-17-18</code></td><td>5</td><td>3–7</td></tr>
+<tr><td><code>13-17-18-12</code></td><td>3</td><td>190、197、489</td></tr>
+<tr><td><code>13-18-17-12</code></td><td>3</td><td>192、194、209</td></tr>
+<tr><td><code>13-12-17-18</code></td><td>3</td><td>490–492</td></tr>
+</tbody>
+</table>
+<p>场景是静态的，鞋没有动，正确的结果只能是一种排列。在这 28 帧里，图像从左到右的顺序与世界坐标的顺序始终一致，
+所以这不是几何翻转造成的假象，<b>是同一个 Object 编号在不同帧里被派给了不同的鞋</b>。另有一种更大的变化：灰色那双从排的一端到了另一端（<code>12-13-17-18</code> →
+<code>17-18-12-13</code>）。<b>这一条暂不算作身份互换</b>：模型两次都把 12/13 叫作灰色，颜色是看得见的；
+也可能是两次到访之间几何不是刚性的（console 的质心同期也移了约 0.4 m）。要分清得看帧 5 和帧 185 的原图。</p>
+<p>于是每个物体的点云都是好几只鞋的观测拼起来的，铺满了整排，Object12 和 Object13 的包围盒才会几乎一样。
+截图里粉色在两端、蓝色在中间交错，就是这个原因。</p>
+</div>
+<div class="blk">
+<span class="h">案例二：凳子（Object76 / 77 / 112 / 113）</span>
+<figure class="shot">
+<a href="evidence_img/kj9b68-002.png" target="_blank" rel="noopener"><img src="evidence_img/kj9b68-002.png" alt="v11 结果页同时选中四个吧凳物体，点云与 3D bbox 两两重叠" loading="lazy"></a>
+<figcaption>v11 末版结果页，同时选中 Object 076 / 077 / 112 / 113。</figcaption>
+</figure>
+<p>厨房岛台边一排<b>四个</b>木吧凳，GT 是四个独立实例（<code>obj_0028 / 0029 / 0031 / 0030</code>），沿排相距约 0.5 m。</p>
+<ul>
+<li>点云长度：76 为 <b>2.38 m</b>，77 为 <b>1.59 m</b>，都比两个凳子并排还长；112、113 为 0.81 / 0.77 m，正常。</li>
+<li>重叠：112 的 <b>57%</b> 点落在 76 的 2 cm 内，113 的 <b>52%</b> 点落在 77 的 2 cm 内。</li>
+</ul>
+<p><b>机制和鞋不同：不是编号互换，是编号不够用。</b>帧 160–449 只有两个物体：
+<code>Object76 rear wooden bar stool</code> 和 <code>Object77 front wooden bar stool</code>。
+这一段里多数帧只露出一两个凳子（只有 1 个的 12 帧、2 个的 12 帧、3 个的 4 帧、4 个的只有 2 帧），
+「前面那个 / 后面那个」由当时露出的是哪几个决定。按观测落在哪个 GT 凳子上统计：</p>
+<table>
+<thead><tr><th>帧 160–449</th><th>g28（y 6.30）</th><th>g29（6.77）</th><th>g31（7.31）</th><th>g30（7.82）</th></tr></thead>
+<tbody>
+<tr><td><code>Object76</code> rear</td><td>1</td><td><b>11</b></td><td>0</td><td><b>13</b></td></tr>
+<tr><td><code>Object77</code> front</td><td><b>18</b></td><td>0</td><td><b>13</b></td><td>0</td></tr>
+</tbody>
+</table>
+<p>76 吞下了第二和第四个凳子，77 吞下了第一和第三个。帧 440–449 出现了直接矛盾：同一帧里
+<code>Object76</code> 拿到两张相距 <b>0.95–1.08 m</b> 的 mask，两张的 reason 一字不差
+（「<i>the rear/right stool … distinct from the nearer left stool</i>」）；<code>Object77</code> 在帧 448、449 也一样。
+宿主不检查这种情况。</p>
+<p>帧 450 起四个凳子同框，模型新建了 112、113，此后四个物体各对一个凳子，顺序稳定
+（<code>113-77-76-112</code>，18 帧里没有一次互换）。但 76 / 77 之前吞下的观测没有被拆出来，
+所以 112 压在 76 上、113 压在 77 上，就是截图里的样子。</p>
+</div>
+<div class="blk">
+<span class="h">可能的成因（两例共通）</span>
+<ul>
+<li><b>外观相同时，身份按同组里的相对位置认。</b>鞋用「一双里的左 / 右」（「<i>left-side position in the gray pair</i>」），
+凳子用「前 / 后」（「<i>the rear stool … behind the foreground stool</i>」）。两者都拿同组的另一个当参照，
+而那一个同样没确定身份；视角一变、或者露出的个数一变，「左边那只」「后面那个」就换了对象。
+P6 的 ASSIGN 规则把 <i>position relative to a fixed neighbour</i> 列为合法线索，模型把同组的另一个当成了这个邻居。</li>
+<li><b>认错之后没有回头的路。</b>帧 450 模型已经看清是四个凳子，但 76 / 77 的历史观测没被改派。
+状态机允许改派历史观测，可 v11 全程这种改派是 0 次（见 <code>7331041</code>）；动作集里也没有 split。</li>
+<li><b>标签本身在鼓励这样做。</b><code>left gray shoe beside console</code>、
+<code>left black shoe of rightmost pair</code> 把位置写进了名字（P6 的标签规则造成，已在
+<code>4d95fa9</code> 撤销）。名字一旦是「左边那只」，后续窗口按名字认人就会跟着视角漂移。</li>
+<li><b>防止这件事的规则被删掉了。</b>P3 原有一句
+「<i>Do not match cross-frame identities directly by left/right image position</i>」，
+从 P4 起不再出现，v11 用的 P6 也没有。</li>
+<li>reid 门禁拦不住：它只拦跳变超过 1 m 的 assign。鞋的错配在 10–30 cm，凳子相邻两个相距约 0.5 m。</li>
+</ul>
+</div>
+<div class="blk">
 <span class="h">待查</span>
 <ul>
-<li><b>这是一个物体被拆成两个，还是两只鞋本来就这么近？</b> GT 只有<b>一个</b>
-<code>shoes</code> 物体（<code>obj_0058</code>，60 帧，43 点），但 GT 的物体粒度本身比 harness 粗，
-不能直接据此判定。</li>
-<li>若是两只鞋：为什么点云重叠到这程度？两只鞋相距 5.7 cm 时，2 cm 体素 +
-4 cm 中位反投影误差会让它们几乎无法区分。</li>
-<li>若是一个物体：<code>create</code> 在同一窗口被调了两次（都在 <code>created_at: 4</code>），
-当时模型看到的是同一帧的两张 mask，还是不同帧？</li>
-<li>参考位置：两者均在 <code>(1.55, 2.21–2.27, 0.15)</code>，与 console 相邻；同区域的
-<code>Object14</code>（remote）和 <code>Object9</code>（printed sheet）也都在这个台面上。</li>
+<li>换位最早发生在哪一窗：帧 3–7 是 <code>12-13-17-18</code>，帧 185 起变成 <code>17-18-12-13</code>，
+中间那次决策的 reason 和当时可见几只鞋还没看。</li>
+<li>GT 把整排只标成一个 <code>shoes</code>（<code>obj_0058</code>），所以拿 GT 判不了哪只是哪只；
+要验证需要人工在两三帧里认出四只鞋。</li>
+<li><code>4d95fa9</code> 去掉了标签里的位置词，但模型仍可能在 reason 里按左右认人。
+下一次运行要专门看这一排的排列数是否回到 1。</li>
+<li><s>宿主加软检查：同一帧一个物体收到两张相距较远的 mask 时打回。</s><b>已否决（2026-11-05 实测）</b>：
+v11 同帧同物体的 mask 对共 2369 对，凳子错配那几对的包围盒间隙为 0.41–0.74 m，而其余对里间隙超过 0.3 m 的有 964 对
+（墙柜、窗帘等被切成多块 mask 的大物体），没有可用的阈值。</li>
+<li>前面提出的 prompt 改写（「外观相同的东西不能互相定位，只能靠不属于它们的固定参照物」）同样覆盖「前 / 后」，
+改完后鞋和凳子两排一起验证。</li>
 </ul>
 </div>
 </div>
 </div>
 
 <h2><span class="no">02</span>变更记录</h2>
+
+<!-- 2026-11-05 -->
+<div class="entry">
+<div class="entry-head">
+<span class="id">待提交</span>
+<span class="title">全窗口完整结果模式下 3D bbox 不显示</span>
+<span class="date">2026-11-05</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">要解决的问题</span>
+<ul>
+<li>切到「全窗口完整结果」后勾选「显示 3D bbox」，选中物体的框和标签都不出现。</li>
+<li>原因：<code>sceneWindowIndex()</code> 在该模式下返回的是<b>帧索引</b>（499），而 bbox 数据按<b>窗口索引</b>存储（共 100 个窗口），查表落空，不报错。</li>
+<li>同一个混淆在上一条改动里已经在 <code>stateFor</code> 处出现过一次，当时只修了那一处。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动方向</span>
+<ul>
+<li>末窗口一律从最后一帧的 <code>RESULT_FRAMES</code> 行读出 <code>window_index</code>，不再用帧数推算。</li>
+<li>同一函数顺带修了列表分组的窗口号和标题里的「截至窗口 500」（应为 100）。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动文件</span>
+<div class="files">
+<div>pagegen/templates/result/harness_object_groups.js</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="entry">
+<div class="entry-head">
+<span class="id">27dcfad</span>
+<span class="title">结果页：物体观测查看栏与全窗口完整结果</span>
+<span class="date">2026-11-04</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">要解决的问题</span>
+<ul>
+<li>想看某个物体由哪些观测组成，页面上没有入口，只能去翻 <code>state.json</code>。</li>
+<li>「当前最新全部物体」只换了列表视图，3D 点云仍跟着帧进度条变化，看不到完整结果。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动方向</span>
+<ul>
+<li>3D 窗口下新增观测查看栏：选一个物体，列出它的全部观测证据图，始终读末状态。</li>
+<li>「全窗口完整结果」模式下 3D 渲染输入换成末状态，不随滑块变化；2D 面板仍跟随滑块。</li>
+<li>列表按钮分两行：视图选择一行，选择操作一行。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动文件</span>
+<div class="files">
+<div>pagegen/build_result.py</div>
+<div>pagegen/templates/result/harness_result.html</div>
+<div>pagegen/templates/result/harness_result.css</div>
+<div>pagegen/templates/result/harness_object_groups.js</div>
+<div>pagegen/templates/result/harness_observation_panel.js（新增）</div>
+<div>pagegen/templates/result/harness_bbox_display.js</div>
+<div>pagegen/templates/result/harness_cloud_pick.js</div>
+</div>
+</div>
+</div>
+</div>
 
 <!-- 2026-11-04 -->
 <div class="entry">

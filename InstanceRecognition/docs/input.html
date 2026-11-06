@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness 输入信息 · 一个窗口模型看到什么</title>
+<style>
+:root{--ink:#16191d;--ink2:#454c55;--ink3:#6b7480;--line:#dfe3e8;--line2:#eef1f4;
+--bg:#fbfcfd;--card:#fff;--accent:#0f766e;--accent2:#e6f4f1;
+--mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.75 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding:0 28px 120px}
+header{padding:52px 0 26px;border-bottom:1px solid var(--line)}
+.eyebrow{font:11.5px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+h1{margin:0 0 12px;font-size:32px;line-height:1.25;letter-spacing:-.02em}
+.lede{margin:0;color:var(--ink2);max-width:64ch}
+.meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.tag{font:11.5px var(--mono);background:var(--card);border:1px solid var(--line);border-radius:5px;padding:3px 9px;color:var(--ink2)}
+h2{margin:44px 0 10px;font-size:21px;display:flex;align-items:baseline;gap:10px}
+h2 .no{font:13px var(--mono);color:var(--accent);font-weight:600}
+h2 .h{font:12.5px var(--mono);color:var(--ink3);font-weight:400}
+p{margin:0 0 12px}
+code{font:12.8px var(--mono);background:var(--line2);padding:1.5px 5px;border-radius:4px}
+.tree{font-family:var(--mono);font-size:12.9px;line-height:1.8;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:17px 20px;overflow-x:auto;white-space:pre;color:#2b333d}
+.tree b{color:var(--accent);font-weight:600}
+.tree i{color:var(--ink3);font-style:normal}
+.msg{background:var(--card);border:1px solid var(--line);border-radius:9px;margin:10px 0;overflow:hidden}
+.msg .mh{font:12px var(--mono);color:var(--accent);background:var(--accent2);padding:6px 14px;border-bottom:1px solid var(--line)}
+.msg pre{margin:0;padding:12px 14px;font:12.3px/1.6 var(--mono);color:#2b333d;overflow-x:auto;max-height:520px}
+.note{border-left:3px solid var(--accent);background:var(--accent2);padding:10px 14px;border-radius:0 6px 6px 0;margin:16px 0;font-size:14.5px;color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<div class="eyebrow">harness · window input</div>
+<h1>输入信息</h1>
+<p class="lede">一个窗口开始时，模型收到的全部内容。按当前代码整理，不对应某次运行的具体数值。</p>
+<div class="meta">
+<span class="tag">prompt P7 · 548ebaf</span>
+<span class="tag">src/harness/inputs.py</span>
+<span class="tag">核对日期 2026-11-05</span>
+</div>
+</header>
+
+<h2><span class="no">01</span>一个窗口的初始输入<span class="h">按 inputs.py 的组装顺序</span></h2>
+<div class="tree">一个窗口的初始输入
+├── 0. system 消息             <i>prompt.txt 全文（P7），每个窗口相同</i>
+│   └── tools 参数：inspect_observations / inspect_object / compare_geometry
+│                    / propose_update / commit_update
+│
+├── 1. 窗口状态与全局几何      <i>一条 text 块，最先发送</i>
+│   ├── window [first, cutoff]、max_calls
+│   ├── state                  <i>tools.listing()</i>
+│   │   ├── version
+│   │   ├── objects：每个 Object 一条
+│   │   │   ├── id、object_label
+│   │   │   ├── created_at、status（<b>恒为 provisional</b>）
+│   │   │   ├── label_history       <i>发生过 relabel 才有</i>
+│   │   │   └── observation_count   <i>只给数量，不给任何观测 id</i>
+│   │   └── aliases                 <i>merge 后的旧编号映射</i>
+│   ├── <b>global_object_geometry</b>  <i>spatial_context.py，与 state 并列</i>
+│   │   ├── base_version、cutoff
+│   │   ├── coordinate_frame（shared_world）、units（meters）
+│   │   ├── geometry_scope：只是已观测表面，不是完整物理范围
+│   │   ├── bbox_convention：直立 OBB，局部 Z = 世界 Z
+│   │   └── objects：每个 Object 一条
+│   │       ├── object_id、object_label
+│   │       ├── bbox_3d_obb：center_xyz、size_xyz、axes_world  <i>可能为 null</i>
+│   │       └── point_count         <i>合并点云体素化后的点数</i>
+│   └── spatial_candidates_policy   <i>一句说明：至多 3 个、中位距离、只是提示</i>
+│
+├── 2. 当前观测                <i>每帧 5 个块，按帧顺序发送</i>
+│   ├── text：sampled_sequence + observations，每条观测一条记录
+│   │   ├── id（seq:instance）、seq、source_frame_id、instance_id
+│   │   ├── category_label          <i>上游类别提示，不是物体身份</i>
+│   │   ├── bbox_xyxy、image_size_wh、overlay_color_rgb
+│   │   ├── <b>point_count、centroid、bounds</b>   <i>反投影点云摘要</i>
+│   │   └── <b>spatial_candidates</b>：至多 3 个
+│   │       └── rank、object_id、object_label、median_surface_distance_m
+│   ├── text「original RGB」 + 图：完整原始 RGB
+│   └── text「full-frame colored mask overlay」 + 图：彩色 mask + 编号 + 2D bbox
+│
+└── 3. 历史访问说明            <i>最后一条 text</i>
+    └── 只有档案和全局几何；历史代表观测的元数据和图片要调
+        inspect_object / inspect_observations 取</div>
+<div class="note">高亮的三处是初始输入里全部的几何信息。<code>compare_geometry</code> 要模型主动调用，不在初始输入里。
+只写审计、不发给模型的：每个物体的代表观测（<code>representative</code>）和 <code>spatial_candidates</code> 原表，存在 <code>window_inputs/NNNN_context.json</code>。</div>
+<h2><span class="no">02</span>示例：窗口 51 的初始输入<span class="h">抽样帧 250–254 · base_version 50</span></h2>
+<p>取自 v11（<code>harness-v11-amb3r-500frames-20261026-1400</code>）这个窗口第一次调用的真实请求 <code>calls/w0250_*_call00_request.json</code>。为了和上面的树对应，按当前代码做了两处改动：去掉 <code>state.pending</code>（原有 248 条、约 67,610 字符），去掉物体档案里的 <code>representative_observation_id</code>。长列表只保留前几条，浮点数保留 4 位小数，图片换成占位说明。</p>
+<div class="msg"><div class="mh">system · prompt.txt 全文（12,041 字符，此处省略）</div><pre>见 docs/prompts.html 的 P7</pre></div>
+<div class="msg"><div class="mh">tools</div><pre>inspect_observations — Inspect up to 4 observations in full-frame RGB and highlighted overlays
+inspect_object — Inspect an archived object: metadata and one full-frame RGB with its representative original-mask bbox; repeated images are reused
+compare_geometry — Compare two observations; distances in meters are evidence, not identity rules
+propose_update — Validate a proposal and return preview; does not commit
+commit_update — Commit the checked proposal at current version</pre></div>
+<div class="msg"><div class="mh">user · text 1 · 窗口状态与全局几何（按当前代码约 50,798 字符）</div><pre>{
+  &quot;window&quot;: [250, 254],
+  &quot;state&quot;: {
+    &quot;version&quot;: 50,
+    &quot;objects&quot;: [
+      {
+        &quot;id&quot;: &quot;Object1&quot;,
+        &quot;object_label&quot;: &quot;black office chair&quot;,
+        &quot;created_at&quot;: 4,
+        &quot;status&quot;: &quot;provisional&quot;,
+        &quot;observation_count&quot;: 60
+      },
+      {
+        &quot;id&quot;: &quot;Object2&quot;,
+        &quot;object_label&quot;: &quot;light wood console table&quot;,
+        &quot;created_at&quot;: 4,
+        &quot;status&quot;: &quot;provisional&quot;,
+        &quot;observation_count&quot;: 56
+      },
+      {
+        &quot;id&quot;: &quot;Object3&quot;,
+        &quot;object_label&quot;: &quot;small wooden computer desk&quot;,
+        &quot;created_at&quot;: 4,
+        &quot;status&quot;: &quot;provisional&quot;,
+        &quot;observation_count&quot;: 68
+      },
+      &quot;…（另有 92 个物体，结构相同）&quot;
+    ],
+    &quot;aliases&quot;: {}
+  },
+  &quot;max_calls&quot;: 28,
+  &quot;global_object_geometry&quot;: {
+    &quot;base_version&quot;: 50,
+    &quot;cutoff&quot;: 249,
+    &quot;coordinate_frame&quot;: &quot;shared_world&quot;,
+    &quot;units&quot;: &quot;meters&quot;,
+    &quot;geometry_scope&quot;: &quot;archived observed surfaces, not complete physical extents&quot;,
+    &quot;bbox_convention&quot;: &quot;upright OBB; local Z equals world Z; axes_world are local axes expressed in world coordinates&quot;,
+    &quot;objects&quot;: [
+      {
+        &quot;object_id&quot;: &quot;Object1&quot;,
+        &quot;object_label&quot;: &quot;black office chair&quot;,
+        &quot;bbox_3d_obb&quot;: {
+          &quot;center_xyz&quot;: [2.9942, 1.4573, 0.5566],
+          &quot;size_xyz&quot;: [0.6201, 0.6674, 0.9349],
+          &quot;axes_world&quot;: [
+            [-0.0309, 0.9995, 0.0],
+            [-0.9995, -0.0309, 0.0],
+            [0.0, 0.0, 1.0]
+          ]
+        },
+        &quot;point_count&quot;: 8551
+      },
+      {
+        &quot;object_id&quot;: &quot;Object2&quot;,
+        &quot;object_label&quot;: &quot;light wood console table&quot;,
+        &quot;bbox_3d_obb&quot;: {
+          &quot;center_xyz&quot;: [1.9281, 1.6879, 0.341],
+          &quot;size_xyz&quot;: [0.5813, 1.1863, 0.4223],
+          &quot;axes_world&quot;: [
+            [0.698, 0.7161, 0.0],
+            [-0.7161, 0.698, 0.0],
+            [0.0, 0.0, 1.0]
+          ]
+        },
+        &quot;point_count&quot;: 7175
+      },
+      {
+        &quot;object_id&quot;: &quot;Object3&quot;,
+        &quot;object_label&quot;: &quot;small wooden computer desk&quot;,
+        &quot;bbox_3d_obb&quot;: {
+          &quot;center_xyz&quot;: [3.1292, 0.8021, 0.6031],
+          &quot;size_xyz&quot;: [1.1693, 0.6306, 0.9706],
+          &quot;axes_world&quot;: [
+            [0.949, 0.3152, 0.0],
+            [-0.3152, 0.949, 0.0],
+            [0.0, 0.0, 1.0]
+          ]
+        },
+        &quot;point_count&quot;: 10461
+      },
+      &quot;…（另有 92 个物体，结构相同）&quot;
+    ]
+  },
+  &quot;spatial_candidates_policy&quot;: &quot;up to 3; median observation-to-archived-surface nearest distance in meters; hints only, not exhaustive identities or confidence&quot;
+}</pre></div>
+<div class="msg"><div class="mh">user · text · 抽样帧 250 的观测（11 条，9,473 字符）</div><pre>{
+  &quot;sampled_sequence&quot;: 250,
+  &quot;observations&quot;: [
+    {
+      &quot;id&quot;: &quot;0250:001&quot;,
+      &quot;seq&quot;: 250,
+      &quot;source_frame_id&quot;: 2794,
+      &quot;category_label&quot;: &quot;built-in cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [851, 674, 1103, 947],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [242, 61, 61],
+      &quot;instance_id&quot;: 1,
+      &quot;point_count&quot;: 10269,
+      &quot;centroid&quot;: [2.937, 7.2492, 0.5253],
+      &quot;bounds&quot;: [
+        [2.5936, 7.0962, 0.124],
+        [3.2843, 7.3932, 0.8544]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.01
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object82&quot;,
+          &quot;object_label&quot;: &quot;white throw pillow on sofa&quot;,
+          &quot;median_surface_distance_m&quot;: 0.2206
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object81&quot;,
+          &quot;object_label&quot;: &quot;dark blue sofa&quot;,
+          &quot;median_surface_distance_m&quot;: 0.3675
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0250:002&quot;,
+      &quot;seq&quot;: 250,
+      &quot;source_frame_id&quot;: 2794,
+      &quot;category_label&quot;: &quot;built-in cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [499, 693, 849, 960],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [61, 114, 242],
+      &quot;instance_id&quot;: 2,
+      &quot;point_count&quot;: 14369,
+      &quot;centroid&quot;: [2.1615, 6.9542, 0.5626],
+      &quot;bounds&quot;: [
+        [1.7608, 6.7747, 0.2263],
+        [2.5844, 7.1298, 0.8774]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.0086
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object86&quot;,
+          &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
+          &quot;median_surface_distance_m&quot;: 0.3111
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object81&quot;,
+          &quot;object_label&quot;: &quot;dark blue sofa&quot;,
+          &quot;median_surface_distance_m&quot;: 0.5605
+        }
+      ]
+    },
+    &quot;…（另有 9 条观测，结构相同）&quot;
+  ]
+}</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 250: original RGB
+[图片：完整原始 RGB]</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 250: full-frame colored mask overlay
+[图片：彩色 mask + 编号 + 2D bbox]</pre></div>
+<div class="msg"><div class="mh">user · text · 抽样帧 251 的观测（16 条，13,626 字符）</div><pre>{
+  &quot;sampled_sequence&quot;: 251,
+  &quot;observations&quot;: [
+    {
+      &quot;id&quot;: &quot;0251:001&quot;,
+      &quot;seq&quot;: 251,
+      &quot;source_frame_id&quot;: 2805,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [477, 613, 664, 926],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [242, 61, 61],
+      &quot;instance_id&quot;: 1,
+      &quot;point_count&quot;: 8080,
+      &quot;centroid&quot;: [1.9583, 6.8784, 0.5343],
+      &quot;bounds&quot;: [
+        [1.7609, 6.7902, 0.1299],
+        [2.1816, 6.9757, 0.8645]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.0083
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object86&quot;,
+          &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
+          &quot;median_surface_distance_m&quot;: 0.3455
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object81&quot;,
+          &quot;object_label&quot;: &quot;dark blue sofa&quot;,
+          &quot;median_surface_distance_m&quot;: 0.4702
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0251:002&quot;,
+      &quot;seq&quot;: 251,
+      &quot;source_frame_id&quot;: 2805,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [77, 7, 279, 279],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [61, 114, 242],
+      &quot;instance_id&quot;: 2,
+      &quot;point_count&quot;: 8259,
+      &quot;centroid&quot;: [1.2262, 6.6272, 1.9526],
+      &quot;bounds&quot;: [
+        [1.067, 6.5409, 1.669],
+        [1.4045, 6.7031, 2.2432]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.0091
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object95&quot;,
+          &quot;object_label&quot;: &quot;black speaker in living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.7118
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object85&quot;,
+          &quot;object_label&quot;: &quot;television&quot;,
+          &quot;median_surface_distance_m&quot;: 0.718
+        }
+      ]
+    },
+    &quot;…（另有 14 条观测，结构相同）&quot;
+  ]
+}</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 251: original RGB
+[图片：完整原始 RGB]</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 251: full-frame colored mask overlay
+[图片：彩色 mask + 编号 + 2D bbox]</pre></div>
+<div class="msg"><div class="mh">user · text · 抽样帧 252 的观测（16 条，13,732 字符）</div><pre>{
+  &quot;sampled_sequence&quot;: 252,
+  &quot;observations&quot;: [
+    {
+      &quot;id&quot;: &quot;0252:001&quot;,
+      &quot;seq&quot;: 252,
+      &quot;source_frame_id&quot;: 2816,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [487, 409, 675, 718],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [242, 61, 61],
+      &quot;instance_id&quot;: 1,
+      &quot;point_count&quot;: 8161,
+      &quot;centroid&quot;: [1.9491, 6.8792, 0.5456],
+      &quot;bounds&quot;: [
+        [1.7523, 6.7894, 0.1346],
+        [2.172, 6.9748, 0.8746]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.0093
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object86&quot;,
+          &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
+          &quot;median_surface_distance_m&quot;: 0.3578
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object81&quot;,
+          &quot;object_label&quot;: &quot;dark blue sofa&quot;,
+          &quot;median_surface_distance_m&quot;: 0.4767
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0252:002&quot;,
+      &quot;seq&quot;: 252,
+      &quot;source_frame_id&quot;: 2816,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [129, 424, 327, 753],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [61, 114, 242],
+      &quot;instance_id&quot;: 2,
+      &quot;point_count&quot;: 9039,
+      &quot;centroid&quot;: [1.2296, 6.5906, 0.5344],
+      &quot;bounds&quot;: [
+        [1.0717, 6.5059, 0.1471],
+        [1.403, 6.678, 0.8899]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.0089
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object85&quot;,
+          &quot;object_label&quot;: &quot;television&quot;,
+          &quot;median_surface_distance_m&quot;: 0.3295
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object25&quot;,
+          &quot;object_label&quot;: &quot;floor rug&quot;,
+          &quot;median_surface_distance_m&quot;: 0.6118
+        }
+      ]
+    },
+    &quot;…（另有 14 条观测，结构相同）&quot;
+  ]
+}</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 252: original RGB
+[图片：完整原始 RGB]</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 252: full-frame colored mask overlay
+[图片：彩色 mask + 编号 + 2D bbox]</pre></div>
+<div class="msg"><div class="mh">user · text · 抽样帧 253 的观测（16 条，13,623 字符）</div><pre>{
+  &quot;sampled_sequence&quot;: 253,
+  &quot;observations&quot;: [
+    {
+      &quot;id&quot;: &quot;0253:001&quot;,
+      &quot;seq&quot;: 253,
+      &quot;source_frame_id&quot;: 2828,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [524, 336, 711, 637],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [242, 61, 61],
+      &quot;instance_id&quot;: 1,
+      &quot;point_count&quot;: 7732,
+      &quot;centroid&quot;: [1.9486, 6.8815, 0.5436],
+      &quot;bounds&quot;: [
+        [1.7547, 6.7924, 0.1381],
+        [2.1716, 6.9753, 0.8748]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.0097
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object86&quot;,
+          &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
+          &quot;median_surface_distance_m&quot;: 0.3601
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object81&quot;,
+          &quot;object_label&quot;: &quot;dark blue sofa&quot;,
+          &quot;median_surface_distance_m&quot;: 0.4779
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0253:002&quot;,
+      &quot;seq&quot;: 253,
+      &quot;source_frame_id&quot;: 2828,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [717, 7, 912, 332],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [61, 114, 242],
+      &quot;instance_id&quot;: 2,
+      &quot;point_count&quot;: 9214,
+      &quot;centroid&quot;: [2.3887, 7.071, 1.2596],
+      &quot;bounds&quot;: [
+        [2.1802, 6.9819, 0.872],
+        [2.6123, 7.1664, 1.6344]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.0088
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object86&quot;,
+          &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
+          &quot;median_surface_distance_m&quot;: 0.8702
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object82&quot;,
+          &quot;object_label&quot;: &quot;white throw pillow on sofa&quot;,
+          &quot;median_surface_distance_m&quot;: 0.8728
+        }
+      ]
+    },
+    &quot;…（另有 14 条观测，结构相同）&quot;
+  ]
+}</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 253: original RGB
+[图片：完整原始 RGB]</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 253: full-frame colored mask overlay
+[图片：彩色 mask + 编号 + 2D bbox]</pre></div>
+<div class="msg"><div class="mh">user · text · 抽样帧 254 的观测（16 条，13,597 字符）</div><pre>{
+  &quot;sampled_sequence&quot;: 254,
+  &quot;observations&quot;: [
+    {
+      &quot;id&quot;: &quot;0254:001&quot;,
+      &quot;seq&quot;: 254,
+      &quot;source_frame_id&quot;: 2839,
+      &quot;category_label&quot;: &quot;bookcase&quot;,
+      &quot;bbox_xyxy&quot;: [886, 8, 1187, 433],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [242, 61, 61],
+      &quot;instance_id&quot;: 1,
+      &quot;point_count&quot;: 15471,
+      &quot;centroid&quot;: [2.961, 7.2922, 0.7901],
+      &quot;bounds&quot;: [
+        [2.6062, 7.111, 0.1651],
+        [3.3286, 7.4937, 1.3227]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.0124
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object82&quot;,
+          &quot;object_label&quot;: &quot;white throw pillow on sofa&quot;,
+          &quot;median_surface_distance_m&quot;: 0.3081
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object81&quot;,
+          &quot;object_label&quot;: &quot;dark blue sofa&quot;,
+          &quot;median_surface_distance_m&quot;: 0.4751
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0254:002&quot;,
+      &quot;seq&quot;: 254,
+      &quot;source_frame_id&quot;: 2839,
+      &quot;category_label&quot;: &quot;book&quot;,
+      &quot;bbox_xyxy&quot;: [269, 57, 294, 184],
+      &quot;image_size_wh&quot;: [1296, 968],
+      &quot;overlay_color_rgb&quot;: [61, 114, 242],
+      &quot;instance_id&quot;: 2,
+      &quot;point_count&quot;: 368,
+      &quot;centroid&quot;: [1.1829, 6.6402, 1.0245],
+      &quot;bounds&quot;: [
+        [1.1641, 6.6297, 0.8975],
+        [1.2017, 6.6562, 1.146]
+      ],
+      &quot;spatial_candidates&quot;: [
+        {
+          &quot;rank&quot;: 1,
+          &quot;object_id&quot;: &quot;Object83&quot;,
+          &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.146
+        },
+        {
+          &quot;rank&quot;: 2,
+          &quot;object_id&quot;: &quot;Object85&quot;,
+          &quot;object_label&quot;: &quot;television&quot;,
+          &quot;median_surface_distance_m&quot;: 0.3489
+        },
+        {
+          &quot;rank&quot;: 3,
+          &quot;object_id&quot;: &quot;Object95&quot;,
+          &quot;object_label&quot;: &quot;black speaker in living room wall unit&quot;,
+          &quot;median_surface_distance_m&quot;: 0.7941
+        }
+      ]
+    },
+    &quot;…（另有 14 条观测，结构相同）&quot;
+  ]
+}</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 254: original RGB
+[图片：完整原始 RGB]</pre></div>
+<div class="msg"><div class="mh">user · text + image</div><pre>Current sampled sequence 254: full-frame colored mask overlay
+[图片：彩色 mask + 编号 + 2D bbox]</pre></div>
+<div class="msg"><div class="mh">user · text · 历史访问说明</div><pre>{
+  &quot;history_access&quot;: &quot;Archived object records and global geometry only; individual historical representative metadata and images are not included. Call inspect_object(object_id) for representative observation metadata and one RGB+bbox image; inspect_observations(ids) for additional views. The representative image is full-frame RGB with the original SAM3 mask bbox and Object ID.&quot;
+}</pre></div>
+</div>
+</body>
+</html>
