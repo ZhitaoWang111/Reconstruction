@@ -68,7 +68,8 @@ class StubSegmenter:
         self.checkpoint, self.threshold = checkpoint, threshold
         self.load_seconds = 0.5
 
-    def infer(self, source, labels_path, output, max_masks=gpt_sam31.DEFAULT_MAX_MASKS):
+    def infer(self, source, labels_path, output, max_masks=gpt_sam31.DEFAULT_MAX_MASKS,
+              min_area_fraction=gpt_sam31.DEFAULT_MIN_MASK_AREA_FRACTION):
         Path(output).mkdir(parents=True, exist_ok=True)
         (Path(output) / "raw_masks").mkdir(exist_ok=True)
         mask = Path(output) / "raw_masks/001_table.png"

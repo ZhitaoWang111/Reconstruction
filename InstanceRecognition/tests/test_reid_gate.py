@@ -56,7 +56,7 @@ class NeedsVerification(unittest.TestCase):
         self.assignments, self.centroids = archive(BIN_ARCHIVE)
 
     def screen(self, observations, **kwargs):
-        action = {'action': 'assign', 'object_id': 'Object25',
+        action = {'action': 'hold', 'object_id': 'Object25',
                   'observations': observations}
         return check_assign(0, action, self.assignments, self.centroids, **kwargs)
 
@@ -90,21 +90,21 @@ class NeedsVerification(unittest.TestCase):
         centroids = {'0069:005': [3.65, 1.32, 0.19],
                      '0068:006': [3.67, 1.32, 0.20],
                      '0123:008': [6.77, 5.96, 0.52]}
-        check = check_assign(0, {'action': 'assign', 'object_id': 'Object25',
+        check = check_assign(0, {'action': 'hold', 'object_id': 'Object25',
                                  'observations': ['0123:008']},
                              assignments, centroids)
         self.assertIn(check['nearest_archived_observation'], ('0069:005', '0068:006'))
 
     def test_new_object_is_never_held(self):
         # An object created in this same proposal has no archive to compare to.
-        action = {'action': 'assign', 'object_id': 'Object73',
+        action = {'action': 'hold', 'object_id': 'Object73',
                   'observations': ['0123:008']}
         self.centroids['0123:008'] = [6.77, 5.96, 0.52]
         self.assertIsNone(check_assign(0, action, self.assignments, self.centroids))
 
     def test_observation_without_centroid_is_skipped(self):
         # Two observations in the run had empty masks and no centroid at all.
-        action = {'action': 'assign', 'object_id': 'Object25',
+        action = {'action': 'hold', 'object_id': 'Object25',
                   'observations': ['0073:004']}
         self.assertIsNone(check_assign(0, action, self.assignments, self.centroids))
 
@@ -113,7 +113,7 @@ class NeedsVerification(unittest.TestCase):
         rug = [[3.8 + 0.25 * i, 1.5 + 0.1 * i, 0.09] for i in range(10)]
         assignments, centroids = archive(rug, 'Object26')
         centroids['0085:009'] = [5.53, 2.39, 0.11]
-        action = {'action': 'assign', 'object_id': 'Object26',
+        action = {'action': 'hold', 'object_id': 'Object26',
                   'observations': ['0085:009']}
         self.assertIsNone(check_assign(0, action, assignments, centroids))
 
@@ -125,8 +125,8 @@ class ProposalLevel(unittest.TestCase):
         assignments = {'a': {'object_id': 'Object25'}}
         actions = [
             {'action': 'create', 'object_id': 'Object73', 'object_label': 'bin'},
-            {'action': 'assign', 'object_id': 'Object73', 'observations': ['b']},
-            {'action': 'defer', 'observations': ['a']},
+            {'action': 'hold', 'object_id': 'Object73', 'observations': ['b']},
+            {'action': 'discard', 'observations': ['a']},
         ]
         result = verify_reidentification(actions, assignments, centroids)
         self.assertEqual(result['status'], 'ok')
@@ -139,8 +139,8 @@ class ProposalLevel(unittest.TestCase):
         assignments = {'a': {'object_id': 'Object25'},
                        'b': {'object_id': 'Object54'}}
         actions = [
-            {'action': 'assign', 'object_id': 'Object25', 'observations': ['c']},
-            {'action': 'assign', 'object_id': 'Object54', 'observations': ['d']},
+            {'action': 'hold', 'object_id': 'Object25', 'observations': ['c']},
+            {'action': 'hold', 'object_id': 'Object54', 'observations': ['d']},
         ]
         result = verify_reidentification(actions, assignments, centroids)
         self.assertEqual(result['status'], 'verification_required')
@@ -155,9 +155,9 @@ class ProposalLevel(unittest.TestCase):
         centroids = {'a': [0.0, 0.0, 0.0], 'near': [0.0, 0.5, 0.0],
                      'far': [6.0, 0.0, 0.0]}
         assignments = {'a': {'object_id': 'Object25'}}
-        actions = [{'action': 'assign', 'object_id': 'Object25',
+        actions = [{'action': 'hold', 'object_id': 'Object25',
                     'observations': ['near']},
-                   {'action': 'assign', 'object_id': 'Object25',
+                   {'action': 'hold', 'object_id': 'Object25',
                     'observations': ['far']}]
         for floor in (0.8, 1.0, 1.2):
             result = verify_reidentification(actions, assignments, centroids,

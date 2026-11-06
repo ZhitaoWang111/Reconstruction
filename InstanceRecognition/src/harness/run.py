@@ -59,7 +59,7 @@ def process_window(data, state, first, cutoff, args, prompt, out, client):
             # are needed.
             messages.append({'role':'user','content':
                 f'Budget nearly exhausted: you have {args.max_calls-step} rounds left. '
-                'Submit a complete valid proposal now - assign what you can, defer the rest in '
+                'Submit a complete valid proposal now - hold what you can, discard the rest in '
                 'entries of at most four observations - and then call commit_update with the '
                 'proposal id. Two calls, both required: a proposal that is never committed '
                 'loses the whole window.'})
@@ -297,7 +297,7 @@ def main():
         counts=sorted(len(list((out/'calls').glob(f'w{first:04d}_{sid}_call*_meta.json'))) for sid in sids)
         committed_calls+=counts[-1];abandoned_calls+=sum(counts[:-1])
     summary={'completed':state['cutoff']==args.frames-1,'frames':args.frames,'windows':state['version'],'objects':len(state['objects']),
-             'observations':len(state['assignments']),'deferrals':sum(a['status']=='defer' for a in state['assignments'].values()),
+             'observations':len(state['assignments']),'discarded':sum(a['status']=='discard' for a in state['assignments'].values()),
              'excluded':sum(a['status']=='exclude' for a in state['assignments'].values()),
              'api_successful_calls':len(metas),'api_calls_in_committed_windows':committed_calls,
              'api_calls_in_abandoned_attempts':abandoned_calls,'retried_windows':retried,

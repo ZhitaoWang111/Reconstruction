@@ -8,27 +8,27 @@ OBS={'0000:001':{'seq':0},'0001:001':{'seq':1},'0005:001':{'seq':5}}
 E={'0000:001','0001:001'}
 def action(kind,**kw):return dict(action=kind,evidence=['0000:001'],reason='visible evidence',**kw)
 def first():
- return propose(initial(),{'base_version':0,'actions':[action('create',object_id='Object1',object_label='toilet'),action('assign',object_id='Object1',observations=['0000:001'])]},OBS,0,E)['state']
+ return propose(initial(),{'base_version':0,'actions':[action('create',object_id='Object1',object_label='toilet'),action('hold',object_id='Object1',observations=['0000:001'])]},OBS,0,E)['state']
 def test_new_object_and_immutable_source():
  s=initial();new=first();assert new['assignments']['0000:001']['object_id']=='Object1';assert s==initial()
 def test_future_and_missing_observations_rejected():
  for ids in [['0005:001'],[]]:
-  with pytest.raises(ValueError):propose(initial(),{'base_version':0,'actions':[action('defer',observations=ids)]},OBS,0,E)
- with pytest.raises(ValueError):propose(first(),{'base_version':1,'actions':[action('defer',observations=['0000:001'])]},OBS,1,E)
+  with pytest.raises(ValueError):propose(initial(),{'base_version':0,'actions':[action('discard',observations=ids)]},OBS,0,E)
+ with pytest.raises(ValueError):propose(first(),{'base_version':1,'actions':[action('discard',observations=['0000:001'])]},OBS,1,E)
 def test_stale_and_invented_evidence():
  with pytest.raises(ValueError):propose(first(),{'base_version':0,'actions':[]},OBS,0,E)
- a=action('defer',observations=['0000:001']);a['evidence']=['hallucination']
+ a=action('discard',observations=['0000:001']);a['evidence']=['hallucination']
  with pytest.raises(ValueError):propose(initial(),{'base_version':0,'actions':[a]},OBS,0,E)
 def test_merge_then_reassign_keeps_old_state():
- s=first();p={'base_version':1,'actions':[action('create',object_id='Object2',object_label='base'),action('assign',object_id='Object2',observations=['0001:001'])]}
+ s=first();p={'base_version':1,'actions':[action('create',object_id='Object2',object_label='base'),action('hold',object_id='Object2',observations=['0001:001'])]}
  s2=propose(s,p,OBS,1,E)['state'];s3=propose(s2,{'base_version':2,'actions':[action('merge',source_object='Object2',object_id='Object1')]},OBS,1,E)['state']
  assert s2['assignments']['0001:001']['object_id']=='Object2'
  assert s3['aliases']['Object2']=='Object1'
- checked=propose(s3,{'base_version':3,'actions':[action('create',object_id='Object3',object_label='bin'),action('assign',object_id='Object3',observations=['0001:001'])]},OBS,1,E)
+ checked=propose(s3,{'base_version':3,'actions':[action('create',object_id='Object3',object_label='bin'),action('hold',object_id='Object3',observations=['0001:001'])]},OBS,1,E)
  assert set(checked['affected'])=={'Object1','Object3'}
  assert checked['state']['assignments']['0001:001']['object_id']=='Object3'
 def test_pending_and_repair_are_accounted():
- s=propose(initial(),{'base_version':0,'actions':[action('defer',observations=['0000:001']),action('repair',observations=['0001:001'])]},OBS,1,E)['state']
+ s=propose(initial(),{'base_version':0,'actions':[action('discard',observations=['0000:001']),action('repair',observations=['0001:001'])]},OBS,1,E)['state']
  assert all(a['object_id'] is None for a in s['assignments'].values())
 def test_tools_block_future_and_unchecked_commit():
  class Data:items=OBS
@@ -37,7 +37,7 @@ def test_tools_block_future_and_unchecked_commit():
  with pytest.raises(ValueError):tools.call('commit_update',{'proposal_id':'guess'})
 def test_duplicate_updates_rejected():
  with pytest.raises(ValueError,match='twice'):
-  propose(initial(),{'base_version':0,'actions':[action('defer',observations=['0000:001']),action('repair',observations=['0000:001'])]},OBS,0,E)
+  propose(initial(),{'base_version':0,'actions':[action('discard',observations=['0000:001']),action('repair',observations=['0000:001'])]},OBS,0,E)
 
 def test_materialization_reassignment_rebuilds_from_original(tmp_path):
  import numpy as np
@@ -47,9 +47,9 @@ def test_materialization_reassignment_rebuilds_from_original(tmp_path):
    p=np.array([[int(k[0:4]),0,0] for k,a in state['assignments'].items() if a['object_id']==oid],dtype=np.float32)
    return p,np.zeros(p.shape,dtype=np.uint8)
  s=first()
- checked=propose(s,{'base_version':1,'actions':[action('assign',object_id='Object1',observations=['0001:001'])]},OBS,1,E)
+ checked=propose(s,{'base_version':1,'actions':[action('hold',object_id='Object1',observations=['0001:001'])]},OBS,1,E)
  materialize(Data(),checked,tmp_path/'v2',None,.02)
- changed=propose(checked['state'],{'base_version':2,'actions':[action('create',object_id='Object2',object_label='new'),action('assign',object_id='Object2',observations=['0001:001'])]},OBS,1,E)
+ changed=propose(checked['state'],{'base_version':2,'actions':[action('create',object_id='Object2',object_label='new'),action('hold',object_id='Object2',observations=['0001:001'])]},OBS,1,E)
  materialize(Data(),changed,tmp_path/'v3',tmp_path/'v2',.02)
  with np.load(tmp_path/'v2/clouds/Object1.npz') as z:assert len(z['points'])==2
  with np.load(tmp_path/'v3/clouds/Object1.npz') as z:assert len(z['points'])==1
@@ -133,7 +133,7 @@ def test_explicit_label_schema():
 @pytest.mark.parametrize('bad_id', ['O1', 'Object0', 'Object01', 'Object-1', 'Object1.0'])
 def test_object_id_must_use_canonical_object_prefix(bad_id):
  with pytest.raises(ValueError):
-  propose(initial(), {'base_version':0,'actions':[action('create',object_id=bad_id,object_label='toilet'),action('assign',object_id=bad_id,observations=['0000:001'])]}, OBS, 0, E)
+  propose(initial(), {'base_version':0,'actions':[action('create',object_id=bad_id,object_label='toilet'),action('hold',object_id=bad_id,observations=['0000:001'])]}, OBS, 0, E)
 
 
 def test_relabel_preserves_observations_identity_and_history(tmp_path):
@@ -188,51 +188,61 @@ def _window(count):
     return obs, set(obs)
 
 
-def test_defer_is_per_observation():
-    # A whole-window deferral under one reason used to pass: the window's own ids
+def test_retired_action_names_are_refused():
+    """`assign` and `defer` are gone; the host names the action it does not know."""
+    for retired in ('assign', 'defer'):
+        payload = action(retired, observations=['0000:001'])
+        if retired == 'assign':
+            payload['object_id'] = 'Object1'
+        with pytest.raises(ValueError, match='Unknown action'):
+            propose(first(), {'base_version': 1, 'actions': [payload]}, OBS, 1, E)
+
+
+def test_discard_is_per_observation():
+    # A whole-window disposal under one reason used to pass: the window's own ids
     # are already in evidence, so it needed no inspection and no new image. That
-    # is what turned 34 deferred observations in the P1 run into 535 in P3, with
+    # is what turned 34 discarded observations in the P1 run into 535 in P3, with
     # single actions disposing of 41 at once. See DEVNOTES section 10.
-    from src.harness.state import DEFER_BATCH_LIMIT
-    obs, evidence = _window(DEFER_BATCH_LIMIT + 2)
+    from src.harness.state import DISCARD_BATCH_LIMIT
+    obs, evidence = _window(DISCARD_BATCH_LIMIT + 2)
     ids = sorted(obs)
-    with pytest.raises(ValueError, match='Defer at most'):
+    with pytest.raises(ValueError, match='Discard at most'):
         propose(initial(), {'base_version': 0,
-                            'actions': [action('defer', observations=ids)]}, obs, 0, evidence)
+                            'actions': [action('discard', observations=ids)]}, obs, 0, evidence)
 
 
-def test_defer_at_the_limit_is_allowed():
-    from src.harness.state import DEFER_BATCH_LIMIT
-    obs, evidence = _window(DEFER_BATCH_LIMIT)
+def test_discard_at_the_limit_is_allowed():
+    from src.harness.state import DISCARD_BATCH_LIMIT
+    obs, evidence = _window(DISCARD_BATCH_LIMIT)
     ids = sorted(obs)
     checked = propose(initial(), {'base_version': 0,
-                                  'actions': [action('defer', observations=ids)]}, obs, 0, evidence)
-    assert all(checked['state']['assignments'][i]['status'] == 'defer' for i in ids)
+                                  'actions': [action('discard', observations=ids)]}, obs, 0, evidence)
+    assert all(checked['state']['assignments'][i]['status'] == 'discard' for i in ids)
 
 
-def test_assign_batches_are_not_capped():
-    # The ceiling is on deferral, which is a judgement per observation, not on
-    # assignment, where one object legitimately owns many observations.
+def test_hold_batches_are_not_capped():
+    # The ceiling is on discard, which is a judgement per observation, not on
+    # holding, where one object can legitimately own many observations.
     obs, evidence = _window(8)
     ids = sorted(obs)
     actions = [action('create', object_id='Object1', object_label='bin'),
-               action('assign', object_id='Object1', observations=ids)]
+               action('hold', object_id='Object1', observations=ids)]
     checked = propose(initial(), {'base_version': 0, 'actions': actions}, obs, 0, evidence)
     assert all(checked['state']['assignments'][i]['object_id'] == 'Object1' for i in ids)
 
 
-def test_listing_hides_deferrals_but_state_keeps_them():
- """A deferral is a closed decision, not a queue: the listing omits it, the
+def test_listing_hides_discards_but_state_keeps_them():
+ """A discard is a closed decision, not a queue: the listing omits it, the
  state still records it so audit and coverage keep working.
 
- Across the 500-frame run no deferred observation was ever reclaimed, because
+ Across the 500-frame run no discarded observation was ever reclaimed, because
  its mask never appears in a later window. Broadcasting 550 of them every
  window cost 149 KB of the first message and bought nothing.
  """
- s=propose(initial(),{'base_version':0,'actions':[action('defer',observations=['0000:001']),
+ s=propose(initial(),{'base_version':0,'actions':[action('discard',observations=['0000:001']),
      action('exclude',observations=['0001:001'])]},OBS,1,E)['state']
  listing=Tools(SimpleNamespace(items=OBS),s,0).listing()
  assert set(listing)=={'version','objects','aliases'}
  assert '0000:001' not in json.dumps(listing)
- assert s['assignments']['0000:001']['status']=='defer'
+ assert s['assignments']['0000:001']['status']=='discard'
  assert s['assignments']['0001:001']['status']=='exclude'

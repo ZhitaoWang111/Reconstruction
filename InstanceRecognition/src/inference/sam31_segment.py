@@ -14,6 +14,12 @@ from src import config
 
 DEFAULT_THRESHOLD = 0.5
 DEFAULT_MAX_MASKS = 16
+# Fraction of the frame a mask must cover to be kept at all. Below this the
+# mask cannot carry enough surface to reconstruct the thing it shows, so
+# filtering it here is cheaper than letting every downstream stage carry it and
+# discard it later. Applied to the mask's own pixel count over width*height.
+# 0 disables the filter.
+DEFAULT_MIN_MASK_AREA_FRACTION = 0.005
 PALETTE = [
     (255, 99, 71), (30, 144, 255), (50, 205, 50), (255, 193, 7),
     (186, 85, 211), (0, 206, 209), (255, 105, 180), (255, 140, 0),
@@ -73,16 +79,18 @@ def sam3_session(predictor, source):
 
 
 def segment(predictor, source, categories, output, threshold=DEFAULT_THRESHOLD,
-            max_masks=DEFAULT_MAX_MASKS):
+            max_masks=DEFAULT_MAX_MASKS, min_area_fraction=DEFAULT_MIN_MASK_AREA_FRACTION):
     if not 0 <= threshold <= 1 or not 1 <= max_masks <= 32:
         raise ValueError('Invalid mask settings')
+    if not 0 <= min_area_fraction < 1:
+        raise ValueError('Invalid minimum mask area fraction')
     source, output = Path(source).resolve(), Path(output)
     with Image.open(source) as image:
         if image.format != 'JPEG':
             raise ValueError('Expected an original JPEG RGB frame')
         width, height = image.size
     (output / 'raw_masks').mkdir(parents=True, exist_ok=True)
-    candidates, prompts = [], []
+    candidates, prompts, excluded_by_size = [], [], []
     started = time.monotonic()
     with sam3_session(predictor, source) as session:
         for index, category in enumerate(categories):
@@ -103,10 +111,21 @@ def segment(predictor, source, categories, output, threshold=DEFAULT_THRESHOLD,
                 raise ValueError('SAM text output shape mismatch')
             if not np.isfinite(scores).all() or not np.isfinite(boxes).all():
                 raise ValueError('Nonfinite SAM output')
-            ids, empty = [], []
+            ids, empty, small = [], [], []
             for candidate_index, (mask, score, box) in enumerate(zip(masks, scores, boxes)):
                 if not mask.any():
                     empty.append(candidate_index)
+                    continue
+                pixels = int(mask.sum())
+                if min_area_fraction and pixels < min_area_fraction * width * height:
+                    # Too small to reconstruct from: no mask file, no candidate,
+                    # but the record is kept so the decision can be audited.
+                    excluded_by_size.append({
+                        'class_name': category['category'], 'class_id': index,
+                        'prompt_index': index, 'sam_prompt': category['sam_prompt'],
+                        'sam_score': float(score), 'sam_box_xyxy': box.round(2).tolist(),
+                        'mask_pixels': pixels, 'area_fraction': pixels / (width * height),
+                    })
                     continue
                 raw_id = len(candidates) + 1
                 mask_file = f'raw_masks/{raw_id:03d}_{safe_name(category["category"])}.png'
@@ -121,7 +140,9 @@ def segment(predictor, source, categories, output, threshold=DEFAULT_THRESHOLD,
                 })
                 ids.append(raw_id)
             prompts.append({**category, 'prompt_index': index, 'raw_candidate_ids': ids,
-                            'empty_candidate_indices': empty, 'elapsed_seconds': time.monotonic() - tick})
+                            'empty_candidate_indices': empty,
+                            'excluded_by_size_count': sum(1 for x in excluded_by_size if x['prompt_index'] == index),
+                            'elapsed_seconds': time.monotonic() - tick})
     selected = select_within_budget(candidates, max_masks)
     kept = {item['raw_candidate_id'] for item in selected}
     return {
@@ -129,9 +150,12 @@ def segment(predictor, source, categories, output, threshold=DEFAULT_THRESHOLD,
         'image_shape_hwc': [height, width, 3], 'instances': selected, 'instance_count': len(selected),
         'raw_candidates': candidates, 'raw_candidate_count': len(candidates), 'prompts': prompts,
         'excluded_by_budget': [item['raw_candidate_id'] for item in candidates if item['raw_candidate_id'] not in kept],
+        'excluded_by_size': excluded_by_size,
+        'excluded_by_size_count': len(excluded_by_size),
         'unique_classes': sorted({item['class_name'] for item in selected}),
         'policy': {'sam_output_prob_threshold': threshold, 'max_selected_masks': max_masks,
-                   'selection': 'top scores; ties by candidate order; all raw masks retained',
+                   'min_mask_area_fraction': min_area_fraction,
+                   'selection': 'masks below min_mask_area_fraction are dropped; the rest ranked by score; ties by candidate order; all retained raw masks kept',
                    'cross_category_nms': False, 'temporal_propagation': False},
         'elapsed_seconds': time.monotonic() - started,
     }

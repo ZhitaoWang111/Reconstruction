@@ -10,10 +10,13 @@ _LEGACY_OBSERVATION_KEYS = frozenset({'mask_id'})
 _LEGACY_OBSERVATION_TOKEN = 'mask_id'
 _CURRENT_OBSERVATION_TOKEN = 'instance_id'
 
-# A deferral is a per-observation judgement, not a way to clear a window. Four is
-# generous enough for a genuinely ambiguous cluster and small enough that a
-# whole-window disposal has to be written out one observation at a time.
-DEFER_BATCH_LIMIT = 4
+# A discard is a per-observation judgement, not a way to clear a window. Ten is
+# generous enough for a genuinely unusable cluster and small enough that a
+# whole-window disposal still has to be written out observation by observation.
+# `defer` was the name until 2026-11; the input no longer accepts it, because a
+# deferral was never reclaimed (0 of 532 in the v11 run) and the name promised a
+# later decision the host never offered.
+DISCARD_BATCH_LIMIT = 10
 
 
 def _strip_legacy_observation_keys(value):
@@ -130,7 +133,7 @@ def propose(state, proposal, observations, cutoff, evidence):
                 # it looks complete to the model and files nothing, and the coverage
                 # check then reports the missing ids as if they were never mentioned.
                 if 'observations' in extra:
-                    raise ValueError('create takes no observations; add a separate assign action for them')
+                    raise ValueError('create takes no observations; add a separate hold action for them')
                 raise ValueError(f'create accepts only action, object_id, object_label, evidence and '
                                  f'reason; got {sorted(extra)}')
             if not isinstance(oid, str) or not oid.startswith('Object') or not oid[6:].isdigit() or int(oid[6:]) <= 0:
@@ -158,32 +161,32 @@ def propose(state, proposal, observations, cutoff, evidence):
                 'evidence': copy.deepcopy(refs), 'reason': a['reason'], 'decided_at': cutoff})
             obj['object_label'] = object_label
             # affected tracks geometry changes; a category correction reuses the cloud.
-        elif kind in ('assign', 'defer', 'exclude'):
+        elif kind in ('hold', 'discard', 'exclude'):
             ids = a.get('observations')
             if not isinstance(ids, list) or not ids or len(set(ids)) != len(ids) or any(x not in visible for x in ids):
                 raise ValueError('Invalid, repeated, or future observation IDs')
-            # One deferral is one decision. Without a ceiling, "defer everything
+            # One discard is one decision. Without a ceiling, "discard everything
             # in this window under one reason" is a legal, zero-cost action: the
             # window's own ids are already in evidence, so it needs no inspection
-            # and always passes. That is what turned 34 deferred observations in
+            # and always passes. That is what turned 34 discarded observations in
             # the P1 run into 535 in the P3 run, with single actions disposing of
-            # 41 at once. Deferring may still happen; it has to be per observation.
-            if kind == 'defer' and len(ids) > DEFER_BATCH_LIMIT:
+            # 41 at once. Discarding may still happen; it has to be per observation.
+            if kind == 'discard' and len(ids) > DISCARD_BATCH_LIMIT:
                 raise ValueError(
-                    f'Defer at most {DEFER_BATCH_LIMIT} observations per action; got {len(ids)}. '
-                    'Each deferral needs its own reason, because a group deferral under one '
-                    'reason is not a decision. Submit one defer action per observation you '
-                    'actually judged ambiguous, after inspecting it.')
+                    f'Discard at most {DISCARD_BATCH_LIMIT} observations per action; got {len(ids)}. '
+                    'Each discard needs its own reason, because a group discard under one '
+                    'reason is not a decision. Submit one discard action per observation you '
+                    'actually judged unusable, after inspecting it.')
             if touched.intersection(ids): raise ValueError('Observation changed twice in one proposal')
             touched.update(ids)
-            if kind == 'assign' and oid not in new['objects']: raise ValueError('Unknown target object')
+            if kind == 'hold' and oid not in new['objects']: raise ValueError('Unknown target object')
             for obs in ids:
                 old = new['assignments'].get(obs, {}).get('object_id')
                 if old: affected.add(old)
-                new['assignments'][obs] = {'object_id': oid if kind == 'assign' else None,
-                    'status': 'assigned' if kind == 'assign' else kind, 'reason': a['reason'], 'evidence': refs,
+                new['assignments'][obs] = {'object_id': oid if kind == 'hold' else None,
+                    'status': 'assigned' if kind == 'hold' else kind, 'reason': a['reason'], 'evidence': refs,
                     'decided_at': cutoff}
-            if kind == 'assign': affected.add(oid)
+            if kind == 'hold': affected.add(oid)
         elif kind == 'merge':
             source = a.get('source_object')
             if source == oid or source not in new['objects'] or oid not in new['objects']:
@@ -199,7 +202,7 @@ def propose(state, proposal, observations, cutoff, evidence):
         else:
             raise ValueError(f'Unknown action {kind}')
     if set(new['assignments']) != visible:
-        raise ValueError('Every visible observation needs assigned/defer/exclude status; missing: '+str(sorted(visible-set(new['assignments']))))
+        raise ValueError('Every visible observation needs assigned/discard/exclude status; missing: '+str(sorted(visible-set(new['assignments']))))
     for oid in new['objects']:
         if not any(a['object_id'] == oid for a in new['assignments'].values()):
             raise ValueError(f'Empty object {oid}; assign observations or merge it')

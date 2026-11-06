@@ -112,14 +112,14 @@ def check_assign(action_index, action, prior_assignments, centroids,
 
 def verify_reidentification(actions, prior_assignments, centroids,
                             floor_m=DEFAULT_FLOOR_M, scale_multiplier=SCALE_MULTIPLIER):
-    """Screen every assign in a proposal; report the ones that need a look.
+    """Screen every hold in a proposal; report the ones that need a look.
 
-    Only `assign` is screened.  `create` has no archive to re-identify against,
-    and `defer`/`exclude`/`relabel`/`merge` do not put new surfaces into an object.
+    Only `hold` is screened.  `create` has no archive to re-identify against,
+    and `discard`/`exclude`/`relabel`/`merge` do not put new surfaces into an object.
     """
     checks = []
     for index, action in enumerate(actions or []):
-        if action.get('action') != 'assign':
+        if action.get('action') != 'hold':
             continue
         check = check_assign(index, action, prior_assignments, centroids,
                              floor_m, scale_multiplier)

@@ -10,7 +10,8 @@ from PIL import Image, ImageDraw
 from src import config
 from .io import perception_dir, read_json, sha256, write_json
 from .label_frames import validate
-from .sam31_segment import DEFAULT_MAX_MASKS, DEFAULT_THRESHOLD, PALETTE, load_predictor, segment
+from .sam31_segment import (DEFAULT_MAX_MASKS, DEFAULT_MIN_MASK_AREA_FRACTION, DEFAULT_THRESHOLD,
+                            PALETTE, load_predictor, segment)
 
 
 def write_display_artifacts(prediction, output):
@@ -48,28 +49,34 @@ class GptSam31Segmenter:
         self.threshold = threshold
         self.load_seconds = time.monotonic() - started
 
-    def infer(self, source, labels_path, output, max_masks=DEFAULT_MAX_MASKS):
+    def infer(self, source, labels_path, output, max_masks=DEFAULT_MAX_MASKS,
+              min_area_fraction=DEFAULT_MIN_MASK_AREA_FRACTION):
         labels = read_json(labels_path)
         result = segment(self.predictor, source, labels['labels']['categories'], output,
-                         self.threshold, max_masks)
+                         self.threshold, max_masks, min_area_fraction)
         return write_display_artifacts(result, output)
 
     def close(self):
         self.predictor.shutdown()
 
 
-def frame_provenance(record, labels_path, checkpoint, threshold, max_masks):
+def frame_provenance(record, labels_path, checkpoint, threshold, max_masks,
+                     min_area_fraction=DEFAULT_MIN_MASK_AREA_FRACTION):
     checkpoint = Path(checkpoint).resolve(strict=True)
     stat = checkpoint.stat()
     return {'format': 'gpt_sam31_v2', 'source_sha256': sha256(record['source']),
             'labels_sha256': sha256(labels_path), 'threshold': threshold, 'max_masks': max_masks,
+            'min_mask_area_fraction': min_area_fraction,
             'checkpoint': str(checkpoint), 'checkpoint_size': stat.st_size,
             'checkpoint_mtime_ns': stat.st_mtime_ns}
 
 
-def run(labels_run, output, checkpoint, threshold=DEFAULT_THRESHOLD, max_masks=DEFAULT_MAX_MASKS):
+def run(labels_run, output, checkpoint, threshold=DEFAULT_THRESHOLD, max_masks=DEFAULT_MAX_MASKS,
+        min_area_fraction=DEFAULT_MIN_MASK_AREA_FRACTION):
     if not 0 <= threshold <= 1 or not 1 <= max_masks <= 32:
         raise ValueError('Invalid mask settings')
+    if not 0 <= min_area_fraction < 1:
+        raise ValueError('Invalid minimum mask area fraction')
     labels_run, output = Path(labels_run).resolve(), Path(output).resolve()
     records = read_json(labels_run / 'config.json')['frames']
     if not records:
@@ -87,7 +94,8 @@ def run(labels_run, output, checkpoint, threshold=DEFAULT_THRESHOLD, max_masks=D
             if labels['source_frame_id'] != fid or Path(labels['source']).resolve() != Path(record['source']).resolve():
                 raise ValueError(f'GPT labels and batch disagree on frame {seq}')
             validate(labels['labels'])
-            provenance = frame_provenance(record, label_path, checkpoint, threshold, max_masks)
+            provenance = frame_provenance(record, label_path, checkpoint, threshold, max_masks,
+                                          min_area_fraction)
             folder = output / f'frame_{fid:06d}' / 'sam31'
             prediction_path = folder / 'predictions.json'
             if folder.exists():
@@ -107,7 +115,8 @@ def run(labels_run, output, checkpoint, threshold=DEFAULT_THRESHOLD, max_masks=D
                 with tempfile.TemporaryDirectory(prefix='.sam31-', dir=folder.parent) as temporary:
                     staging = Path(temporary) / 'sam31'
                     staging.mkdir()
-                    prediction = segmenter.infer(record['source'], label_path, staging, max_masks)
+                    prediction = segmenter.infer(record['source'], label_path, staging, max_masks,
+                                                 min_area_fraction)
                     prediction.update({
                         'sequence_index': seq, 'source_frame_id': fid, 'provenance': provenance,
                         'gpt_model': labels['requested_model'], 'gpt_elapsed_seconds': labels['elapsed_seconds'],
@@ -137,16 +146,21 @@ def parse_args(argv=None):
     parser.add_argument('--checkpoint', type=Path, default=config.SAM31_CHECKPOINT)
     parser.add_argument('--threshold', type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument('--max-masks', type=int, default=DEFAULT_MAX_MASKS)
+    parser.add_argument('--min-mask-area', type=float, default=DEFAULT_MIN_MASK_AREA_FRACTION,
+                        help='Drop masks covering less than this fraction of the frame (0 disables)')
     args = parser.parse_args(argv)
     if not 0 <= args.threshold <= 1 or not 1 <= args.max_masks <= 32:
         parser.error('Require threshold in 0..1 and max-masks in 1..32')
+    if not 0 <= args.min_mask_area < 1:
+        parser.error('Require min-mask-area in 0..1')
     return args
 
 
 def main(argv=None):
     args = parse_args(argv)
     folder = perception_dir(args.run)
-    return run(folder / 'labels', folder / 'masks', args.checkpoint, args.threshold, args.max_masks)
+    return run(folder / 'labels', folder / 'masks', args.checkpoint, args.threshold, args.max_masks,
+               args.min_mask_area)
 
 
 if __name__ == '__main__':

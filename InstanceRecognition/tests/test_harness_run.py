@@ -48,7 +48,7 @@ def runner(tmp_path, monkeypatch):
             name = 'propose_update'
             obs = f'{first:04d}:001'
             proposal = {'base_version': first, 'actions': [{
-                'action': 'defer', 'observations': [obs], 'reason': 'Ambiguous identity', 'evidence': [obs]}]}
+                'action': 'discard', 'observations': [obs], 'reason': 'Ambiguous identity', 'evidence': [obs]}]}
             args = {'proposal_json': json.dumps(proposal)}
         response = {'choices': [{'finish_reason': 'tool_calls', 'message': {
             'role': 'assistant', 'tool_calls': [{'id': f'c{first}_{name}', 'type': 'function',

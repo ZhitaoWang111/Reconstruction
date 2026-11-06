@@ -37,7 +37,7 @@ def tools_for(centroid=FAR):
 
 def propose_assign(tools, object_id='Object25', observations=(CURRENT,)):
     body = {'base_version': 1, 'actions': [{
-        'action': 'assign', 'object_id': object_id, 'observations': list(observations),
+        'action': 'hold', 'object_id': object_id, 'observations': list(observations),
         'evidence': list(observations), 'reason': 'same bin seen before'}]}
     return tools.call('propose_update', {'proposal_json': json.dumps(body)})[0]
 
@@ -102,7 +102,7 @@ def test_creating_an_object_is_never_held():
     body = {'base_version': 1, 'actions': [
         {'action': 'create', 'object_id': 'Object26', 'object_label': 'bin',
          'evidence': [CURRENT], 'reason': 'new bin'},
-        {'action': 'assign', 'object_id': 'Object26', 'observations': [CURRENT],
+        {'action': 'hold', 'object_id': 'Object26', 'observations': [CURRENT],
          'evidence': [CURRENT], 'reason': 'assign the new bin'}]}
     payload = tools.call('propose_update', {'proposal_json': json.dumps(body)})[0]
     assert 'proposal_id' in payload

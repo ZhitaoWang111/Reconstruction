@@ -78,13 +78,16 @@ def build(run_dir, site_dir):
             elif kind=='merge':
                 add(oid,'合并：'+a['source_object']+' → '+oid)
                 add(a['source_object'],'合并至 '+oid)
-            elif kind in ('assign','defer','exclude','repair'):  # `repair` is the pre-rename name
+            # `repair` -> `exclude` and `assign`/`defer` -> `hold`/`discard` are
+            # renames; a run may predate either, and its pages still have to render.
+            elif kind in ('hold', 'discard', 'exclude', 'assign', 'defer', 'repair'):
                 for obs in a['observations']:
                     old=previous['assignments'].get(obs)
-                    if old and (old.get('object_id')!=oid or old['status']!=('assigned' if kind=='assign' else kind)):
+                    new_status='assigned' if kind in ('hold','assign') else ('discard' if kind in ('discard','defer') else kind)
+                    if old and (old.get('object_id')!=oid or old['status']!=new_status):
                         add(old.get('object_id'),'修正观测归属')
                         add(oid,'修正观测归属')
-                if kind=='assign' and oid in previous['objects']:add(oid,'补充观测')
+                if kind in ('hold','assign') and oid in previous['objects']:add(oid,'补充观测')
         changes.append({'window_index':index,'first':previous.get('cutoff',-1)+1,'cutoff':state['cutoff'],'objects':list(entries.values())})
         previous=state
     (out/'result_data.js').write_text('window.RESULT_FRAMES='+dumps_sanitized(mapping,ensure_ascii=False)+';\nwindow.RESULT_CHANGES='+dumps_sanitized(changes,ensure_ascii=False)+';\n'

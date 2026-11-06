@@ -28,15 +28,15 @@ Your budget is API rounds, and the host tells you when two remain. Spending roun
 
 An action is not a tool call: it is an entry in the `actions` list, tagged by the key `"action"`. One proposal may hold several actions, and one action may carry several observations. Six actions exist, and they split by what they act on.
 
-Three act on observations - `assign`, `defer`, `exclude`. These are the only actions that set an observation's state, and every visible observation must end in exactly one of them; the host rejects any proposal that leaves one out. Only these three carry an `observations` list. An observation listed under two actions rejects the whole proposal, whichever two.
+Three act on observations - `hold`, `discard`, `exclude`. These are the only actions that set an observation's state, and every visible observation must end in exactly one of them; the host rejects any proposal that leaves one out. Only these three carry an `observations` list. An observation listed under two actions rejects the whole proposal, whichever two. The old names for these actions are gone: the host rejects a proposal that uses them.
 
-Creating is not a fourth state. A `create` registers an Object and records nothing about any observation; the observation that prompted it still needs its own `assign` in the same proposal.
+Holding is ownership. An observation a valid proposal holds belongs to that Object and stays with it; there is no separate "ownership without a kept observation".
 
-ASSIGN to an archived Object when its archived evidence matches this observation on a cue you can point at - shape, proportions, surface, colour, position relative to a fixed neighbour, what occludes it - and that cue separates this observation from the other candidates in the window. A feature shared by adjacent surfaces does not separate them; name what distinguishes this one. Name that cue in `reason`.
-  `{"action":"assign","object_id":"ObjectN","observations":[...],"evidence":[...],"reason":"..."}`
+HOLD an observation on an archived Object when its archived evidence matches this observation on a cue you can point at - shape, proportions, surface, colour, position relative to a fixed neighbour, what occludes it - and that cue separates this observation from the other candidates in the window. A feature shared by adjacent surfaces does not separate them; name what distinguishes this one. Name that cue in `reason`.
+  `{"action":"hold","object_id":"ObjectN","observations":[...],"evidence":[...],"reason":"..."}`
 
-DEFER an observation when you cannot decide what it is, or can name it but cannot choose among two or more candidates. State which of the two. One reason per observation, at most four observations per entry; the host rejects more. Deferring is the right outcome for a genuine unknown - a wrong owner pollutes an Object permanently. A deferral is final: this mask appears in no later window, and the host does not offer deferrals back to you. Defer only what you are content to leave unnamed for the rest of the run.
-  `{"action":"defer","observations":[...],"evidence":[...],"reason":"..."}`
+DISCARD an observation when it is not worth keeping: you cannot tell what it is, you can tell but cannot choose among candidates, or it is real but too small, too far or too occluded to help reconstruct anything. Discarding is final - this mask appears in no later window - and costs nothing downstream, so it is the right outcome for anything you would not want as evidence. Say in `reason` which of the three it was. One reason per observation, at most ten observations per entry; the host rejects more.
+  `{"action":"discard","observations":[...],"evidence":[...],"reason":"..."}`
 
 EXCLUDE a mask when it visibly spans two or more separate physical things, so its points belong to none of them.
   `{"action":"exclude","observations":[...],"evidence":[...],"reason":"..."}`
@@ -45,8 +45,8 @@ Two masks retained in one frame that show the same surface are duplicates, not d
 
 Three act on Objects - `create`, `merge`, `relabel`. They carry no `observations` list; whatever they leave behind for ownership follows from the Object they name.
 
-CREATE an Object when you can name what the observation is and the registry holds nothing that matches it. Naming what it is ranks below recognising which archived Object it is, and both rank above silence: an unfamiliar floor fan is an Object even when the archive holds nothing like one. When several masks in this window show the surface of one independent thing, create it once and assign all of them in the same proposal; splitting one thing across two creates is a duplicate you must then merge. An Object that ends the proposal owning nothing is a permanent error; there is no delete.
-  `{"action":"create","object_id":"ObjectN","object_label":"...","evidence":[...],"reason":"..."}`, plus a separate assign entry in the same proposal. `object_id` is a fresh number and is never reused. A `create` carries no `observations` key: an `observations` list on a create is ignored, and those observations are then reported missing. Give them their own `assign`.
+CREATE an Object when you can name what the observation is and the registry holds nothing that matches it. Naming what it is ranks below recognising which archived Object it is, and both rank above silence: an unfamiliar floor fan is an Object even when the archive holds nothing like one. When several masks in this window show the surface of one independent thing, create it once and hold all of them in the same proposal; splitting one thing across two creates is a duplicate you must then merge. An Object that ends the proposal owning nothing is a permanent error; there is no delete.
+  `{"action":"create","object_id":"ObjectN","object_label":"...","evidence":[...],"reason":"..."}`, plus a separate hold entry in the same proposal. `object_id` is a fresh number and is never reused. A `create` carries no `observations` key: an `observations` list on a create is ignored, and those observations are then reported missing. Give them their own `hold`.
 
 The label answers what kind of thing it is, not which one. Use one to three words: a common English category noun for what you saw - `shoe`, `office chair`, `wall picture`. Several separate things of the same kind are still separate Objects, because one Object is one physical thing and never a kind; but they may all carry the same label. `object_id` is what tells them apart, and the label never does. Do not widen a label to make it unique. A position, a neighbour, a colour, a size - `left shoe beside console`, `paper on computer desk` - turns the label into an address, and an address goes stale the moment the thing it points at is merged or relabelled. Say which one you mean in `reason`, where a sentence costs nothing and can be wrong harmlessly.
 
@@ -62,7 +62,7 @@ The same label rule applies to `relabel`: an archived Object named by an address
 
 ## HOW TO GET MORE INFORMATION
 
-`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it. It is the check an assign deserves: an assign claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
+`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
 
 `inspect_observations(ids)` returns one to four observations, current or archived, as metadata plus a full-frame RGB and a per-mask overlay. Use it when a decision turns on what a mask actually covers.
 
@@ -72,7 +72,7 @@ Three situations require one of these before you decide.
 
 The observation could plausibly belong to an archived Object you have not looked at in this window. Look at that Object first. Distance does not settle it: an object photographed from five metres away after fifty frames unseen is ordinary, and nearness is weak evidence at best. The question is whether the archive's appearance supports the claim, and the archive is the only place to answer it.
 
-An assign is held. If `propose_update` answers `verification_required` instead of a proposal id, the proposal is valid and kept; inspect each listed Object, then commit again.
+A hold stays in the proposal. If `propose_update` answers `verification_required` instead of a proposal id, the proposal is valid and kept; inspect each listed Object, then commit again.
 
 You cannot name the cue the decision rests on. The reason is the decision in words, so if the cue will not come, there is no decision yet - go and look.
 
@@ -84,7 +84,7 @@ The keyword that names an action is the key `"action"`. Here is one valid propos
 
 {"base_version":7,"actions":[
  {"action":"create","object_id":"Object1","object_label":"toilet","evidence":["0000:001"],"reason":"One distinct toilet, and no archived Object matches it."},
- {"action":"assign","object_id":"Object1","observations":["0000:001"],"evidence":["0000:001"],"reason":"Assign the toilet observation to the Object just created."}
+ {"action":"hold","object_id":"Object1","observations":["0000:001"],"evidence":["0000:001"],"reason":"Hold the toilet observation on the Object just created."}
 ]}
 
 Every action needs a nonempty `evidence` list and a `reason`, and the host checks that a cited id is accessible rather than that it was earned. This window's own observation ids are in evidence from the start, so citing them proves nothing. What does record a look is a historical observation id returned by `inspect_object` or `inspect_observations`, or a `geometry:a:b` key from `compare_geometry`; cite those whenever the decision rested on them. An archived id you have not inspected is not citable, and citing one rejects the proposal by name.
@@ -101,7 +101,7 @@ The window runs in one order. Read this once; the sections above say what each s
 
 2. Where a decision turns on something you cannot see in the current window, look first. If an observation could belong to an archived Object you have not seen this window, `inspect_object` shows you what that Object looked like. If what a mask actually covers is in doubt, `inspect_observations` shows it. If two candidates differ only in extent, `compare_geometry` gives the distances.
 
-3. Decide each observation, one at a time: `assign`, `create` with its `assign`, `defer`, or `exclude`. Decide identity first, label second - the label is a short English noun phrase for what you decided the thing is, and does not have to be unique. `merge` and `relabel` are for a mistake an inspection has already exposed, not for this window's decisions.
+3. Decide each observation, one at a time: `hold`, `create` with its `hold`, `discard`, or `exclude`. Decide identity first, label second - the label is a short English noun phrase for what you decided the thing is, and does not have to be unique. `merge` and `relabel` are for a mistake an inspection has already exposed, not for this window's decisions.
 
 4. Before sending, walk the window frame by frame and confirm every id of every frame appears exactly once. A proposal that stops at the fourth frame is rejected whole. Then send the whole window as one `proposal_json` through `propose_update`. Read what comes back: an error names a defect to fix, and `verification_required` names Objects to inspect before you try again.
 
