@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>算法设计 · 1105-v1 · InstanceRecognition</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --model:#7c3aed; --model-soft:#f3eefe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr); max-width:1180px; margin:0 auto; padding:0 28px 120px}
+  @media (min-width:1080px){
+    .wrap{grid-template-columns:230px minmax(0,1fr); gap:56px; padding-left:36px; padding-right:36px}
+    .rail{position:sticky; top:0; align-self:start; max-height:100vh; overflow:auto; padding:44px 0}
+  }
+  .rail{display:none}
+  @media (min-width:1080px){ .rail{display:block} }
+  .rail-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px}
+  .rail a{
+    display:block; padding:7px 12px; margin:1px 0; border-radius:6px;
+    color:var(--ink-2); text-decoration:none; font-size:13.5px; border-left:2px solid transparent;
+  }
+  .rail a:hover{background:var(--line-2); color:var(--ink)}
+  .rail a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+  .rail a .n{font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:7px}
+  .rail a.on .n{color:var(--accent)}
+
+  header.top{padding:56px 0 34px; border-bottom:1px solid var(--line); margin-bottom:8px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+  h1{margin:0 0 14px; font-size:clamp(28px,3.6vw,40px); line-height:1.2; letter-spacing:-.022em; font-weight:700}
+  .lede{margin:0; max-width:62ch; color:var(--ink-2); font-size:16.5px}
+  .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+
+  section{padding-top:56px; scroll-margin-top:24px}
+  h2{margin:0 0 6px; font-size:23px; letter-spacing:-.014em; font-weight:700; display:flex; align-items:baseline; gap:12px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; letter-spacing:.04em}
+  .sub{margin:0 0 22px; color:var(--ink-3); font-size:14px; font-family:var(--mono)}
+  h3{margin:34px 0 10px; font-size:16.5px; font-weight:650; letter-spacing:-.006em}
+  h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  ul{margin:0 0 14px; padding-left:22px; line-height:1.8}
+  li{margin-bottom:4px}
+  code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.8px; line-height:1.65}
+  pre code{background:none; padding:0; color:inherit; font-size:inherit}
+  pre .c{color:#7d8894}
+  pre .k{color:#7dd3fc}
+  pre .s{color:#a5d6a7}
+
+  .io{border:1px solid var(--line); border-radius:10px; background:var(--card); margin:0 0 26px; overflow:hidden}
+  .io .row{display:grid; grid-template-columns:76px minmax(0,1fr); gap:16px; padding:13px 18px; border-bottom:1px solid var(--line-2)}
+  .io .row:last-child{border-bottom:none}
+  .io .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:700; padding-top:3px}
+  .io .val{font-size:14.5px; line-height:1.7}
+  .io .val code{font-size:12.8px}
+
+  .flow{display:grid; gap:0; margin:26px 0 8px}
+  .step{display:grid; grid-template-columns:34px minmax(0,1fr); gap:16px; align-items:start}
+  .step .dot{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:13px; font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .step .dot.m{background:var(--model-soft); color:var(--model); border-color:#ddd0fb}
+  .step .dot.w{background:var(--warn-soft); color:var(--warn); border-color:#f2ddb4}
+  .step .body{padding:5px 0 26px; border-bottom:1px dashed var(--line)}
+  .step:last-child .body{border-bottom:none}
+  .step .name{font-weight:650; font-size:15.5px; margin-bottom:3px}
+  .step .io2{font-family:var(--mono); font-size:12.3px; color:var(--ink-3); line-height:1.7}
+  .step .io2 em{font-style:normal; color:var(--ink-2)}
+
+  .marks{display:grid; gap:10px; margin:16px 0}
+  .mark{display:grid; grid-template-columns:74px minmax(0,1fr); gap:14px; padding:12px 15px; border-radius:8px; font-size:14.5px; line-height:1.65}
+  .mark .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding-top:2px}
+  .mark.a{background:var(--accent-soft); border:1px solid #bfe3dd}
+  .mark.a .who{color:var(--accent)}
+  .mark.m{background:var(--model-soft); border:1px solid #ddd0fb}
+  .mark.m .who{color:var(--model)}
+  .mark.w{background:var(--warn-soft); border:1px solid #f2ddb4}
+  .mark.w .who{color:var(--warn)}
+
+  .note{background:var(--accent-soft); border:1px solid #bfe3dd; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+  .warn{background:var(--warn-soft); border:1px solid #f2ddb4; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; border-bottom:1px solid var(--line); white-space:nowrap}
+  td code{font-size:12.6px}
+  tbody tr:hover{background:#f7f9fa}
+
+  .tree{font-family:var(--mono); font-size:13px; line-height:1.75; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 20px; margin:16px 0 20px; white-space:pre; overflow-x:auto; color:var(--ink)}
+  .tree i{color:var(--ink-3); font-style:normal}
+  .tree b{color:var(--accent)}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="rail" id="rail">
+  <div class="rail-title">1105-v1 算法</div>
+  <a href="#overview"><span class="n">00</span>变更动机</a>
+  <a href="#perception"><span class="n">01</span>感知过滤</a>
+  <a href="#candidates"><span class="n">02</span>空间候选</a>
+  <a href="#hold"><span class="n">03</span>持有机制</a>
+  <a href="#window"><span class="n">04</span>窗口输入</a>
+  <a href="#tools"><span class="n">05</span>工具与流程</a>
+  <a href="#verify"><span class="n">06</span>verify</a>
+  <a href="#actions"><span class="n">07</span>动作表</a>
+</nav>
+
+<main>
+
+<header class="top">
+  <div class="eyebrow">InstanceRecognition · Algorithm Design · 1105-v1</div>
+  <h1>1105-v1 算法变更说明</h1>
+  <p class="lede">
+    相比 v11 基线，1105-v1 在感知、候选几何、持有上限、verify 四个层面做了系统性改动，
+    目标是减少同类物体混淆、让误判代价可控、让宿主提供可信的几何证据。
+  </p>
+  <div class="meta">
+    <span class="tag">设计日期 <b>2026-11</b></span>
+    <span class="tag">基准 <b>v11 · 500 帧 / 100 窗 / 114 物体</b></span>
+    <span class="tag">源码分支 <b>HEAD（d82021c 起）</b></span>
+  </div>
+</header>
+
+
+<!-- ============ 00 ============ -->
+<section id="overview">
+  <h2><span class="no">00</span>变更动机</h2>
+  <p class="sub">从 v11 的四个根因出发</p>
+
+  <p>
+    v11（500 帧 / 100 窗）暴露了四个反复出现的失败模式，1105-v1 针对每一个做了对应的改动：
+  </p>
+
+  <table>
+    <thead><tr><th>根因</th><th>v11 表现</th><th>1105-v1 对策</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>感知噪声</td>
+        <td>过小的 mask（画面占比 &lt;0.5%）给 harness 带来无效观测，模型逐一 discard 消耗预算</td>
+        <td>SAM 阶段按画面面积过滤，0.5% 阈值，500 帧共过滤 22.9%（1154/5046）原始候选</td>
+      </tr>
+      <tr>
+        <td>几何候选弱</td>
+        <td>每条观测只给最近 3 个候选、用中位距离，同类物体（凳子）分不清；全局 OBB 几乎没用上（<code>compare_geometry</code> 调用 3 次）</td>
+        <td>候选扩展到 15 个，改用 gap（第 5 百分位最近距离）+ overlap（10 cm 内占比），删掉 OBB 块和 <code>compare_geometry</code></td>
+      </tr>
+      <tr>
+        <td>无持有上限</td>
+        <td>一个物体可积累几百条观测，错误无法纠正，点云随时间偏移</td>
+        <td>每个物体最多持有 5 条，超员时模型用 <code>evict</code> 换位</td>
+      </tr>
+      <tr>
+        <td>无验证环节</td>
+        <td>提交后没有检查机制，归错的观测一旦提交永久留存</td>
+        <td>每次 <code>propose_update</code> 后宿主渲染反投影图，模型确认再 commit</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    另外，动作名称做了语义修正：<code>assign</code>→<code>hold</code>，<code>defer</code>→<code>discard</code>，
+    让名字和实际语义一致（持有是长期的，丢弃是最终的）。
+  </p>
+</section>
+
+
+<!-- ============ 01 ============ -->
+<section id="perception">
+  <h2><span class="no">01</span>感知过滤</h2>
+  <p class="sub">src/inference/sam31_segment.py · DEFAULT_MIN_MASK_AREA_FRACTION = 0.005</p>
+
+  <div class="io">
+    <div class="row"><div class="lbl">触发</div><div class="val">在 SAM 候选循环里，mask 像素数算出来之后，预算截断之前</div></div>
+    <div class="row"><div class="lbl">阈值</div><div class="val">占画面面积 0.5%（1296×968 = 1,254,528 px，约 6,273 像素）</div></div>
+    <div class="row"><div class="lbl">豁免</div><div class="val">无碰边豁免：bbox 触及画面边缘也同样过滤</div></div>
+    <div class="row"><div class="lbl">审计</div><div class="val">被过滤的候选不写 mask 文件，只记入 <code>excluded_by_size</code> 字段（类别、面积占比、bbox、sam_score）</div></div>
+  </div>
+
+  <h3>阈值选取依据</h3>
+  <p>
+    在 v11 的 500 帧上实测：0.5% 过滤 1154 个原始候选（22.9%），影响 341 帧，主要是书、鞋、遥控器等小物体。
+    调高到 1.0% 多过滤 544 个，新增的主要是柜子、门的残缺视图（大物体只露一角），代价明显大于收益，故保持 0.5%。
+  </p>
+  <div class="warn">
+    已知代价：0.5% 下柜子丢 43 个、门丢 15 个候选，均为大物体的小视图（离得远或只露一角）。
+    若后续发现某些物体点云缺块，先查 <code>excluded_by_size</code> 记录。
+  </div>
+
+  <h3>与 excluded_by_budget 的区别</h3>
+  <p>
+    <code>excluded_by_budget</code> 是按 SAM 置信度截断的预算限制（默认上限 16 个/帧）；
+    <code>excluded_by_size</code> 是面积过滤，发生在预算截断之前，两者记录相互独立。
+    在 500 帧实测中，67 帧触及 16 个/帧上限，<code>excluded_by_budget</code> 几乎不触发。
+  </p>
+</section>
+
+
+<!-- ============ 02 ============ -->
+<section id="candidates">
+  <h2><span class="no">02</span>空间候选重写</h2>
+  <p class="sub">src/harness/spatial_context.py · 1105-v1 item 2</p>
+
+  <div class="io">
+    <div class="row"><div class="lbl">删除</div><div class="val">全局 OBB 块（<code>global_object_geometry</code>）、<code>compare_geometry</code> 工具、<code>geometry:a:b</code> 证据键</div></div>
+    <div class="row"><div class="lbl">保留</div><div class="val">每条观测的 <code>spatial_candidates</code>，字段从 3 个扩展到最多 15 个，指标从中位距离改为 gap + overlap</div></div>
+  </div>
+
+  <h3>两个新指标</h3>
+  <table>
+    <thead><tr><th>字段</th><th>计算方式</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>gap_m</code></td>
+        <td>观测点云到候选物体点云各点最近距离的第 5 百分位</td>
+        <td>「还差多远才能接触到」。用第 5 百分位而非最小值，抑制 mask 边缘的单个噪点</td>
+      </tr>
+      <tr>
+        <td><code>overlap</code></td>
+        <td>观测点云中距候选物体点云 10 cm 以内的点的比例</td>
+        <td>「有多少表面是重叠的」。10 cm 容差吸收 AMB3R 跨帧误差（中位 6.6 cm，p90 13.1 cm）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>候选选取规则</h3>
+  <div class="flow">
+    <div class="step">
+      <div class="dot">1</div>
+      <div class="body">
+        <div class="name">质心预筛</div>
+        <div class="io2">只对质心距离 ≤ 2.5 m 的物体建 KD 树，跳过远处物体避免不必要计算</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">2</div>
+      <div class="body">
+        <div class="name">gap 截断</div>
+        <div class="io2">gap &gt; 2 m 的物体丢弃（太远，不可能是同一个物体）</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">3</div>
+      <div class="body">
+        <div class="name">取前 8</div>
+        <div class="io2">按 gap 升序取前 8 个候选</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">4</div>
+      <div class="body">
+        <div class="name">密集扩展</div>
+        <div class="io2">第 9 名起，gap &lt; 0.5 m 的继续补入，最多补到总数 15 个。0.5 m 来自 AMB3R 双帧最大误差（≈0.4 m）加余量</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>物体点云的变化</h3>
+  <p>
+    候选的 gap/overlap 只用该物体的<b>持有观测</b>（status <code>held</code>）点云计算，不再用历史所有归属观测。
+    持有上限 5 条保证了点云规模可控，跨帧误差不会随时间累积放大。
+  </p>
+
+  <h3>视角参考值（2b 批新增）</h3>
+  <p>
+    每个候选还附带两个视角字段，来自 <code>scene_amb3r_v2</code> 里写入的 <code>camera_to_world</code>：
+  </p>
+  <ul>
+    <li><code>view_direction</code>：相机到物体质心的单位向量（球面方向）</li>
+    <li><code>camera_distance_m</code>：相机到质心的距离（米）</li>
+  </ul>
+  <p>源没有 <code>camera_to_world</code>（如 <code>scene_amb3r_v1</code>）时这两个字段不出现，候选正常返回。</p>
+</section>
+
+
+<!-- ============ 03 ============ -->
+<section id="hold">
+  <h2><span class="no">03</span>持有机制</h2>
+  <p class="sub">src/harness/state.py · HOLD_LIMIT = 5</p>
+
+  <div class="io">
+    <div class="row"><div class="lbl">上限</div><div class="val">每个物体最多持有 5 条观测（<code>HOLD_LIMIT</code>）</div></div>
+    <div class="row"><div class="lbl">状态名</div><div class="val"><code>held</code>（原 <code>assigned</code>，向后兼容读旧 run）</div></div>
+    <div class="row"><div class="lbl">换位</div><div class="val">hold 动作带 <code>evict</code> 字段指定被替换的观测；被替换的观测转 discard</div></div>
+    <div class="row"><div class="lbl">inspect</div><div class="val">物体满员时 <code>inspect_object</code> 自动返回全部 5 条（含视角方向和可见像素），无需指定参数</div></div>
+  </div>
+
+  <h3>满员替换流程</h3>
+  <div class="flow">
+    <div class="step">
+      <div class="dot m">1</div>
+      <div class="body">
+        <div class="name">inspect_object（自动返回全部观测）</div>
+        <div class="io2">返回 5 张图 + 每条观测的 view_direction、camera_distance_m、visible_pixels、bbox_truncated</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">2</div>
+      <div class="body">
+        <div class="name">模型决策</div>
+        <div class="io2">对比视角间隔和可见像素，选出最值得替换的那条</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">3</div>
+      <div class="body">
+        <div class="name">提交 hold + evict</div>
+        <div class="io2"><code>{"action":"hold","object_id":"Object3","observations":["0185:003"],"evict":"0042:001","evidence":[…],"reason":"…"}</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">4</div>
+      <div class="body">
+        <div class="name">宿主执行</div>
+        <div class="io2">0042:001 → discard；0185:003 → held；持有数仍为 5，验证通过</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>观测参考值（2b 批）</h3>
+  <p>每条观测元数据新增以下字段，供模型判断是否值得持有：</p>
+  <table>
+    <thead><tr><th>字段</th><th>来源</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td><code>bbox_truncated</code></td><td>bbox 距画面边缘 ≤ 5 px 则为 true</td><td>标记目标可能在画面外未完整出现</td></tr>
+      <tr><td><code>view_direction</code></td><td>camera_to_world → 相机到质心的单位向量</td><td>候选视角（inspect_object 满员时返回）</td></tr>
+      <tr><td><code>camera_distance_m</code></td><td>相机到质心的欧氏距离</td><td>远处视图质量低，优先换位</td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+<!-- ============ 04 ============ -->
+<section id="window">
+  <h2><span class="no">04</span>窗口初始输入</h2>
+  <p class="sub">src/harness/inputs.py · 与 v11 的差异</p>
+
+  <div class="tree">一个窗口的初始输入（1105-v1）
+├── 1. 窗口状态              <i>一条 text 块</i>
+│   ├── window、state.version、max_calls
+│   ├── <b>spatial_candidates_policy</b>  <i>候选规则说明（新）</i>
+│   └── 已归档物体档案：每个 Object 一条
+│       ├── id、object_label、created_at、status
+│       ├── label_history（relabel 后才有）
+│       ├── observation_count
+│       └── <b>centroid</b>  <i>持有观测点云质心均值，3 个坐标（新）</i>
+│
+├── 2. 当前观测              <i>每帧一组</i>
+│   ├── 文字：每条观测一条记录
+│   │   ├── id、seq、source_frame_id、instance_id
+│   │   ├── category_label、bbox_xyxy、image_size_wh、overlay_color_rgb
+│   │   ├── point_count、centroid、bounds
+│   │   ├── <b>bbox_truncated</b>   <i>新：bbox 是否触及画面边缘</i>
+│   │   └── <b>spatial_candidates</b>：至多 15 个
+│   │       ├── object_id、object_label
+│   │       ├── <b>gap_m</b>       <i>新：第 5 百分位最近距离</i>
+│   │       ├── <b>overlap</b>     <i>新：10 cm 内点占比</i>
+│   │       ├── <b>view_direction</b>    <i>新（需 v2 source）</i>
+│   │       └── <b>camera_distance_m</b> <i>新（需 v2 source）</i>
+│   ├── 图：完整原始 RGB
+│   └── 图：全帧 mask overlay
+│
+└── 3. 历史访问说明
+
+<b>与 v11 相比删除的字段：</b>
+  ✗ global_object_geometry（全局 OBB 块）
+  ✗ geometry_scope / bbox_convention
+  ✗ representative_observation_id
+  ✗ observation_ids（持有观测列表）</div>
+
+  <div class="note">
+    <strong>体积变化：</strong>v11 窗口 51（帧 250–254）首条消息约 122,696 字符，其中 state.pending 占 67,610 字符（已在 v11 后删除），global_object_geometry 约 22,000 字符。1105-v1 同等窗口预计首条消息在 30,000–40,000 字符，降幅 65% 以上。
+  </div>
+</section>
+
+
+<!-- ============ 05 ============ -->
+<section id="tools">
+  <h2><span class="no">05</span>工具与证据流程</h2>
+  <p class="sub">src/harness/tools.py · 五个工具</p>
+
+  <table>
+    <thead><tr><th>工具</th><th>返回</th><th>1105-v1 变化</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>inspect_observations(ids)</code></td>
+        <td>最多 4 条观测的 RGB + overlay</td>
+        <td>无变化</td>
+      </tr>
+      <tr>
+        <td><code>inspect_object(object_id)</code></td>
+        <td>代表观测图 + 元数据 + <b>geometry 摘要</b></td>
+        <td>
+          新增 geometry（centroid、bounds_min/max、size_xyz）；<br>
+          物体满员时自动返回全部 5 条持有观测（每条带 view_direction、camera_distance_m）；<br>
+          删除 <code>compare_geometry</code>
+        </td>
+      </tr>
+      <tr>
+        <td><code>propose_update(proposal_json)</code></td>
+        <td>proposal_id 或 verification_required 或 <b>verify_required</b></td>
+        <td>新增 verify_required 分支（见 §06）；reid gate 保持不变</td>
+      </tr>
+      <tr>
+        <td><code>commit_update(proposal_id)</code></td>
+        <td>ready_to_commit</td>
+        <td>无变化；verify 检查在 propose 阶段完成</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>证据引用规则（不变）</h3>
+  <p>
+    每个动作必须有 <code>evidence</code> 列表和 <code>reason</code>。
+    本窗口观测 id 开窗时自动进入证据集，引用它们不证明做了任何检查。
+    历史 id 只有通过 <code>inspect_object</code> 或 <code>inspect_observations</code> 看过后才可引用；
+    引用未看过的历史 id，报错并按名指出。
+  </p>
+</section>
+
+
+<!-- ============ 06 ============ -->
+<section id="verify">
+  <h2><span class="no">06</span>提交后 verify</h2>
+  <p class="sub">src/harness/verify.py · propose_update 后自动触发</p>
+
+  <div class="io">
+    <div class="row"><div class="lbl">触发</div><div class="val">每次 propose_update 通过结构验证和 reid gate 之后，对 hold / create / merge 动作自动检查</div></div>
+    <div class="row"><div class="lbl">计数</div><div class="val"><code>max_verify_rounds = 2</code>，独立计数，不占 max_calls；2 轮用完后强制允许 commit 并记日志</div></div>
+    <div class="row"><div class="lbl">渲染</div><div class="val">Python PIL + 相机内外参（来自 scene_amb3r_v2）；无 3D 渲染，全部是 2D 反投影到原始 RGB 帧</div></div>
+  </div>
+
+  <h3>三种检查</h3>
+
+  <h3 style="font-size:15px; margin-top:20px">hold</h3>
+  <p>
+    把目标物体的持有点云反投影到这条观测所在帧的 RGB 上，同时画出观测的 mask bbox（黄框）。
+    模型确认青色点（物体云）和黄框（mask）对齐。每条 hold 观测对应一张图。
+  </p>
+  <div class="note">
+    精度说明：AMB3R 跨帧误差中位 6.6 cm，p90 13.1 cm。间距约 9 cm 的同一双鞋，
+    反投影可能看起来略有偏移，不一定是归错。间距 0.4 m 以上（凳子、椅子）可以区分。
+  </div>
+
+  <h3 style="font-size:15px; margin-top:20px">create</h3>
+  <p>
+    计算新物体点云和每个已有物体点云的重叠率（10 cm 容差）。
+    重叠 &gt; 10% 时触发 verify_fail，渲染重叠最多的那个物体的反投影图，提示模型检查是否是同一表面。
+  </p>
+
+  <h3 style="font-size:15px; margin-top:20px">merge</h3>
+  <p>
+    合并后如果总持有数超过 5 条，verify 消息告知模型超员 N 条，要求重新 propose 并加 discard 动作淘汰多余的观测。
+    不引入新的结构化回复格式：模型重新 propose，在同一提案里写 merge + discard 即可。
+  </p>
+
+  <h3>完整的 verify 流程</h3>
+  <div class="flow">
+    <div class="step">
+      <div class="dot m">1</div>
+      <div class="body">
+        <div class="name">propose_update</div>
+        <div class="io2">宿主验证结构、证据、reid gate</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">2</div>
+      <div class="body">
+        <div class="name">verify.build_checks()</div>
+        <div class="io2">对每条 hold/create/merge 渲染图，返回 verify_required（有异常）或跳过（全部通过）</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">3a</div>
+      <div class="body">
+        <div class="name">确认无误</div>
+        <div class="io2">模型调 commit_update → 落盘 → 窗口结束</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">3b</div>
+      <div class="body">
+        <div class="name">发现问题</div>
+        <div class="io2">模型调 propose_update（修改 object_id / 加 discard / 加 evict）→ 回到步骤 2</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot w">4</div>
+      <div class="body">
+        <div class="name">2 轮未通过</div>
+        <div class="io2">强制允许 commit，记录到 verify/ 目录，继续下一窗口</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 07 ============ -->
+<section id="actions">
+  <h2><span class="no">07</span>动作表</h2>
+  <p class="sub">1105-v1 与 v11 的对比</p>
+
+  <table>
+    <thead><tr><th>动作</th><th>v11 名称</th><th>1105-v1 变化</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>hold</code></td>
+        <td><code>assign</code></td>
+        <td>改名；每个物体限 5 条；超员需 <code>evict</code> 字段；verify 检查</td>
+      </tr>
+      <tr>
+        <td><code>discard</code></td>
+        <td><code>defer</code></td>
+        <td>改名；上限从 4 条/动作提高到 10 条/动作；一次 discard 是一个观测的一个决定</td>
+      </tr>
+      <tr>
+        <td><code>create</code></td>
+        <td>无变化</td>
+        <td>verify 新增重叠检查；create 动作本身不带 observations（不变）</td>
+      </tr>
+      <tr>
+        <td><code>exclude</code></td>
+        <td>无变化</td>
+        <td>无变化</td>
+      </tr>
+      <tr>
+        <td><code>relabel</code></td>
+        <td>无变化</td>
+        <td>无变化</td>
+      </tr>
+      <tr>
+        <td><code>merge</code></td>
+        <td>无变化</td>
+        <td>verify 新增超员检查；超员时须重新 propose 加 discard</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark w">
+      <div class="who">兼容</div>
+      <div>旧名 <code>assign</code> / <code>defer</code> 在 <b>输入侧</b>已不再接受（host 以 Unknown action 报错）。
+      旧 run 的 state.json（status <code>assigned</code> / <code>defer</code>）可以正常读取——
+      pagegen 和 spatial_context 对两套名称都兼容。</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>InstanceRecognition · 1105-v1 algorithm design · 核对日期 2026-11</p>
+</footer>
+
+</main>
+</div>
+
+<script>
+  const rail=document.getElementById('rail');
+  if(rail){
+    const links=[...rail.querySelectorAll('a')];
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){
+          links.forEach(l=>l.classList.remove('on'));
+          const a=rail.querySelector(`a[href="#${e.target.id}"]`);
+          if(a)a.classList.add('on');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section[id]').forEach(s=>obs.observe(s));
+  }
+</script>
+</body>
+</html>
