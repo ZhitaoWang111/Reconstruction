@@ -1,7 +1,5 @@
 """Evidence access and validated proposals, bounded by current cutoff."""
 import json
-import numpy as np
-from scipy.spatial import cKDTree
 from .state import propose
 from .observations import model_observation
 from .history import choose_representative, historical_bbox_view
@@ -17,8 +15,7 @@ STRING={'type':'string'}
 # move until a commit, which ends the window. Calling it always returned what the
 # model already had.
 TOOLS=[tool('inspect_observations','Inspect up to 4 observations in full-frame RGB and highlighted overlays',{'ids':{'type':'array','items':STRING,'maxItems':4}}),
-       tool('inspect_object','Inspect an archived object: metadata and one full-frame RGB with its representative original-mask bbox; repeated images are reused',{'object_id':STRING}),
-       tool('compare_geometry','Compare two observations; distances in meters are evidence, not identity rules',{'observation_a':STRING,'observation_b':STRING}),
+       tool('inspect_object','Inspect an archived object: metadata and one representative full-frame RGB (default) or all held observations. Pass all_observations=true when the object is full and you need to decide which observation to evict.',{'object_id':STRING,'all_observations':{'type':'boolean','default':False}}),
        tool('propose_update','Validate a proposal and return preview; does not commit',{'proposal_json':STRING}),
        tool('commit_update','Commit the checked proposal at current version',{'proposal_id':STRING})]
 
@@ -26,7 +23,7 @@ TOOLS=[tool('inspect_observations','Inspect up to 4 observations in full-frame R
 class Tools:
     def __init__(self,data,state,cutoff):
         self.data,self.state,self.cutoff=data,state,cutoff
-        self.evidence=set();self.pending=None;self.geometry={}
+        self.evidence=set();self.pending=None
         self.representatives={};self.sent_images=set()
         # Set by the caller once the window is nearly out of API rounds. A hold
         # that cannot be paid for would cost the whole window, so the gate stands
@@ -125,27 +122,36 @@ class Tools:
         if name=='inspect_object':
             obj=next((o for o in self.listing()['objects'] if o['id']==args['object_id']),None)
             if obj is None:raise ValueError('Unknown active object')
-            record=self.representative(args['object_id']);oid=record['observation']['id']
-            path=historical_bbox_view(self.data,args['object_id'],oid)
-            descriptors=[];reused=[]
-            self.attach_image(path,{'observation_id':oid,'object_id':args['object_id'],'kind':'historical_rgb_bbox'},images,descriptors,reused)
-            self.evidence.add(oid)
-            public_record=self.public_representative(args['object_id'])
-            return {'object':obj,**public_record,'observations':[public_record['observation']],
-                    'visual_images':descriptors,'reused_images':reused},images
-        if name=='compare_geometry':
-            a,b=args['observation_a'],args['observation_b']
-            for i in (a,b):
-                if i not in self.data.items or self.data.items[i]['seq']>self.cutoff:raise ValueError('Unknown or future observation')
-            p,q=self.data.points[a][::8],self.data.points[b][::8]
-            key=f'geometry:{a}:{b}'
-            result={'id':key,'observations':[a,b],'note':'Subsampled observed surfaces, not visibility or proof of identity'}
-            if len(p) and len(q):
-                d=cKDTree(q).query(p)[0];e=cKDTree(p).query(q)[0]
-                result.update(min_distance_m=float(d.min()),median_a_to_b_m=float(np.median(d)),median_b_to_a_m=float(np.median(e)),
-                              a_fraction_within_5cm=float((d<.05).mean()),b_fraction_within_5cm=float((e<.05).mean()))
-            else:result['unavailable']='No valid points'
-            self.evidence.add(key);self.geometry[key]=result;return result,images
+            object_id=args['object_id']
+            all_obs=args.get('all_observations',False)
+            # When the object is full or the caller explicitly wants all views,
+            # return every held observation so the model can decide which to evict.
+            held_ids=[i for i,a in self.state['assignments'].items()
+                      if a.get('object_id')==object_id and
+                         a.get('status') in ('held','assigned') and
+                         self.data.items[i]['seq']<=self.state['cutoff']]
+            from src.harness.state import HOLD_LIMIT
+            return_all=all_obs or len(held_ids)>=HOLD_LIMIT
+            if return_all:
+                descriptors=[];reused=[];obs_meta=[]
+                for oid in held_ids:
+                    path=historical_bbox_view(self.data,object_id,oid)
+                    self.attach_image(path,{'observation_id':oid,'object_id':object_id,'kind':'historical_rgb_bbox'},images,descriptors,reused)
+                    self.evidence.add(oid)
+                    obs_meta.append(model_observation(self.data.items[oid]))
+                return {'object':obj,'object_id':object_id,
+                        'observations':obs_meta,'held_count':len(held_ids),
+                        'note':'All held observations returned; cite the observation you intend to evict in the hold action evict field.',
+                        'visual_images':descriptors,'reused_images':reused},images
+            else:
+                record=self.representative(object_id);oid=record['observation']['id']
+                path=historical_bbox_view(self.data,object_id,oid)
+                descriptors=[];reused=[]
+                self.attach_image(path,{'observation_id':oid,'object_id':object_id,'kind':'historical_rgb_bbox'},images,descriptors,reused)
+                self.evidence.add(oid)
+                public_record=self.public_representative(object_id)
+                return {'object':obj,**public_record,'observations':[public_record['observation']],
+                        'visual_images':descriptors,'reused_images':reused},images
         if name=='propose_update':
             self.pending=None
             checked=propose(self.state,json.loads(args['proposal_json']),self.data.items,self.cutoff,self.evidence)

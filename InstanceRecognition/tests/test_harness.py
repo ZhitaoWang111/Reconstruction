@@ -182,9 +182,13 @@ def test_relabel_rejects_retired_object():
   propose(s,{'base_version':1,'actions':[action('relabel',object_id='Object2',object_label='basin')]},OBS,0,E)
 
 
-def _window(count):
-    """A window with `count` observations; test_harness's own OBS has only three."""
-    obs = {f'0000:{i:03d}': {'seq': 0} for i in range(count)}
+def _window(count, start=0, seq=0):
+    """A window with `count` observations; test_harness's own OBS has only three.
+
+    `start` offsets the instance id so two windows do not collide, and `seq`
+    sets the sequence index so the observations are visible at that cutoff.
+    """
+    obs = {f'{seq:04d}:{i:03d}': {'seq': seq} for i in range(start, start + count)}
     return obs, set(obs)
 
 
@@ -220,15 +224,55 @@ def test_discard_at_the_limit_is_allowed():
     assert all(checked['state']['assignments'][i]['status'] == 'discard' for i in ids)
 
 
-def test_hold_batches_are_not_capped():
-    # The ceiling is on discard, which is a judgement per observation, not on
-    # holding, where one object can legitimately own many observations.
-    obs, evidence = _window(8)
+def test_hold_at_limit_is_allowed():
+    """An object can hold exactly HOLD_LIMIT observations without error."""
+    from src.harness.state import HOLD_LIMIT
+    obs, evidence = _window(HOLD_LIMIT)
     ids = sorted(obs)
     actions = [action('create', object_id='Object1', object_label='bin'),
                action('hold', object_id='Object1', observations=ids)]
     checked = propose(initial(), {'base_version': 0, 'actions': actions}, obs, 0, evidence)
     assert all(checked['state']['assignments'][i]['object_id'] == 'Object1' for i in ids)
+    assert all(checked['state']['assignments'][i]['status'] == 'held' for i in ids)
+
+
+def test_hold_over_limit_is_rejected():
+    """Holding more than HOLD_LIMIT observations onto one object is an error."""
+    from src.harness.state import HOLD_LIMIT
+    obs, evidence = _window(HOLD_LIMIT + 1)
+    ids = sorted(obs)
+    actions = [action('create', object_id='Object1', object_label='bin'),
+               action('hold', object_id='Object1', observations=ids)]
+    with pytest.raises(ValueError, match='exceeding the limit'):
+        propose(initial(), {'base_version': 0, 'actions': actions}, obs, 0, evidence)
+
+
+def test_evict_makes_room_for_new_hold():
+    """Evicting an existing held observation allows one new hold on a full object."""
+    from src.harness.state import HOLD_LIMIT
+    # Fill the object to the limit in window 0.
+    obs1, ev1 = _window(HOLD_LIMIT, start=0, seq=0)
+    ids1 = sorted(obs1)
+    actions1 = [action('create', object_id='Object1', object_label='bin'),
+                action('hold', object_id='Object1', observations=ids1)]
+    s1 = propose(initial(), {'base_version': 0, 'actions': actions1}, obs1, 0, ev1)['state']
+    # Window 1: one new observation, evict the first held one. `observations`
+    # here is every observation the run has seen so far, not just this window's,
+    # because `visible` is derived from it by cutoff.
+    obs2, _ev2 = _window(1, start=0, seq=1)
+    new_obs = sorted(obs2)[0]
+    all_obs = {**obs1, **obs2}
+    evidence = set(all_obs) | {ids1[0]}
+    hold_act = action('hold', object_id='Object1', observations=[new_obs])
+    hold_act['evict'] = ids1[0]
+    hold_act['evidence'] = [new_obs, ids1[0]]
+    checked = propose(s1, {'base_version': 1, 'actions': [hold_act]}, all_obs, 1, evidence)
+    state = checked['state']
+    assert state['assignments'][new_obs]['status'] == 'held'
+    assert state['assignments'][ids1[0]]['status'] == 'discard'
+    held = [k for k, a in state['assignments'].items()
+            if a.get('object_id') == 'Object1' and a['status'] in ('held', 'assigned')]
+    assert len(held) == HOLD_LIMIT
 
 
 def test_listing_hides_discards_but_state_keeps_them():

@@ -752,8 +752,8 @@ response = predictor.handle_request({
 │       ├── category_label          <i>上游给这条观测的类别提示，不是物体身份</i>
 │       ├── bbox_xyxy、image_size_wh、overlay_color_rgb
 │       ├── point_count、centroid、bounds   <i>反投影点云摘要</i>
-│       └── spatial_candidates：至多 3 个
-│           └── rank、object_id、object_label、median_surface_distance_m
+│       └── spatial_candidates：至多 15 个
+│           └── object_id、object_label、gap_m（第 5 百分位最近距离）、overlap（10 cm 内占比）
 │
 └── 3. 历史访问说明          <i>最后一条 text</i>
     └── 初始不含历史代表观测的文字与图片；取用走 inspect_object / inspect_observations</div>
@@ -1004,7 +1004,7 @@ response = predictor.handle_request({
     <li>对<b>上一个已提交版本</b>的每个物体，用 <code>versions/NNNN/clouds/*.npz</code> 重新拟合
       直立 OBB：RANSAC 找主平面定朝向、平面吸附修正边界、分位数定尺寸、再做低密度尾检查。</li>
     <li>对本窗每条观测，用 KD 树算它的点到每个物体点云的最近距离，取<b>中位数</b>；按这个中位数排序取前 3，
-      记为 <code>spatial_candidates</code>。</li>
+      记为 <code>spatial_candidates</code>（至多 15 个，每个有 <code>gap_m</code> 和 <code>overlap</code>）。</li>
     <li>全部结果冻结在窗口开始那一刻（<code>base_version</code> / <code>cutoff</code>），
       窗口内不再刷新——即便模型改了归属。</li>
   </ol>
@@ -1022,7 +1022,7 @@ response = predictor.handle_request({
   <h3>五个工具</h3>
   <p>
     五个工具按副作用从小到大分三档。<b>取证</b>：<code>inspect_observations</code> /
-    <code>inspect_object</code> / <code>compare_geometry</code> 只读，但看过的观测 ID 会登记为可引用证据，
+    <code>inspect_object</code> 只读，但看过的观测 ID 会登记为可引用证据，
     这是提案里 <code>evidence</code> 字段的唯一来源。<b>校验</b>：<code>propose_update</code>
     只改内存里的待提交提案，失败不留任何磁盘痕迹。<b>提交</b>：<code>commit_update</code>
     是唯一写盘的调用。所有工具都是纯同步调用，没有并行（<code>parallel_tool_calls: false</code>）。
@@ -1052,13 +1052,7 @@ response = predictor.handle_request({
             （整帧 RGB，画上原始 mask 框与 Object ID）。只给一条，不给整段历史。</td>
         <td><b>56</b> 次 <span class="q">每次 1 张图</span></td>
       </tr>
-      <tr>
-        <td><code>compare_geometry</code></td>
-        <td>这两片点云在三维里有多近？</td>
-        <td>两条观测采样点云之间的最近距离、双向中位距离、各自落在对方 5 cm 内的点的比例。
-            返回值自带一句限定：<i>只是子采样的可见表面，不是可见性证明，也不能证明是同一个物体</i>。</td>
-        <td><b>0</b> 次 <span class="q">从未使用</span></td>
-      </tr>
+      
       <tr>
         <td><code>propose_update</code></td>
         <td>我准备这样改，先检查能不能执行</td>
@@ -1138,7 +1132,6 @@ response = predictor.handle_request({
       <tr><td>每窗 API 轮次</td><td>中位 <b>6</b>，最少 3，最多 13（上限 14）；5 轮的窗口最多（10 个）</td></tr>
       <tr><td><code>propose_update</code> 调用</td><td>54 次 → 30 次提交 + 24 次重试（22 次报错）</td></tr>
       <tr><td>取证工具</td><td><code>inspect_observations</code> 93 次，<code>inspect_object</code> 56 次</td></tr>
-      <tr><td><code>compare_geometry</code></td><td>0 次</td></tr>
       <tr><td>每窗输入 token</td><td>中位约 42.8 万；首窗 66.4 万；最重窗口（窗 12，帧 55–59）82.6 万</td></tr>
     </tbody>
   </table>

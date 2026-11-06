@@ -33,7 +33,7 @@ def test_initial_input_has_no_historical_images_or_evidence(tmp_path,monkeypatch
               if part['type']=='text' and part['text'].startswith('{')]
     assert all('historical_representatives' not in payload for payload in payloads)
     assert payloads[0]['state']['objects'][0]['object_label']=='chair'
-    assert 'global_object_geometry' in payloads[0]
+    assert 'spatial_candidates_policy' in payloads[0]
     assert payloads[1]['observations'][0]['id']=='0001:001'
     assert 'inspect_object' in payloads[-1]['history_access']
     assert not (data.out/'evidence').exists()

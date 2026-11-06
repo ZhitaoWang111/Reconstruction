@@ -12,13 +12,17 @@ from src.harness.tools import Tools
 FAR = [6.77, 5.96, 0.52]        # the bin two rooms away
 NEAR = [3.705, 1.225, 0.21]     # the archived bin, three centimetres later
 CURRENT = '0100:001'
-HISTORY = [f'00{index:02d}:001' for index in range(8)]
+HISTORY = [f'00{index:02d}:001' for index in range(4)]
 
 
 def tools_for(centroid=FAR):
-    """One archived Object25 with eight observations, plus one open observation."""
+    """One archived Object25 with four observations, plus one open observation.
+
+    Four is below HOLD_LIMIT (5) so holding CURRENT stays at the limit; the
+    gate's distance check is what this file exercises, not the cap.
+    """
     items, assignments = {}, {}
-    for index in range(8):
+    for index in range(4):
         obs = HISTORY[index]
         items[obs] = {'seq': index, 'centroid': [3.70 + .01 * index, 1.23, 0.21],
                       'category_label': 'wastebasket'}

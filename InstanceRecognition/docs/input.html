@@ -47,8 +47,7 @@ code{font:12.8px var(--mono);background:var(--line2);padding:1.5px 5px;border-ra
 <h2><span class="no">01</span>一个窗口的初始输入<span class="h">按 inputs.py 的组装顺序</span></h2>
 <div class="tree">一个窗口的初始输入
 ├── 0. system 消息             <i>prompt.txt 全文（P7），每个窗口相同</i>
-│   └── tools 参数：inspect_observations / inspect_object / compare_geometry
-│                    / propose_update / commit_update
+│   └── tools 参数：inspect_observations / inspect_object / propose_update / commit_update
 │
 ├── 1. 窗口状态与全局几何      <i>一条 text 块，最先发送</i>
 │   ├── window [first, cutoff]、max_calls
@@ -60,16 +59,7 @@ code{font:12.8px var(--mono);background:var(--line2);padding:1.5px 5px;border-ra
 │   │   │   ├── label_history       <i>发生过 relabel 才有</i>
 │   │   │   └── observation_count   <i>只给数量，不给任何观测 id</i>
 │   │   └── aliases                 <i>merge 后的旧编号映射</i>
-│   ├── <b>global_object_geometry</b>  <i>spatial_context.py，与 state 并列</i>
-│   │   ├── base_version、cutoff
-│   │   ├── coordinate_frame（shared_world）、units（meters）
-│   │   ├── geometry_scope：只是已观测表面，不是完整物理范围
-│   │   ├── bbox_convention：直立 OBB，局部 Z = 世界 Z
-│   │   └── objects：每个 Object 一条
-│   │       ├── object_id、object_label
-│   │       ├── bbox_3d_obb：center_xyz、size_xyz、axes_world  <i>可能为 null</i>
-│   │       └── point_count         <i>合并点云体素化后的点数</i>
-│   └── spatial_candidates_policy   <i>一句说明：至多 3 个、中位距离、只是提示</i>
+│   └── spatial_candidates_policy   <i>一句说明：规则参考 1105-v1 第 2 项</i>
 │
 ├── 2. 当前观测                <i>每帧 5 个块，按帧顺序发送</i>
 │   ├── text：sampled_sequence + observations，每条观测一条记录
@@ -77,22 +67,21 @@ code{font:12.8px var(--mono);background:var(--line2);padding:1.5px 5px;border-ra
 │   │   ├── category_label          <i>上游类别提示，不是物体身份</i>
 │   │   ├── bbox_xyxy、image_size_wh、overlay_color_rgb
 │   │   ├── <b>point_count、centroid、bounds</b>   <i>反投影点云摘要</i>
-│   │   └── <b>spatial_candidates</b>：至多 3 个
-│   │       └── rank、object_id、object_label、median_surface_distance_m
+│   │   └── <b>spatial_candidates</b>：至多 15 个
+│   │       └── object_id、object_label、gap_m（第 5 百分位最近距离）、overlap（10 cm 内占比）
 │   ├── text「original RGB」 + 图：完整原始 RGB
 │   └── text「full-frame colored mask overlay」 + 图：彩色 mask + 编号 + 2D bbox
 │
 └── 3. 历史访问说明            <i>最后一条 text</i>
     └── 只有档案和全局几何；历史代表观测的元数据和图片要调
         inspect_object / inspect_observations 取</div>
-<div class="note">高亮的三处是初始输入里全部的几何信息。<code>compare_geometry</code> 要模型主动调用，不在初始输入里。
+<div class="note">高亮的两处是初始输入里全部的几何信息：<code>centroid/bounds</code>（观测点云摘要）和 <code>spatial_candidates</code>（相邻物体候选）。
 只写审计、不发给模型的：每个物体的代表观测（<code>representative</code>）和 <code>spatial_candidates</code> 原表，存在 <code>window_inputs/NNNN_context.json</code>。</div>
 <h2><span class="no">02</span>示例：窗口 51 的初始输入<span class="h">抽样帧 250–254 · base_version 50</span></h2>
 <p>取自 v11（<code>harness-v11-amb3r-500frames-20261026-1400</code>）这个窗口第一次调用的真实请求 <code>calls/w0250_*_call00_request.json</code>。为了和上面的树对应，按当前代码做了两处改动：去掉 <code>state.pending</code>（原有 248 条、约 67,610 字符），去掉物体档案里的 <code>representative_observation_id</code>。长列表只保留前几条，浮点数保留 4 位小数，图片换成占位说明。</p>
 <div class="msg"><div class="mh">system · prompt.txt 全文（12,041 字符，此处省略）</div><pre>见 docs/prompts.html 的 P7</pre></div>
 <div class="msg"><div class="mh">tools</div><pre>inspect_observations — Inspect up to 4 observations in full-frame RGB and highlighted overlays
-inspect_object — Inspect an archived object: metadata and one full-frame RGB with its representative original-mask bbox; repeated images are reused
-compare_geometry — Compare two observations; distances in meters are evidence, not identity rules
+inspect_object — Inspect an archived object: metadata and one representative full-frame RGB (default) or all held observations (all_observations=true)
 propose_update — Validate a proposal and return preview; does not commit
 commit_update — Commit the checked proposal at current version</pre></div>
 <div class="msg"><div class="mh">user · text 1 · 窗口状态与全局几何（按当前代码约 50,798 字符）</div><pre>{
@@ -126,60 +115,7 @@ commit_update — Commit the checked proposal at current version</pre></div>
     &quot;aliases&quot;: {}
   },
   &quot;max_calls&quot;: 28,
-  &quot;global_object_geometry&quot;: {
-    &quot;base_version&quot;: 50,
-    &quot;cutoff&quot;: 249,
-    &quot;coordinate_frame&quot;: &quot;shared_world&quot;,
-    &quot;units&quot;: &quot;meters&quot;,
-    &quot;geometry_scope&quot;: &quot;archived observed surfaces, not complete physical extents&quot;,
-    &quot;bbox_convention&quot;: &quot;upright OBB; local Z equals world Z; axes_world are local axes expressed in world coordinates&quot;,
-    &quot;objects&quot;: [
-      {
-        &quot;object_id&quot;: &quot;Object1&quot;,
-        &quot;object_label&quot;: &quot;black office chair&quot;,
-        &quot;bbox_3d_obb&quot;: {
-          &quot;center_xyz&quot;: [2.9942, 1.4573, 0.5566],
-          &quot;size_xyz&quot;: [0.6201, 0.6674, 0.9349],
-          &quot;axes_world&quot;: [
-            [-0.0309, 0.9995, 0.0],
-            [-0.9995, -0.0309, 0.0],
-            [0.0, 0.0, 1.0]
-          ]
-        },
-        &quot;point_count&quot;: 8551
-      },
-      {
-        &quot;object_id&quot;: &quot;Object2&quot;,
-        &quot;object_label&quot;: &quot;light wood console table&quot;,
-        &quot;bbox_3d_obb&quot;: {
-          &quot;center_xyz&quot;: [1.9281, 1.6879, 0.341],
-          &quot;size_xyz&quot;: [0.5813, 1.1863, 0.4223],
-          &quot;axes_world&quot;: [
-            [0.698, 0.7161, 0.0],
-            [-0.7161, 0.698, 0.0],
-            [0.0, 0.0, 1.0]
-          ]
-        },
-        &quot;point_count&quot;: 7175
-      },
-      {
-        &quot;object_id&quot;: &quot;Object3&quot;,
-        &quot;object_label&quot;: &quot;small wooden computer desk&quot;,
-        &quot;bbox_3d_obb&quot;: {
-          &quot;center_xyz&quot;: [3.1292, 0.8021, 0.6031],
-          &quot;size_xyz&quot;: [1.1693, 0.6306, 0.9706],
-          &quot;axes_world&quot;: [
-            [0.949, 0.3152, 0.0],
-            [-0.3152, 0.949, 0.0],
-            [0.0, 0.0, 1.0]
-          ]
-        },
-        &quot;point_count&quot;: 10461
-      },
-      &quot;…（另有 92 个物体，结构相同）&quot;
-    ]
-  },
-  &quot;spatial_candidates_policy&quot;: &quot;up to 3; median observation-to-archived-surface nearest distance in meters; hints only, not exhaustive identities or confidence&quot;
+  &quot;spatial_candidates_policy&quot;: &quot;candidates by gap (5th-pctile nearest distance); at most 8 + extras with gap&lt;0.5 m, cap 15; each has gap_m and overlap (fraction within 10 cm); objects beyond 2 m are omitted&quot;
 }</pre></div>
 <div class="msg"><div class="mh">user · text · 抽样帧 250 的观测（11 条，9,473 字符）</div><pre>{
   &quot;sampled_sequence&quot;: 250,
@@ -200,23 +136,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [3.2843, 7.3932, 0.8544]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.01
+          &quot;gap_m&quot;: 0.01,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object82&quot;,
+        {          &quot;object_id&quot;: &quot;Object82&quot;,
           &quot;object_label&quot;: &quot;white throw pillow on sofa&quot;,
-          &quot;median_surface_distance_m&quot;: 0.2206
+          &quot;gap_m&quot;: 0.2206,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object81&quot;,
+        {          &quot;object_id&quot;: &quot;Object81&quot;,
           &quot;object_label&quot;: &quot;dark blue sofa&quot;,
-          &quot;median_surface_distance_m&quot;: 0.3675
+          &quot;gap_m&quot;: 0.3675,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },
@@ -236,23 +169,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [2.5844, 7.1298, 0.8774]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.0086
+          &quot;gap_m&quot;: 0.0086,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object86&quot;,
+        {          &quot;object_id&quot;: &quot;Object86&quot;,
           &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
-          &quot;median_surface_distance_m&quot;: 0.3111
+          &quot;gap_m&quot;: 0.3111,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object81&quot;,
+        {          &quot;object_id&quot;: &quot;Object81&quot;,
           &quot;object_label&quot;: &quot;dark blue sofa&quot;,
-          &quot;median_surface_distance_m&quot;: 0.5605
+          &quot;gap_m&quot;: 0.5605,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },
@@ -282,23 +212,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [2.1816, 6.9757, 0.8645]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.0083
+          &quot;gap_m&quot;: 0.0083,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object86&quot;,
+        {          &quot;object_id&quot;: &quot;Object86&quot;,
           &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
-          &quot;median_surface_distance_m&quot;: 0.3455
+          &quot;gap_m&quot;: 0.3455,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object81&quot;,
+        {          &quot;object_id&quot;: &quot;Object81&quot;,
           &quot;object_label&quot;: &quot;dark blue sofa&quot;,
-          &quot;median_surface_distance_m&quot;: 0.4702
+          &quot;gap_m&quot;: 0.4702,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },
@@ -318,23 +245,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [1.4045, 6.7031, 2.2432]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.0091
+          &quot;gap_m&quot;: 0.0091,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object95&quot;,
+        {          &quot;object_id&quot;: &quot;Object95&quot;,
           &quot;object_label&quot;: &quot;black speaker in living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.7118
+          &quot;gap_m&quot;: 0.7118,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object85&quot;,
+        {          &quot;object_id&quot;: &quot;Object85&quot;,
           &quot;object_label&quot;: &quot;television&quot;,
-          &quot;median_surface_distance_m&quot;: 0.718
+          &quot;gap_m&quot;: 0.718,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },
@@ -364,23 +288,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [2.172, 6.9748, 0.8746]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.0093
+          &quot;gap_m&quot;: 0.0093,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object86&quot;,
+        {          &quot;object_id&quot;: &quot;Object86&quot;,
           &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
-          &quot;median_surface_distance_m&quot;: 0.3578
+          &quot;gap_m&quot;: 0.3578,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object81&quot;,
+        {          &quot;object_id&quot;: &quot;Object81&quot;,
           &quot;object_label&quot;: &quot;dark blue sofa&quot;,
-          &quot;median_surface_distance_m&quot;: 0.4767
+          &quot;gap_m&quot;: 0.4767,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },
@@ -400,23 +321,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [1.403, 6.678, 0.8899]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.0089
+          &quot;gap_m&quot;: 0.0089,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object85&quot;,
+        {          &quot;object_id&quot;: &quot;Object85&quot;,
           &quot;object_label&quot;: &quot;television&quot;,
-          &quot;median_surface_distance_m&quot;: 0.3295
+          &quot;gap_m&quot;: 0.3295,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object25&quot;,
+        {          &quot;object_id&quot;: &quot;Object25&quot;,
           &quot;object_label&quot;: &quot;floor rug&quot;,
-          &quot;median_surface_distance_m&quot;: 0.6118
+          &quot;gap_m&quot;: 0.6118,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },
@@ -446,23 +364,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [2.1716, 6.9753, 0.8748]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.0097
+          &quot;gap_m&quot;: 0.0097,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object86&quot;,
+        {          &quot;object_id&quot;: &quot;Object86&quot;,
           &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
-          &quot;median_surface_distance_m&quot;: 0.3601
+          &quot;gap_m&quot;: 0.3601,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object81&quot;,
+        {          &quot;object_id&quot;: &quot;Object81&quot;,
           &quot;object_label&quot;: &quot;dark blue sofa&quot;,
-          &quot;median_surface_distance_m&quot;: 0.4779
+          &quot;gap_m&quot;: 0.4779,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },
@@ -482,23 +397,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [2.6123, 7.1664, 1.6344]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.0088
+          &quot;gap_m&quot;: 0.0088,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object86&quot;,
+        {          &quot;object_id&quot;: &quot;Object86&quot;,
           &quot;object_label&quot;: &quot;dark upholstered ottoman&quot;,
-          &quot;median_surface_distance_m&quot;: 0.8702
+          &quot;gap_m&quot;: 0.8702,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object82&quot;,
+        {          &quot;object_id&quot;: &quot;Object82&quot;,
           &quot;object_label&quot;: &quot;white throw pillow on sofa&quot;,
-          &quot;median_surface_distance_m&quot;: 0.8728
+          &quot;gap_m&quot;: 0.8728,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },
@@ -528,23 +440,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [3.3286, 7.4937, 1.3227]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.0124
+          &quot;gap_m&quot;: 0.0124,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object82&quot;,
+        {          &quot;object_id&quot;: &quot;Object82&quot;,
           &quot;object_label&quot;: &quot;white throw pillow on sofa&quot;,
-          &quot;median_surface_distance_m&quot;: 0.3081
+          &quot;gap_m&quot;: 0.3081,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object81&quot;,
+        {          &quot;object_id&quot;: &quot;Object81&quot;,
           &quot;object_label&quot;: &quot;dark blue sofa&quot;,
-          &quot;median_surface_distance_m&quot;: 0.4751
+          &quot;gap_m&quot;: 0.4751,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },
@@ -564,23 +473,20 @@ commit_update — Commit the checked proposal at current version</pre></div>
         [1.2017, 6.6562, 1.146]
       ],
       &quot;spatial_candidates&quot;: [
-        {
-          &quot;rank&quot;: 1,
-          &quot;object_id&quot;: &quot;Object83&quot;,
+        {          &quot;object_id&quot;: &quot;Object83&quot;,
           &quot;object_label&quot;: &quot;wooden living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.146
+          &quot;gap_m&quot;: 0.146,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 2,
-          &quot;object_id&quot;: &quot;Object85&quot;,
+        {          &quot;object_id&quot;: &quot;Object85&quot;,
           &quot;object_label&quot;: &quot;television&quot;,
-          &quot;median_surface_distance_m&quot;: 0.3489
+          &quot;gap_m&quot;: 0.3489,
+          &quot;overlap&quot;: 0.8
         },
-        {
-          &quot;rank&quot;: 3,
-          &quot;object_id&quot;: &quot;Object95&quot;,
+        {          &quot;object_id&quot;: &quot;Object95&quot;,
           &quot;object_label&quot;: &quot;black speaker in living room wall unit&quot;,
-          &quot;median_surface_distance_m&quot;: 0.7941
+          &quot;gap_m&quot;: 0.7941,
+          &quot;overlap&quot;: 0.8
         }
       ]
     },

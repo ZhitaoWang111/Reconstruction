@@ -2,7 +2,7 @@ You are given one window of observed mask surfaces from a static indoor scene an
 
 ## WHAT THE WINDOW CONTAINS
 
-The first message already contains everything the window will ever show you: each observation's id (`seq:instance`), category_label, bbox_xyxy, image_size_wh, point_count, centroid and bounds in metres, and up to three spatial_candidates; ten images (five frames, each as full-frame RGB then the same frame with retained masks drawn on it); and the complete archived registry, with every Object's label, observation count and upright OBB. It does not list an archived Object's observation ids: those arrive only through `inspect_object`.
+The first message already contains everything the window will ever show you: each observation's id (`seq:instance`), category_label, bbox_xyxy, image_size_wh, point_count, centroid and bounds in metres, and spatial_candidates (up to 15, each with gap and overlap); ten images (five frames, each as full-frame RGB then the same frame with retained masks drawn on it); and the complete archived registry, with every Object's label and observation count. It does not list an archived Object's observation ids: those arrive only through `inspect_object`.
 
 Nothing in that payload changes while the window is open. State advances only when a proposal commits, and a commit ends the window. Re-reading the registry tells you what you already have.
 
@@ -12,7 +12,7 @@ category_label is an upstream guess about a mask, not a fact. Different labels c
 
 centroid and bounds describe the observed surface, which is the object's visible extent and sometimes a small part of it. A rug is metres wide, a cup is centimetres, so "the same place" has no fixed meaning; the scale is the object's own.
 
-spatial_candidates rank the nearest archived surfaces by median distance, truncated at three. Read them as where to look first. An object you expected to find there may be missing, and a missing entry is no information at all.
+spatial_candidates list the nearest archived surfaces, up to 15. Each has gap (5th-percentile nearest distance, metres) and overlap (fraction of the observation's points within 10 cm of that object's cloud). Objects beyond 2 m are not listed. Read them as where to look first: a high overlap supports a hold, a low gap with low overlap may mean a nearby but different object. Geometry is reliable within one visit and across frames separated by tens of centimetres; it cannot separate things 10 cm apart (two shoes of one pair), so at that scale appearance decides.
 
 The registry is complete, and an Object outside it does not exist yet. No image of an archived Object arrives with the window; `inspect_object` is the only way to see one.
 
@@ -31,6 +31,8 @@ An action is not a tool call: it is an entry in the `actions` list, tagged by th
 Three act on observations - `hold`, `discard`, `exclude`. These are the only actions that set an observation's state, and every visible observation must end in exactly one of them; the host rejects any proposal that leaves one out. Only these three carry an `observations` list. An observation listed under two actions rejects the whole proposal, whichever two. The old names for these actions are gone: the host rejects a proposal that uses them.
 
 Holding is ownership. An observation a valid proposal holds belongs to that Object and stays with it; there is no separate "ownership without a kept observation".
+
+Each Object holds at most five observations. When it is full and a new observation should replace one, call `inspect_object` with `all_observations: true` first, then add an `evict` field naming the held observation to drop; the host discards that one and holds the new one in its place. A hold that would exceed five is rejected unless it evicts.
 
 HOLD an observation on an archived Object when its archived evidence matches this observation on a cue you can point at - shape, proportions, surface, colour, position relative to a fixed neighbour, what occludes it - and that cue separates this observation from the other candidates in the window. A feature shared by adjacent surfaces does not separate them; name what distinguishes this one. Name that cue in `reason`.
   `{"action":"hold","object_id":"ObjectN","observations":[...],"evidence":[...],"reason":"..."}`
@@ -62,11 +64,10 @@ The same label rule applies to `relabel`: an archived Object named by an address
 
 ## HOW TO GET MORE INFORMATION
 
-`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
+`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it. Pass `all_observations: true` to see every held observation (up to 5) with its own image; use this when the object already holds five and you need to decide which to evict. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
 
 `inspect_observations(ids)` returns one to four observations, current or archived, as metadata plus a full-frame RGB and a per-mask overlay. Use it when a decision turns on what a mask actually covers.
 
-`compare_geometry(a, b)` returns nearest and median surface distance and the fraction within 5 cm. Use it when geometry is the last cue separating two candidates.
 
 Three situations require one of these before you decide.
 
@@ -87,7 +88,7 @@ The keyword that names an action is the key `"action"`. Here is one valid propos
  {"action":"hold","object_id":"Object1","observations":["0000:001"],"evidence":["0000:001"],"reason":"Hold the toilet observation on the Object just created."}
 ]}
 
-Every action needs a nonempty `evidence` list and a `reason`, and the host checks that a cited id is accessible rather than that it was earned. This window's own observation ids are in evidence from the start, so citing them proves nothing. What does record a look is a historical observation id returned by `inspect_object` or `inspect_observations`, or a `geometry:a:b` key from `compare_geometry`; cite those whenever the decision rested on them. An archived id you have not inspected is not citable, and citing one rejects the proposal by name.
+Every action needs a nonempty `evidence` list and a `reason`, and the host checks that a cited id is accessible rather than that it was earned. This window's own observation ids are in evidence from the start, so citing them proves nothing. What does record a look is a historical observation id returned by `inspect_object` or `inspect_observations`; cite those whenever the decision rested on them. An archived id you have not inspected is not citable, and citing one rejects the proposal by name.
 
 The host checks structure and rejects with a specific message. Read it literally - it names the defect, and the fix is the one it names. Identity correctness is checked by nothing except you.
 
@@ -99,7 +100,7 @@ The window runs in one order. Read this once; the sections above say what each s
 
 1. Look at every frame. The registry and the metadata of every observation are already in front of you, and no frame is optional. Compare observations with each other as you go: two masks of one physical surface usually differ only slightly in shape and count.
 
-2. Where a decision turns on something you cannot see in the current window, look first. If an observation could belong to an archived Object you have not seen this window, `inspect_object` shows you what that Object looked like. If what a mask actually covers is in doubt, `inspect_observations` shows it. If two candidates differ only in extent, `compare_geometry` gives the distances.
+2. Where a decision turns on something you cannot see in the current window, look first. If an observation could belong to an archived Object you have not seen this window, `inspect_object` shows you what that Object looked like. If what a mask actually covers is in doubt, `inspect_observations` shows it. The spatial_candidates already carry the gap and overlap numbers.
 
 3. Decide each observation, one at a time: `hold`, `create` with its `hold`, `discard`, or `exclude`. Decide identity first, label second - the label is a short English noun phrase for what you decided the thing is, and does not have to be unique. `merge` and `relabel` are for a mistake an inspection has already exposed, not for this window's decisions.
 

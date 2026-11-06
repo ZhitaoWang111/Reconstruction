@@ -17,6 +17,10 @@ _CURRENT_OBSERVATION_TOKEN = 'instance_id'
 # deferral was never reclaimed (0 of 532 in the v11 run) and the name promised a
 # later decision the host never offered.
 DISCARD_BATCH_LIMIT = 10
+# Each object keeps at most this many held observations. Staying small keeps
+# the point cloud honest: a single wrong hold pollutes at most one slot and
+# can be evicted when a better view arrives.
+HOLD_LIMIT = 5
 
 
 def _strip_legacy_observation_keys(value):
@@ -180,11 +184,27 @@ def propose(state, proposal, observations, cutoff, evidence):
             if touched.intersection(ids): raise ValueError('Observation changed twice in one proposal')
             touched.update(ids)
             if kind == 'hold' and oid not in new['objects']: raise ValueError('Unknown target object')
+            if kind == 'hold':
+                evict = a.get('evict')
+                if evict is not None:
+                    # Evict an existing held observation to make room. The model
+                    # names exactly one; the host validates it then discards it.
+                    if not isinstance(evict, str):
+                        raise ValueError('evict must be a single observation id string')
+                    evict_rec = new['assignments'].get(evict, {})
+                    if evict_rec.get('object_id') != oid or evict_rec.get('status') not in ('held', 'assigned'):
+                        raise ValueError(
+                            f'evict target {evict!r} is not a currently held observation of {oid}')
+                    new['assignments'][evict] = {**evict_rec,
+                        'object_id': None, 'status': 'discard',
+                        'reason': f'evicted to make room: {a["reason"]}',
+                        'decided_at': cutoff}
+                    affected.add(oid)
             for obs in ids:
                 old = new['assignments'].get(obs, {}).get('object_id')
                 if old: affected.add(old)
                 new['assignments'][obs] = {'object_id': oid if kind == 'hold' else None,
-                    'status': 'assigned' if kind == 'hold' else kind, 'reason': a['reason'], 'evidence': refs,
+                    'status': 'held' if kind == 'hold' else kind, 'reason': a['reason'], 'evidence': refs,
                     'decided_at': cutoff}
             if kind == 'hold': affected.add(oid)
         elif kind == 'merge':
@@ -203,9 +223,18 @@ def propose(state, proposal, observations, cutoff, evidence):
             raise ValueError(f'Unknown action {kind}')
     if set(new['assignments']) != visible:
         raise ValueError('Every visible observation needs assigned/discard/exclude status; missing: '+str(sorted(visible-set(new['assignments']))))
+    # Enforce the per-object hold cap. Count both 'held' (new name) and
+    # 'assigned' (pre-rename runs read back as held) so the check works
+    # consistently regardless of which run wrote the state.
     for oid in new['objects']:
-        if not any(a['object_id'] == oid for a in new['assignments'].values()):
-            raise ValueError(f'Empty object {oid}; assign observations or merge it')
+        held = [k for k, a in new['assignments'].items()
+                if a.get('object_id') == oid and a.get('status') in ('held', 'assigned')]
+        if len(held) > HOLD_LIMIT:
+            raise ValueError(
+                f'{oid} now holds {len(held)} observations, exceeding the limit of {HOLD_LIMIT}. '
+                f'Add an evict field to the hold action naming the observation to replace.')
+        if not held:
+            raise ValueError(f'Empty object {oid}; hold observations or merge it')
     new.update(version=state['version']+1, cutoff=cutoff)
     proposal_id = hashlib.sha256(json.dumps({'before':state, 'proposal':proposal,'cutoff':cutoff},sort_keys=True).encode()).hexdigest()[:20]
     return {'id': proposal_id, 'state': new, 'affected': sorted(affected), 'proposal': copy.deepcopy(proposal)}
