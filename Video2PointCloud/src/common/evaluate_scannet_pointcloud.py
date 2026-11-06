@@ -16,6 +16,13 @@ import numpy as np
 import open3d as o3d
 from scipy.spatial import cKDTree
 
+from pointcloud_sampling import sample_amb3r, sample_common, sample_indices, transform_points, write_ply  # noqa: F401
+
+# The Sim(3) that puts the prediction in the scan frame is also the geometry the
+# mask lifter consumes, so it lives in its own module. Fitting it here as well
+# would let evaluation and the published cloud drift apart.
+from fit_sim3_from_gt import fit_alignment, load_gt_poses, umeyama_transform  # noqa: F401
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -30,136 +37,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gt-sample-points", type=int, default=500_000)
     parser.add_argument("--confidence-percentile", type=float, default=40.0)
     return parser.parse_args()
-
-
-def load_gt_poses(data: Path, frame_count: int) -> tuple[np.ndarray, np.ndarray]:
-    paths = sorted(data.glob("[0-9][0-9][0-9][0-9].npz"))[:frame_count]
-    if len(paths) != frame_count:
-        raise ValueError(f"Need {frame_count} metadata files, found {len(paths)}")
-    poses, source_ids = [], []
-    for path in paths:
-        with np.load(path) as metadata:
-            poses.append(metadata["camera_pose"].astype(np.float64))
-            source_ids.append(int(metadata["source_frame_id"]))
-    return np.stack(poses), np.asarray(source_ids, dtype=np.int64)
-
-
-def umeyama_transform(source: np.ndarray, target: np.ndarray, with_scale: bool):
-    valid = np.isfinite(source).all(axis=1) & np.isfinite(target).all(axis=1)
-    source, target = source[valid], target[valid]
-    if len(source) < 3:
-        raise ValueError("At least three finite camera correspondences are required")
-    source_mean, target_mean = source.mean(axis=0), target.mean(axis=0)
-    source_centered, target_centered = source - source_mean, target - target_mean
-    covariance = target_centered.T @ source_centered / len(source)
-    u, singular_values, vt = np.linalg.svd(covariance)
-    correction = np.ones(3)
-    if np.linalg.det(u @ vt) < 0:
-        correction[-1] = -1
-    rotation = u @ np.diag(correction) @ vt
-    variance = np.mean(np.sum(source_centered ** 2, axis=1))
-    scale = float(np.sum(singular_values * correction) / variance) if with_scale else 1.0
-    translation = target_mean - scale * (rotation @ source_mean)
-    aligned = (scale * (rotation @ source.T)).T + translation
-    ate = float(np.sqrt(np.mean(np.sum((aligned - target) ** 2, axis=1))))
-    return rotation, scale, translation, ate, int(valid.sum())
-
-
-def sample_indices(valid: np.ndarray, limit: int, rng: np.random.Generator) -> np.ndarray:
-    indices = np.flatnonzero(valid)
-    if len(indices) > limit:
-        indices = rng.choice(indices, limit, replace=False)
-    return indices
-
-
-def sample_common(prediction: dict, max_points: int, percentile: float):
-    depth = prediction["depth"].astype(np.float32)
-    confidence = prediction.get("confidence", np.ones_like(depth)).astype(np.float32)
-    mask = prediction.get("mask", np.ones_like(depth, dtype=bool)).astype(bool)
-    intrinsics = prediction["intrinsics"].astype(np.float64)
-    poses = prediction["camera_to_world"].astype(np.float64)
-    images = prediction.get("images")
-    finite_confidence = confidence[np.isfinite(confidence)]
-    threshold = float(np.percentile(finite_confidence, percentile))
-    per_frame = max(1, max_points // len(depth))
-    rng = np.random.default_rng(0)
-    point_parts, color_parts = [], []
-    height, width = depth.shape[1:]
-    for frame in range(len(depth)):
-        z = depth[frame].reshape(-1)
-        valid = (
-            np.isfinite(z) & (z > 0) & np.isfinite(confidence[frame].reshape(-1))
-            & (confidence[frame].reshape(-1) >= threshold) & mask[frame].reshape(-1)
-        )
-        selected = sample_indices(valid, per_frame, rng)
-        v, u = np.divmod(selected, width)
-        k = intrinsics[frame]
-        camera = np.stack(
-            ((u - k[0, 2]) / k[0, 0] * z[selected],
-             (v - k[1, 2]) / k[1, 1] * z[selected], z[selected]), axis=1
-        )
-        pose = poses[frame]
-        world = camera @ pose[:3, :3].T + pose[:3, 3]
-        finite = np.isfinite(world).all(axis=1)
-        point_parts.append(world[finite].astype(np.float32))
-        if images is not None:
-            color_parts.append(images[frame].reshape(-1, 3)[selected][finite])
-    points = np.concatenate(point_parts)
-    colors = np.concatenate(color_parts) if color_parts else np.full((len(points), 3), 180, np.uint8)
-    return points, colors, poses, threshold
-
-
-def sample_amb3r(prediction: dict, max_points: int, percentile: float):
-    points = prediction["pts"].astype(np.float32)
-    confidence = prediction["conf"].astype(np.float32)
-    poses = prediction["pose"].astype(np.float64)
-    images = prediction.get("images")
-    for name, array in (("pts", points), ("conf", confidence), ("pose", poses)):
-        if array.shape[0] == 1 and array.ndim in (4, 5):
-            if name == "pts": points = points[0]
-            elif name == "conf": confidence = confidence[0]
-            else: poses = poses[0]
-    if images is not None:
-        images = np.asarray(images)
-        if images.shape[0] == 1 and images.ndim == 5:
-            images = images[0]
-        if len(images) != len(points):
-            raise ValueError(
-                f"AMB3R images/point maps disagree: {len(images)} != {len(points)}"
-            )
-    finite_confidence = confidence[np.isfinite(confidence)]
-    threshold = float(np.percentile(finite_confidence, percentile))
-    per_frame = max(1, max_points // len(points))
-    rng = np.random.default_rng(0)
-    parts, color_parts = [], []
-    for frame_index, (pointmap, conf) in enumerate(zip(points, confidence)):
-        flat = pointmap.reshape(-1, 3)
-        valid = np.isfinite(flat).all(axis=1) & np.isfinite(conf.reshape(-1)) & (conf.reshape(-1) >= threshold)
-        selected = sample_indices(valid, per_frame, rng)
-        parts.append(flat[selected])
-        if images is not None:
-            image = images[frame_index]
-            if image.ndim != 3:
-                raise ValueError(f"Expected a 3D AMB3R image, got {image.shape}")
-            if image.shape[0] == 3:
-                image = np.moveaxis(image, 0, -1)
-            if image.shape != pointmap.shape:
-                raise ValueError(
-                    f"AMB3R image/point-map shapes disagree: {image.shape} != {pointmap.shape}"
-                )
-            image = image.astype(np.float32)
-            if image.min() >= -1.01 and image.max() <= 1.01:
-                image = (image + 1.0) * 127.5
-            elif image.max() <= 1.01:
-                image = image * 255.0
-            color_parts.append(np.clip(np.rint(image), 0, 255).astype(np.uint8).reshape(-1, 3)[selected])
-    sampled = np.concatenate(parts).astype(np.float32)
-    colors = np.concatenate(color_parts) if color_parts else np.full((len(sampled), 3), 180, np.uint8)
-    return sampled, colors, poses, threshold
-
-
-def transform_points(points: np.ndarray, rotation: np.ndarray, scale: float, translation: np.ndarray):
-    return (scale * (points.astype(np.float64) @ rotation.T) + translation).astype(np.float32)
 
 
 def sample_gt_mesh(path: Path, count: int) -> np.ndarray:
@@ -200,15 +77,6 @@ def geometry_metrics(predicted: np.ndarray, target: np.ndarray) -> dict:
     return result
 
 
-def write_ply(path: Path, points: np.ndarray, colors: np.ndarray) -> None:
-    cloud = o3d.geometry.PointCloud()
-    cloud.points = o3d.utility.Vector3dVector(points.astype(np.float64))
-    cloud.colors = o3d.utility.Vector3dVector(colors.astype(np.float64) / 255.0)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not o3d.io.write_point_cloud(str(path), cloud, write_ascii=False, compressed=False):
-        raise RuntimeError(f"Failed to write {path}")
-
-
 def main() -> None:
     args = parse_args()
     with np.load(args.prediction) as archive:
@@ -222,12 +90,14 @@ def main() -> None:
             prediction, args.max_pred_points, args.confidence_percentile
         )
     gt_poses, source_ids = load_gt_poses(args.data, len(predicted_poses))
-    predicted_centres = predicted_poses[:, :3, 3]
-    gt_centres = gt_poses[:, :3, 3]
-    se3 = umeyama_transform(predicted_centres, gt_centres, with_scale=False)
-    sim3 = umeyama_transform(predicted_centres, gt_centres, with_scale=True)
-    se3_points = transform_points(points, *se3[:3])
-    sim3_points = transform_points(points, *sim3[:3])
+    alignment = fit_alignment(predicted_poses, gt_poses)
+    se3, sim3 = alignment["se3_native_scale"], alignment["sim3_oracle_scale"]
+    se3_points = transform_points(
+        points, np.asarray(se3["alignment_rotation"]), se3["alignment_scale"],
+        np.asarray(se3["alignment_translation_m"]))
+    sim3_points = transform_points(
+        points, np.asarray(sim3["alignment_rotation"]), sim3["alignment_scale"],
+        np.asarray(sim3["alignment_translation_m"]))
     gt_points = sample_gt_mesh(args.gt_mesh, args.gt_sample_points)
     result = {
         "prediction": str(args.prediction.resolve()),
@@ -243,22 +113,8 @@ def main() -> None:
             "confidence_threshold": confidence_threshold,
             "max_pred_points": args.max_pred_points,
         },
-        "se3_native_scale": {
-            "trajectory_ate_rmse_m": se3[3],
-            "camera_correspondence_count": se3[4],
-            "alignment_scale": se3[1],
-            "alignment_rotation": se3[0].tolist(),
-            "alignment_translation_m": se3[2].tolist(),
-            **geometry_metrics(se3_points, gt_points),
-        },
-        "sim3_oracle_scale": {
-            "trajectory_ate_rmse_m": sim3[3],
-            "camera_correspondence_count": sim3[4],
-            "alignment_scale": sim3[1],
-            "alignment_rotation": sim3[0].tolist(),
-            "alignment_translation_m": sim3[2].tolist(),
-            **geometry_metrics(sim3_points, gt_points),
-        },
+        "se3_native_scale": {**se3, **geometry_metrics(se3_points, gt_points)},
+        "sim3_oracle_scale": {**sim3, **geometry_metrics(sim3_points, gt_points)},
     }
     if args.se3_ply:
         write_ply(args.se3_ply, se3_points, colors)
