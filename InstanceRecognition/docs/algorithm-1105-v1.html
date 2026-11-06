@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>算法设计 · 1105-v1 · InstanceRecognition</title>
+<title>流水线设计 · 1105-v1 · InstanceRecognition</title>
 <style>
   :root{
     --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
@@ -55,7 +55,7 @@
   h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
   p{margin:0 0 14px}
   a{color:var(--accent)}
-  ul{margin:0 0 14px; padding-left:22px; line-height:1.8}
+  ul,ol{margin:0 0 14px; padding-left:22px; line-height:1.8}
   li{margin-bottom:4px}
   code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
   pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.8px; line-height:1.65}
@@ -100,6 +100,7 @@
   th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; border-bottom:1px solid var(--line); white-space:nowrap}
   td code{font-size:12.6px}
   tbody tr:hover{background:#f7f9fa}
+  table.tools td:nth-child(3){font-size:13px; line-height:1.6; color:var(--ink-2)}
 
   .tree{font-family:var(--mono); font-size:13px; line-height:1.75; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 20px; margin:16px 0 20px; white-space:pre; overflow-x:auto; color:var(--ink)}
   .tree i{color:var(--ink-3); font-style:normal}
@@ -112,323 +113,399 @@
 <div class="wrap">
 
 <nav class="rail" id="rail">
-  <div class="rail-title">1105-v1 算法</div>
-  <a href="#overview"><span class="n">00</span>变更动机</a>
-  <a href="#perception"><span class="n">01</span>感知过滤</a>
-  <a href="#candidates"><span class="n">02</span>空间候选</a>
-  <a href="#hold"><span class="n">03</span>持有机制</a>
+  <div class="rail-title">流水线 1105-v1</div>
+  <a href="#overview"><span class="n">00</span>总览</a>
+  <a href="#perception"><span class="n">01</span>SAM / GPT 出 mask</a>
+  <a href="#projection"><span class="n">02</span>mask 投影到 3D</a>
+  <a href="#harness"><span class="n">03</span>harness 框架</a>
   <a href="#window"><span class="n">04</span>窗口输入</a>
-  <a href="#tools"><span class="n">05</span>工具与流程</a>
+  <a href="#tools"><span class="n">05</span>工具与动作</a>
   <a href="#verify"><span class="n">06</span>verify</a>
-  <a href="#actions"><span class="n">07</span>动作表</a>
+  <a href="#contracts"><span class="n">07</span>契约与失效</a>
+  <a href="#commands"><span class="n">08</span>运行命令</a>
 </nav>
 
 <main>
 
 <header class="top">
-  <div class="eyebrow">InstanceRecognition · Algorithm Design · 1105-v1</div>
-  <h1>1105-v1 算法变更说明</h1>
+  <div class="eyebrow">InstanceRecognition · Pipeline Design · 1105-v1</div>
+  <h1>从一张 RGB 图到一个跨帧物体</h1>
   <p class="lede">
-    相比 v11 基线，1105-v1 在感知、候选几何、持有上限、verify 四个层面做了系统性改动，
-    目标是减少同类物体混淆、让误判代价可控、让宿主提供可信的几何证据。
+    GPT 判断画面里有什么，SAM3.1 按这些判断切出 mask（过小的过滤掉），
+    投影器把每个 mask 像素落成三维点并写入相机位姿，
+    Harness 再逐窗口决定这些点属于哪个物体——每个物体最多持有 5 条观测，
+    每次提交后渲染反投影图让模型确认。
   </p>
   <div class="meta">
-    <span class="tag">设计日期 <b>2026-11</b></span>
-    <span class="tag">基准 <b>v11 · 500 帧 / 100 窗 / 114 物体</b></span>
-    <span class="tag">源码分支 <b>HEAD（d82021c 起）</b></span>
+    <span class="tag">版本 <b>1105-v1</b></span>
+    <span class="tag">核对源码 <b>2026-11</b></span>
+    <span class="tag">投影策略 <b>amb3r_per_frame_v1</b></span>
+    <span class="tag">Source <b>scene_amb3r_v2</b></span>
+    <span class="tag">基准 <b>v11 · 500 帧 / 100 窗</b></span>
   </div>
 </header>
 
 
 <!-- ============ 00 ============ -->
 <section id="overview">
-  <h2><span class="no">00</span>变更动机</h2>
-  <p class="sub">从 v11 的四个根因出发</p>
+  <h2><span class="no">00</span>总览</h2>
+  <p class="sub">三个模块 · 两次模型调用 · 一次纯本地投影</p>
 
-  <p>
-    v11（500 帧 / 100 窗）暴露了四个反复出现的失败模式，1105-v1 针对每一个做了对应的改动：
-  </p>
+  <div class="flow">
+    <div class="step">
+      <div class="dot m">01</div>
+      <div class="body">
+        <div class="name">SAM / GPT 出 mask</div>
+        <div class="io2"><em>输入</em> 一批 RGB 帧 &nbsp;→&nbsp; <em>输出</em> 每帧一组带类别信息的二值 mask（面积过小的已过滤）</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">02</div>
+      <div class="body">
+        <div class="name">mask 投影到 3D</div>
+        <div class="io2"><em>输入</em> 上一步的 mask + AMB3R 逐帧点图 &nbsp;→&nbsp; <em>输出</em> 每帧一份带归属位的三维点，附相机位姿</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">03</div>
+      <div class="body">
+        <div class="name">harness 归属决策</div>
+        <div class="io2"><em>输入</em> source 目录 &nbsp;→&nbsp; <em>输出</em> 物体身份与归属（版本化状态）、每个物体的累计点云</div>
+      </div>
+    </div>
+  </div>
 
-  <table>
-    <thead><tr><th>根因</th><th>v11 表现</th><th>1105-v1 对策</th></tr></thead>
-    <tbody>
-      <tr>
-        <td>感知噪声</td>
-        <td>过小的 mask（画面占比 &lt;0.5%）给 harness 带来无效观测，模型逐一 discard 消耗预算</td>
-        <td>SAM 阶段按画面面积过滤，0.5% 阈值，500 帧共过滤 22.9%（1154/5046）原始候选</td>
-      </tr>
-      <tr>
-        <td>几何候选弱</td>
-        <td>每条观测只给最近 3 个候选、用中位距离，同类物体（凳子）分不清；全局 OBB 几乎没用上（<code>compare_geometry</code> 调用 3 次）</td>
-        <td>候选扩展到 15 个，改用 gap（第 5 百分位最近距离）+ overlap（10 cm 内占比），删掉 OBB 块和 <code>compare_geometry</code></td>
-      </tr>
-      <tr>
-        <td>无持有上限</td>
-        <td>一个物体可积累几百条观测，错误无法纠正，点云随时间偏移</td>
-        <td>每个物体最多持有 5 条，超员时模型用 <code>evict</code> 换位</td>
-      </tr>
-      <tr>
-        <td>无验证环节</td>
-        <td>提交后没有检查机制，归错的观测一旦提交永久留存</td>
-        <td>每次 <code>propose_update</code> 后宿主渲染反投影图，模型确认再 commit</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <p>
-    另外，动作名称做了语义修正：<code>assign</code>→<code>hold</code>，<code>defer</code>→<code>discard</code>，
-    让名字和实际语义一致（持有是长期的，丢弃是最终的）。
-  </p>
+  <div class="marks">
+    <div class="mark m"><div class="who">模型</div><div>两次外部调用：GPT 读图写类别，harness 里的 Claude 模型做跨帧身份决策。SAM 是本地推理，不调外部 API。</div></div>
+    <div class="mark a"><div class="who">1105-v1</div><div>相比 v11 基线：感知增加面积过滤（0.5%）；投影写入 camera_to_world；候选几何从中位距离改为 gap + overlap，扩展到 15 个；持有上限 5 条；提交后 verify。</div></div>
+  </div>
 </section>
 
 
 <!-- ============ 01 ============ -->
 <section id="perception">
-  <h2><span class="no">01</span>感知过滤</h2>
-  <p class="sub">src/inference/sam31_segment.py · DEFAULT_MIN_MASK_AREA_FRACTION = 0.005</p>
+  <h2><span class="no">01</span>SAM / GPT 出 mask</h2>
+  <p class="sub">src/inference/label_frames.py · gpt_sam31.py · sam31_segment.py</p>
 
   <div class="io">
-    <div class="row"><div class="lbl">触发</div><div class="val">在 SAM 候选循环里，mask 像素数算出来之后，预算截断之前</div></div>
-    <div class="row"><div class="lbl">阈值</div><div class="val">占画面面积 0.5%（1296×968 = 1,254,528 px，约 6,273 像素）</div></div>
-    <div class="row"><div class="lbl">豁免</div><div class="val">无碰边豁免：bbox 触及画面边缘也同样过滤</div></div>
-    <div class="row"><div class="lbl">审计</div><div class="val">被过滤的候选不写 mask 文件，只记入 <code>excluded_by_size</code> 字段（类别、面积占比、bbox、sam_score）</div></div>
+    <div class="row"><div class="lbl">输入</div><div class="val">一批原始 RGB 帧（JPEG）。<b>不含</b>任何 mask、深度或时间上下文。</div></div>
+    <div class="row"><div class="lbl">输出</div><div class="val">每帧一组二值 mask PNG，外加一份把 mask 与类别、置信度绑在一起的 <code>predictions.json</code>。mask 是帧内局部的，没有跨帧身份。</div></div>
+    <div class="row"><div class="lbl">命令</div><div class="val"><code>python -m src.inference.label_frames</code> → <code>python -m src.inference.gpt_sam31</code>（顺序执行）</div></div>
   </div>
 
-  <h3>阈值选取依据</h3>
+  <h3>两步分工<span class="h">先 GPT，后 SAM</span></h3>
   <p>
-    在 v11 的 500 帧上实测：0.5% 过滤 1154 个原始候选（22.9%），影响 341 帧，主要是书、鞋、遥控器等小物体。
-    调高到 1.0% 多过滤 544 个，新增的主要是柜子、门的残缺视图（大物体只露一角），代价明显大于收益，故保持 0.5%。
+    GPT 那一步只看图，说出画面里有哪些类别、每类该用什么提示词去分割。
+    SAM 那一步消费这些提示词，把文字落到像素上。两步分开是因为它们失败的模式不同：
+    类别判断错要换 prompt 重跑，分割错要换阈值或权重重跑，重跑范围不一样。
+  </p>
+
+  <h3>面积过滤<span class="h">1105-v1 新增 · DEFAULT_MIN_MASK_AREA_FRACTION = 0.005</span></h3>
+  <p>
+    在 SAM 候选循环里，mask 像素数计算后、预算截断前，过滤掉画面占比低于 0.5% 的候选（1296×968 帧约 6,273 像素）。
+    被过滤的候选不写 mask 文件，只记入 <code>excluded_by_size</code>（类别、面积占比、bbox、sam_score）。
   </p>
   <div class="warn">
-    已知代价：0.5% 下柜子丢 43 个、门丢 15 个候选，均为大物体的小视图（离得远或只露一角）。
-    若后续发现某些物体点云缺块，先查 <code>excluded_by_size</code> 记录。
+    500 帧实测：0.5% 阈值过滤 1154/5046 原始候选（22.9%），影响 341 帧。
+    主要丢弃：书 247、鞋 134、遥控 96、音箱 84、电灯开关 63。
+    已知代价：柜子丢 43 个、门丢 15 个（大物体的小视图）。若点云缺块先查 <code>excluded_by_size</code> 记录。
   </div>
-
-  <h3>与 excluded_by_budget 的区别</h3>
   <p>
-    <code>excluded_by_budget</code> 是按 SAM 置信度截断的预算限制（默认上限 16 个/帧）；
-    <code>excluded_by_size</code> 是面积过滤，发生在预算截断之前，两者记录相互独立。
-    在 500 帧实测中，67 帧触及 16 个/帧上限，<code>excluded_by_budget</code> 几乎不触发。
+    <code>excluded_by_budget</code>（按 SAM 置信度截断，上限 16 个/帧）和 <code>excluded_by_size</code> 互相独立，
+    后者发生在前者之前。500 帧实测中无帧触及预算上限（最大 16 个/帧），<code>excluded_by_budget</code> 几乎不激活。
   </p>
+
+  <h3>500 帧实测规模</h3>
+  <table>
+    <thead><tr><th>指标</th><th>数值</th></tr></thead>
+    <tbody>
+      <tr><td>原始候选（面积过滤前）</td><td>5046 个</td></tr>
+      <tr><td>0.5% 过滤后保留</td><td>3892 个（77.1%）</td></tr>
+      <tr><td>过滤影响帧数</td><td>341/500 帧</td></tr>
+      <tr><td>每帧平均 mask 数（过滤后）</td><td>约 7.8 个</td></tr>
+    </tbody>
+  </table>
 </section>
 
 
 <!-- ============ 02 ============ -->
-<section id="candidates">
-  <h2><span class="no">02</span>空间候选重写</h2>
-  <p class="sub">src/harness/spatial_context.py · 1105-v1 item 2</p>
+<section id="projection">
+  <h2><span class="no">02</span>mask 投影到 3D</h2>
+  <p class="sub">src/geometry/amb3r_mask_source.py · scene_amb3r_v2</p>
 
   <div class="io">
-    <div class="row"><div class="lbl">删除</div><div class="val">全局 OBB 块（<code>global_object_geometry</code>）、<code>compare_geometry</code> 工具、<code>geometry:a:b</code> 证据键</div></div>
-    <div class="row"><div class="lbl">保留</div><div class="val">每条观测的 <code>spatial_candidates</code>，字段从 3 个扩展到最多 15 个，指标从中位距离改为 gap + overlap</div></div>
+    <div class="row"><div class="lbl">输入</div><div class="val">上一步的 mask + AMB3R metric_head 推理结果（逐帧点图 pts、置信图 conf、<b>相机位姿 pose</b>）</div></div>
+    <div class="row"><div class="lbl">输出</div><div class="val">每帧一份 <code>frames/NNNN.npz</code>（points_world、rgb、mask_bits、pixel_indices、grid_shape_hw、<b>camera_to_world</b>）；清单里附 <b>intrinsic_color</b></div></div>
+    <div class="row"><div class="lbl">命令</div><div class="val"><code>python -m src.geometry.amb3r_mask_source --output artifacts/sources/scene0000_00/scene_amb3r_v2</code></div></div>
   </div>
 
-  <h3>两个新指标</h3>
-  <table>
-    <thead><tr><th>字段</th><th>计算方式</th><th>含义</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>gap_m</code></td>
-        <td>观测点云到候选物体点云各点最近距离的第 5 百分位</td>
-        <td>「还差多远才能接触到」。用第 5 百分位而非最小值，抑制 mask 边缘的单个噪点</td>
-      </tr>
-      <tr>
-        <td><code>overlap</code></td>
-        <td>观测点云中距候选物体点云 10 cm 以内的点的比例</td>
-        <td>「有多少表面是重叠的」。10 cm 容差吸收 AMB3R 跨帧误差（中位 6.6 cm，p90 13.1 cm）</td>
-      </tr>
-    </tbody>
-  </table>
+  <h3>点云投影原理</h3>
+  <p>
+    AMB3R 对每个像素预测了一个三维位置（pts）和置信度（conf）。
+    mask 像素 → AMB3R 点图里对应位置的三维坐标 → 乘上 Sim(3) 变换到扫描坐标系 → 写入 points_world。
+    每帧恰好一个点，没有多射线歧义，也没有遮挡泄漏。
+  </p>
 
-  <h3>候选选取规则</h3>
-  <div class="flow">
-    <div class="step">
-      <div class="dot">1</div>
-      <div class="body">
-        <div class="name">质心预筛</div>
-        <div class="io2">只对质心距离 ≤ 2.5 m 的物体建 KD 树，跳过远处物体避免不必要计算</div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="dot">2</div>
-      <div class="body">
-        <div class="name">gap 截断</div>
-        <div class="io2">gap &gt; 2 m 的物体丢弃（太远，不可能是同一个物体）</div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="dot">3</div>
-      <div class="body">
-        <div class="name">取前 8</div>
-        <div class="io2">按 gap 升序取前 8 个候选</div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="dot">4</div>
-      <div class="body">
-        <div class="name">密集扩展</div>
-        <div class="io2">第 9 名起，gap &lt; 0.5 m 的继续补入，最多补到总数 15 个。0.5 m 来自 AMB3R 双帧最大误差（≈0.4 m）加余量</div>
-      </div>
-    </div>
+  <h3>1105-v1 新增：相机位姿写入 source</h3>
+  <p>
+    AMB3R 的 pose（相机到 AMB3R 世界坐标的 4×4 矩阵）乘上同一份 Sim(3)，
+    得到相机到扫描坐标系的 <code>camera_to_world</code>（4×4），写进每帧 npz。
+    harness 可以直接读，无需重新拟合 Sim(3)。
+  </p>
+  <p>
+    RGB 相机内参（fx=1169.62, fy=1167.11, cx=646.30, cy=489.93, 1296×968）从 ScanNet 提取清单读取，
+    写进 source 的 <code>manifest.json</code> 的 <code>intrinsic_color</code> 字段，供 verify 阶段反投影用。
+  </p>
+
+  <h3>Sim(3) 来源</h3>
+  <p>
+    Sim(3)（scale 0.8875，R，t）由 <code>fit_sim3_from_gt.py</code> 拟合，用的是预测相机轨迹和 GT 相机轨迹之间的 Umeyama 对齐。
+    拟合后的变换记录在 <code>pointcloud_gt_corrected_evaluation.json</code>，source 里的 <code>sim3_source</code> 字段指向该文件。
+    这一步用了 GT 位姿——它属于离线校准，不在推理路径上。
+  </p>
+  <div class="note">
+    scene_amb3r_v1（v11 所用）没有 camera_to_world，是 1105-v1 新建 scene_amb3r_v2 的原因。v1 保持原样，用于对照。
   </div>
 
-  <h3>物体点云的变化</h3>
-  <p>
-    候选的 gap/overlap 只用该物体的<b>持有观测</b>（status <code>held</code>）点云计算，不再用历史所有归属观测。
-    持有上限 5 条保证了点云规模可控，跨帧误差不会随时间累积放大。
-  </p>
-
-  <h3>视角参考值（2b 批新增）</h3>
-  <p>
-    每个候选还附带两个视角字段，来自 <code>scene_amb3r_v2</code> 里写入的 <code>camera_to_world</code>：
-  </p>
-  <ul>
-    <li><code>view_direction</code>：相机到物体质心的单位向量（球面方向）</li>
-    <li><code>camera_distance_m</code>：相机到质心的距离（米）</li>
-  </ul>
-  <p>源没有 <code>camera_to_world</code>（如 <code>scene_amb3r_v1</code>）时这两个字段不出现，候选正常返回。</p>
+  <h3>产物目录结构</h3>
+  <div class="tree">scene_amb3r_v2/
+├── manifest.json          <i>500 帧清单，含 intrinsic_color、sim3_source、bounds</i>
+├── frames/
+│   └── NNNN.npz           <i>每帧：points_world (K,3)、rgb (K,3)、mask_bits (K,)、</i>
+│                          <i>pixel_indices (K,)、grid_shape_hw (2,)、</i>
+│                          <i><b>camera_to_world (4,4)</b>（新）</i>
+└── assets/
+    ├── frame_XXXXXX.js    <i>viewer 用的 base64 点云资产</i>
+    └── background.js      <i>场景背景点云</i></div>
 </section>
 
 
 <!-- ============ 03 ============ -->
-<section id="hold">
-  <h2><span class="no">03</span>持有机制</h2>
-  <p class="sub">src/harness/state.py · HOLD_LIMIT = 5</p>
+<section id="harness">
+  <h2><span class="no">03</span>harness 框架</h2>
+  <p class="sub">src/harness/ · 逐窗口的模型决策循环</p>
 
   <div class="io">
-    <div class="row"><div class="lbl">上限</div><div class="val">每个物体最多持有 5 条观测（<code>HOLD_LIMIT</code>）</div></div>
-    <div class="row"><div class="lbl">状态名</div><div class="val"><code>held</code>（原 <code>assigned</code>，向后兼容读旧 run）</div></div>
-    <div class="row"><div class="lbl">换位</div><div class="val">hold 动作带 <code>evict</code> 字段指定被替换的观测；被替换的观测转 discard</div></div>
-    <div class="row"><div class="lbl">inspect</div><div class="val">物体满员时 <code>inspect_object</code> 自动返回全部 5 条（含视角方向和可见像素），无需指定参数</div></div>
+    <div class="row"><div class="lbl">输入</div><div class="val">02 产出的 source 目录（每帧一份带位姿的三维点云）</div></div>
+    <div class="row"><div class="lbl">输出</div><div class="val">物体身份与归属（版本化状态）、每个物体的累计点云、可回放的页面</div></div>
+    <div class="row"><div class="lbl">命令</div><div class="val"><code>python -m src.harness.run</code>；已完成的结果用 <code>--publish-only</code> 只重建页面</div></div>
   </div>
 
-  <h3>满员替换流程</h3>
+  <p>
+    到这里，数据是「每帧一堆带归属位的三维点」。还缺的是<b>身份</b>：
+    第 0 帧的椅子、第 3 帧的椅子、第 7 帧的椅子，是不是同一把。这件事由模型通过工具循环决定。
+  </p>
+
+  <h3>窗口</h3>
+  <p>
+    帧被切成固定大小的窗口（默认 5 帧）。每个窗口是一笔事务：模型看这一窗，
+    决定这些观测归给哪些物体，提交，进入下一窗。
+    开始时模型拿到的是当前窗口每帧的 RGB 与 overlay、每条观测的类别与几何摘要，
+    以及全部已归档物体的文字记录（含质心坐标）。
+  </p>
+  <div class="note">
+    <strong>历史图片一开始不发。</strong>
+    只有文字与几何。要确认某个历史物体长什么样，模型得主动调
+    <code>inspect_object</code> 或 <code>inspect_observations</code>。
+  </div>
+
+  <h3>一个窗口的生命周期<span class="h">run.py</span></h3>
   <div class="flow">
     <div class="step">
-      <div class="dot m">1</div>
+      <div class="dot">1</div>
       <div class="body">
-        <div class="name">inspect_object（自动返回全部观测）</div>
-        <div class="io2">返回 5 张图 + 每条观测的 view_direction、camera_distance_m、visible_pixels、bbox_truncated</div>
+        <div class="name">组装输入</div>
+        <div class="io2"><em>inputs.build_window_content</em> → 一条状态 text、逐帧「观测 text + RGB + overlay」、一条历史访问说明。
+        同时把本窗观测登记进可引用证据集，并写 <code>window_inputs/NNNN_context.json</code> 审计。</div>
       </div>
     </div>
     <div class="step">
       <div class="dot m">2</div>
       <div class="body">
-        <div class="name">模型决策</div>
-        <div class="io2">对比视角间隔和可见像素，选出最值得替换的那条</div>
+        <div class="name">工具循环</div>
+        <div class="io2"><em>最多 <code>max_calls</code> 轮。</em>每轮模型调一个工具（<code>parallel_tool_calls: false</code>）。
+        工具返回的图片作为下一条 user 消息补进会话。</div>
       </div>
     </div>
     <div class="step">
       <div class="dot m">3</div>
       <div class="body">
-        <div class="name">提交 hold + evict</div>
-        <div class="io2"><code>{"action":"hold","object_id":"Object3","observations":["0185:003"],"evict":"0042:001","evidence":[…],"reason":"…"}</code></div>
+        <div class="name">propose_update → verify</div>
+        <div class="io2"><em>1105-v1 新增。</em>提案通过结构检查后，宿主对 hold / create / merge 动作渲染反投影图；
+        返回 <code>verify_required</code> + 图。模型确认后 commit，或修改提案重新 propose。
+        verify 轮次独立计数（最多 2 轮），不占 max_calls。</div>
       </div>
     </div>
     <div class="step">
       <div class="dot">4</div>
       <div class="body">
-        <div class="name">宿主执行</div>
-        <div class="io2">0042:001 → discard；0185:003 → held；持有数仍为 5，验证通过</div>
+        <div class="name">预算警告</div>
+        <div class="io2"><em>第 <code>max_calls−2</code> 轮之前插入。</em>提示立刻提交；从这轮起 reid gate 放行。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">5</div>
+      <div class="body">
+        <div class="name">提交与落盘</div>
+        <div class="io2"><em>commit_update 成功才写盘。</em>先写 <code>versions/.NNNN.tmp</code>，算完点云再原子改名；
+        写 <code>checkpoint.json = {version, cutoff}</code>。失败不碰旧版本。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot w">6</div>
+      <div class="body">
+        <div class="name">耗尽即失败</div>
+        <div class="io2"><em>用完 max_calls 仍未提交</em> → 抛错，检查点保持上一窗口。重跑命令从该窗口继续。</div>
       </div>
     </div>
   </div>
-
-  <h3>观测参考值（2b 批）</h3>
-  <p>每条观测元数据新增以下字段，供模型判断是否值得持有：</p>
-  <table>
-    <thead><tr><th>字段</th><th>来源</th><th>用途</th></tr></thead>
-    <tbody>
-      <tr><td><code>bbox_truncated</code></td><td>bbox 距画面边缘 ≤ 5 px 则为 true</td><td>标记目标可能在画面外未完整出现</td></tr>
-      <tr><td><code>view_direction</code></td><td>camera_to_world → 相机到质心的单位向量</td><td>候选视角（inspect_object 满员时返回）</td></tr>
-      <tr><td><code>camera_distance_m</code></td><td>相机到质心的欧氏距离</td><td>远处视图质量低，优先换位</td></tr>
-    </tbody>
-  </table>
 </section>
 
 
 <!-- ============ 04 ============ -->
 <section id="window">
   <h2><span class="no">04</span>窗口初始输入</h2>
-  <p class="sub">src/harness/inputs.py · 与 v11 的差异</p>
+  <p class="sub">src/harness/inputs.py · src/harness/spatial_context.py</p>
 
   <div class="tree">一个窗口的初始输入（1105-v1）
-├── 1. 窗口状态              <i>一条 text 块</i>
-│   ├── window、state.version、max_calls
-│   ├── <b>spatial_candidates_policy</b>  <i>候选规则说明（新）</i>
+├── 1. 窗口状态              <i>一条 text 块，最先发送</i>
+│   ├── window [first, cutoff]、state.version、max_calls
+│   ├── spatial_candidates_policy  <i>候选规则说明</i>
 │   └── 已归档物体档案：每个 Object 一条
-│       ├── id、object_label、created_at、status
-│       ├── label_history（relabel 后才有）
-│       ├── observation_count
-│       └── <b>centroid</b>  <i>持有观测点云质心均值，3 个坐标（新）</i>
+│       ├── id、object_label、created_at、status（恒为 provisional）
+│       ├── label_history（发生过 relabel 才有）
+│       ├── observation_count   <i>只给数量，不给观测 id</i>
+│       └── <b>centroid</b>    <i>持有观测点云的质心均值，3 个坐标（新）</i>
 │
-├── 2. 当前观测              <i>每帧一组</i>
-│   ├── 文字：每条观测一条记录
-│   │   ├── id、seq、source_frame_id、instance_id
-│   │   ├── category_label、bbox_xyxy、image_size_wh、overlay_color_rgb
-│   │   ├── point_count、centroid、bounds
-│   │   ├── <b>bbox_truncated</b>   <i>新：bbox 是否触及画面边缘</i>
+├── 2. 当前观测              <i>每帧 3 个块，逐帧发送</i>
+│   ├── text：sampled_sequence + observations，每条观测一条记录
+│   │   ├── id（seq:instance）、seq、source_frame_id、instance_id
+│   │   ├── category_label         <i>上游类别提示，不是物体身份</i>
+│   │   ├── bbox_xyxy、image_size_wh、overlay_color_rgb
+│   │   ├── point_count、centroid、bounds   <i>反投影点云摘要</i>
+│   │   ├── <b>bbox_truncated</b>  <i>新：bbox 是否触及画面边缘（≤5 px）</i>
 │   │   └── <b>spatial_candidates</b>：至多 15 个
 │   │       ├── object_id、object_label
-│   │       ├── <b>gap_m</b>       <i>新：第 5 百分位最近距离</i>
-│   │       ├── <b>overlap</b>     <i>新：10 cm 内点占比</i>
-│   │       ├── <b>view_direction</b>    <i>新（需 v2 source）</i>
-│   │       └── <b>camera_distance_m</b> <i>新（需 v2 source）</i>
-│   ├── 图：完整原始 RGB
-│   └── 图：全帧 mask overlay
+│   │       ├── <b>gap_m</b>       <i>新：第 5 百分位最近距离（米）</i>
+│   │       ├── <b>overlap</b>     <i>新：10 cm 内点占比（0–1）</i>
+│   │       ├── <b>view_direction</b>    <i>新：相机到质心的单位向量（需 v2 source）</i>
+│   │       └── <b>camera_distance_m</b> <i>新：相机到质心距离（需 v2 source）</i>
+│   ├── image：完整原始 RGB
+│   └── image：全帧彩色 mask overlay
 │
-└── 3. 历史访问说明
+└── 3. 历史访问说明           <i>最后一条 text</i>
+    └── 只有文字档案；历史图片走 inspect_object / inspect_observations 按需取
 
 <b>与 v11 相比删除的字段：</b>
-  ✗ global_object_geometry（全局 OBB 块）
-  ✗ geometry_scope / bbox_convention
-  ✗ representative_observation_id
-  ✗ observation_ids（持有观测列表）</div>
+  ✗ global_object_geometry（全局 OBB 块：center_xyz / size_xyz / axes_world）
+  ✗ representative_observation_id（历史观测 id 暴露导致无效引用）
+  ✗ observation_ids（同上）
+  ✗ state.pending（deferral 不再广播）</div>
+
+  <h3>空间候选重写<span class="h">spatial_context.py · 1105-v1 item 2</span></h3>
+  <p>
+    候选的候选物体点云只用该物体的<b>持有观测</b>（status <code>held</code>）构建，最多 5 条，
+    不再用所有历史归属。这消除了早期错误归属对点云的污染。
+  </p>
+  <table>
+    <thead><tr><th>字段</th><th>计算方式</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>gap_m</code></td>
+        <td>观测点云到候选物体点云各点最近距离的第 5 百分位</td>
+        <td>「还差多远才能接触」；第 5 百分位抑制 mask 边缘噪点</td>
+      </tr>
+      <tr>
+        <td><code>overlap</code></td>
+        <td>观测点云中距候选物体点云 10 cm 以内的点的比例</td>
+        <td>「有多少表面是共享的」；10 cm 容差吸收 AMB3R 跨帧误差（中位 6.6 cm）</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>候选选取规则：丢弃 gap &gt; 2 m 的物体 → 按 gap 升序取前 8 → 若第 9 名起 gap &lt; 0.5 m 则继续补入，上限 15 个。</p>
 
   <div class="note">
-    <strong>体积变化：</strong>v11 窗口 51（帧 250–254）首条消息约 122,696 字符，其中 state.pending 占 67,610 字符（已在 v11 后删除），global_object_geometry 约 22,000 字符。1105-v1 同等窗口预计首条消息在 30,000–40,000 字符，降幅 65% 以上。
+    <strong>体积变化：</strong>v11 窗口 51 首条消息约 122,696 字符（其中 state.pending 67,610 字符、global_object_geometry 约 22,000 字符）。
+    1105-v1 去掉这两块后，同等规模窗口预计在 30,000–40,000 字符，降幅约 65%。
   </div>
 </section>
 
 
 <!-- ============ 05 ============ -->
 <section id="tools">
-  <h2><span class="no">05</span>工具与证据流程</h2>
-  <p class="sub">src/harness/tools.py · 五个工具</p>
+  <h2><span class="no">05</span>工具与动作</h2>
+  <p class="sub">src/harness/tools.py · src/harness/state.py</p>
 
-  <table>
-    <thead><tr><th>工具</th><th>返回</th><th>1105-v1 变化</th></tr></thead>
+  <h3>四个工具</h3>
+  <table class="tools">
+    <thead><tr><th>工具</th><th>返回</th><th>说明</th></tr></thead>
     <tbody>
       <tr>
         <td><code>inspect_observations(ids)</code></td>
         <td>最多 4 条观测的 RGB + overlay</td>
-        <td>无变化</td>
+        <td>看当前窗口或历史观测的实际 mask 覆盖范围</td>
       </tr>
       <tr>
         <td><code>inspect_object(object_id)</code></td>
         <td>代表观测图 + 元数据 + <b>geometry 摘要</b></td>
         <td>
-          新增 geometry（centroid、bounds_min/max、size_xyz）；<br>
-          物体满员时自动返回全部 5 条持有观测（每条带 view_direction、camera_distance_m）；<br>
-          删除 <code>compare_geometry</code>
+          返回物体的 centroid、bounds_min/max、size_xyz（持有点云计算，最多 5 条）。
+          物体满员（5 条）时自动返回全部持有观测，每条附 view_direction、camera_distance_m、visible_pixels、bbox_truncated。
+          可传 <code>all_observations: true</code> 强制返回全部。
         </td>
       </tr>
       <tr>
         <td><code>propose_update(proposal_json)</code></td>
         <td>proposal_id 或 verification_required 或 <b>verify_required</b></td>
-        <td>新增 verify_required 分支（见 §06）；reid gate 保持不变</td>
+        <td>
+          提案通过结构检查后自动触发 verify；
+          reid gate 返回 verification_required（历史物体未 inspect）；
+          verify 返回 verify_required（反投影图待确认）。
+        </td>
       </tr>
       <tr>
         <td><code>commit_update(proposal_id)</code></td>
         <td>ready_to_commit</td>
-        <td>无变化；verify 检查在 propose 阶段完成</td>
+        <td>写盘并结束窗口；verify 检查在 propose 阶段完成，commit 不再检查。</td>
       </tr>
     </tbody>
   </table>
 
-  <h3>证据引用规则（不变）</h3>
+  <h3>持有上限与换位<span class="h">HOLD_LIMIT = 5</span></h3>
   <p>
-    每个动作必须有 <code>evidence</code> 列表和 <code>reason</code>。
+    每个物体最多持有 5 条观测（status <code>held</code>）。超员时必须在 hold 动作里加 <code>evict</code> 字段指定被替换的观测；
+    宿主把被替换的那条转为 discard，再 hold 新观测，持有数保持 5。
+  </p>
+  <pre><code>{<span class="k">"action"</span>:<span class="s">"hold"</span>,<span class="k">"object_id"</span>:<span class="s">"Object3"</span>,
+ <span class="k">"observations"</span>:[<span class="s">"0185:003"</span>],
+ <span class="k">"evict"</span>:<span class="s">"0042:001"</span>,  <span class="c">// 指定被换出的持有观测</span>
+ <span class="k">"evidence"</span>:[<span class="s">"0185:003"</span>,<span class="s">"0042:001"</span>],
+ <span class="k">"reason"</span>:<span class="s">"0042:001 与新观测视角重复，换掉"</span>}</code></pre>
+
+  <h3>六种动作</h3>
+  <table>
+    <thead><tr><th>动作</th><th>含义</th><th>1105-v1 变化</th></tr></thead>
+    <tbody>
+      <tr><td><code>hold</code></td><td>把观测归到已有物体</td><td>改名自 assign；上限 5 条；超员需 evict；verify 检查</td></tr>
+      <tr><td><code>discard</code></td><td>丢弃观测（最终决定）</td><td>改名自 defer；批量上限从 4 提高到 10</td></tr>
+      <tr><td><code>create</code></td><td>新建物体（不含观测）</td><td>verify 新增重叠检查</td></tr>
+      <tr><td><code>exclude</code></td><td>排除观测（跨物体 mask）</td><td>无变化</td></tr>
+      <tr><td><code>relabel</code></td><td>修正物体标签</td><td>无变化</td></tr>
+      <tr><td><code>merge</code></td><td>合并两个物体</td><td>verify 新增超员检查；超员须重新 propose 加 discard</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark w">
+      <div class="who">兼容</div>
+      <div>旧名 <code>assign</code> / <code>defer</code> 在输入侧已被拒绝（Unknown action）。
+      旧 run 的 state.json（status <code>assigned</code> / <code>defer</code>）仍可读取——pagegen 和 spatial_context 对两套名称都兼容。</div>
+    </div>
+  </div>
+
+  <h3>证据引用规则</h3>
+  <p>
+    每个动作必须有非空 <code>evidence</code> 列表和 <code>reason</code>。
     本窗口观测 id 开窗时自动进入证据集，引用它们不证明做了任何检查。
     历史 id 只有通过 <code>inspect_object</code> 或 <code>inspect_observations</code> 看过后才可引用；
     引用未看过的历史 id，报错并按名指出。
@@ -439,52 +516,50 @@
 <!-- ============ 06 ============ -->
 <section id="verify">
   <h2><span class="no">06</span>提交后 verify</h2>
-  <p class="sub">src/harness/verify.py · propose_update 后自动触发</p>
+  <p class="sub">src/harness/verify.py · propose_update 通过后自动触发</p>
 
   <div class="io">
-    <div class="row"><div class="lbl">触发</div><div class="val">每次 propose_update 通过结构验证和 reid gate 之后，对 hold / create / merge 动作自动检查</div></div>
-    <div class="row"><div class="lbl">计数</div><div class="val"><code>max_verify_rounds = 2</code>，独立计数，不占 max_calls；2 轮用完后强制允许 commit 并记日志</div></div>
-    <div class="row"><div class="lbl">渲染</div><div class="val">Python PIL + 相机内外参（来自 scene_amb3r_v2）；无 3D 渲染，全部是 2D 反投影到原始 RGB 帧</div></div>
+    <div class="row"><div class="lbl">触发</div><div class="val">对提案里每条 hold / create / merge 动作检查；discard / exclude / relabel 不检查</div></div>
+    <div class="row"><div class="lbl">计数</div><div class="val"><code>max_verify_rounds = 2</code>，独立计数，不占 max_calls；2 轮后强制允许 commit 并记日志</div></div>
+    <div class="row"><div class="lbl">渲染</div><div class="val">Python PIL + camera_to_world + intrinsic_color（均来自 scene_amb3r_v2）；2D 反投影，不做 3D 渲染</div></div>
   </div>
 
   <h3>三种检查</h3>
+  <table>
+    <thead><tr><th>动作</th><th>检查内容</th><th>触发条件</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>hold</code></td>
+        <td>把目标物体的持有点云反投影到观测所在帧的 RGB 上；青色点 = 物体云，黄框 = mask bbox</td>
+        <td>有 camera_to_world 时始终渲染</td>
+      </tr>
+      <tr>
+        <td><code>create</code></td>
+        <td>计算新物体点云与每个已有物体的重叠率（10 cm 容差）；重叠 &gt;10% 时渲染重叠最多的物体的反投影图</td>
+        <td>与已有物体重叠 &gt;10%</td>
+      </tr>
+      <tr>
+        <td><code>merge</code></td>
+        <td>合并后持有数是否超过 5；超员时告知超员 N 条</td>
+        <td>合并后持有数 &gt; HOLD_LIMIT</td>
+      </tr>
+    </tbody>
+  </table>
 
-  <h3 style="font-size:15px; margin-top:20px">hold</h3>
-  <p>
-    把目标物体的持有点云反投影到这条观测所在帧的 RGB 上，同时画出观测的 mask bbox（黄框）。
-    模型确认青色点（物体云）和黄框（mask）对齐。每条 hold 观测对应一张图。
-  </p>
-  <div class="note">
-    精度说明：AMB3R 跨帧误差中位 6.6 cm，p90 13.1 cm。间距约 9 cm 的同一双鞋，
-    反投影可能看起来略有偏移，不一定是归错。间距 0.4 m 以上（凳子、椅子）可以区分。
-  </div>
-
-  <h3 style="font-size:15px; margin-top:20px">create</h3>
-  <p>
-    计算新物体点云和每个已有物体点云的重叠率（10 cm 容差）。
-    重叠 &gt; 10% 时触发 verify_fail，渲染重叠最多的那个物体的反投影图，提示模型检查是否是同一表面。
-  </p>
-
-  <h3 style="font-size:15px; margin-top:20px">merge</h3>
-  <p>
-    合并后如果总持有数超过 5 条，verify 消息告知模型超员 N 条，要求重新 propose 并加 discard 动作淘汰多余的观测。
-    不引入新的结构化回复格式：模型重新 propose，在同一提案里写 merge + discard 即可。
-  </p>
-
-  <h3>完整的 verify 流程</h3>
+  <h3>verify 流程</h3>
   <div class="flow">
     <div class="step">
       <div class="dot m">1</div>
       <div class="body">
         <div class="name">propose_update</div>
-        <div class="io2">宿主验证结构、证据、reid gate</div>
+        <div class="io2">宿主验证结构、证据、reid gate，通过后进入 verify</div>
       </div>
     </div>
     <div class="step">
       <div class="dot">2</div>
       <div class="body">
         <div class="name">verify.build_checks()</div>
-        <div class="io2">对每条 hold/create/merge 渲染图，返回 verify_required（有异常）或跳过（全部通过）</div>
+        <div class="io2">渲染图，返回 verify_required（有异常项）或直接通过</div>
       </div>
     </div>
     <div class="step">
@@ -498,73 +573,89 @@
       <div class="dot m">3b</div>
       <div class="body">
         <div class="name">发现问题</div>
-        <div class="io2">模型调 propose_update（修改 object_id / 加 discard / 加 evict）→ 回到步骤 2</div>
+        <div class="io2">模型重新调 propose_update（修改 object_id / 加 discard / 加 evict）→ 回到步骤 2</div>
       </div>
     </div>
     <div class="step">
       <div class="dot w">4</div>
       <div class="body">
         <div class="name">2 轮未通过</div>
-        <div class="io2">强制允许 commit，记录到 verify/ 目录，继续下一窗口</div>
+        <div class="io2">强制允许 commit，记录到 <code>verify/</code> 目录，继续下一窗口</div>
       </div>
     </div>
+  </div>
+
+  <div class="warn">
+    反投影精度受 AMB3R 跨帧误差限制（中位 6.6 cm，p90 13.1 cm）。间距约 9 cm 的同一双鞋，
+    点云与 mask 可能看起来略有偏移。间距 0.4 m 以上（凳子、椅子）可以可靠区分。
   </div>
 </section>
 
 
 <!-- ============ 07 ============ -->
-<section id="actions">
-  <h2><span class="no">07</span>动作表</h2>
-  <p class="sub">1105-v1 与 v11 的对比</p>
+<section id="contracts">
+  <h2><span class="no">07</span>契约与失效</h2>
+  <p class="sub">改哪一段，会让哪一段失效</p>
 
   <table>
-    <thead><tr><th>动作</th><th>v11 名称</th><th>1105-v1 变化</th></tr></thead>
+    <thead><tr><th>改动</th><th>影响范围</th><th>需要重跑</th></tr></thead>
     <tbody>
-      <tr>
-        <td><code>hold</code></td>
-        <td><code>assign</code></td>
-        <td>改名；每个物体限 5 条；超员需 <code>evict</code> 字段；verify 检查</td>
-      </tr>
-      <tr>
-        <td><code>discard</code></td>
-        <td><code>defer</code></td>
-        <td>改名；上限从 4 条/动作提高到 10 条/动作；一次 discard 是一个观测的一个决定</td>
-      </tr>
-      <tr>
-        <td><code>create</code></td>
-        <td>无变化</td>
-        <td>verify 新增重叠检查；create 动作本身不带 observations（不变）</td>
-      </tr>
-      <tr>
-        <td><code>exclude</code></td>
-        <td>无变化</td>
-        <td>无变化</td>
-      </tr>
-      <tr>
-        <td><code>relabel</code></td>
-        <td>无变化</td>
-        <td>无变化</td>
-      </tr>
-      <tr>
-        <td><code>merge</code></td>
-        <td>无变化</td>
-        <td>verify 新增超员检查；超员时须重新 propose 加 discard</td>
-      </tr>
+      <tr><td>更换 prompt.txt</td><td>所有未来窗口；已提交窗口不受影响</td><td>新的 run（旧 checkpoint 不兼容新 prompt hash）</td></tr>
+      <tr><td>更换 source（v1→v2）</td><td>全部几何、camera_to_world、verify 反投影</td><td>完整重跑；旧 run 继续指向旧 source</td></tr>
+      <tr><td>调整 HOLD_LIMIT</td><td>已有 run 的 state.json 里可能有超限物体</td><td>新 run；旧 state 按旧规则读（向后兼容）</td></tr>
+      <tr><td>调整 SAM 面积阈值</td><td>感知输出变化，source 需重新生成</td><td>重跑 gpt_sam31 + amb3r_mask_source + harness run</td></tr>
+      <tr><td>调整候选规则（gap/overlap 阈值）</td><td>每窗口候选列表变化，影响归属决策</td><td>新 run；不影响已有 source</td></tr>
     </tbody>
   </table>
+</section>
 
-  <div class="marks">
-    <div class="mark w">
-      <div class="who">兼容</div>
-      <div>旧名 <code>assign</code> / <code>defer</code> 在 <b>输入侧</b>已不再接受（host 以 Unknown action 报错）。
-      旧 run 的 state.json（status <code>assigned</code> / <code>defer</code>）可以正常读取——
-      pagegen 和 spatial_context 对两套名称都兼容。</div>
+
+<!-- ============ 08 ============ -->
+<section id="commands">
+  <h2><span class="no">08</span>运行命令</h2>
+  <p class="sub">完整流水线的顺序</p>
+
+  <div class="flow">
+    <div class="step">
+      <div class="dot m">1</div>
+      <div class="body">
+        <div class="name">感知：GPT 标注</div>
+        <div class="io2"><em>python -m src.inference.label_frames</em><br>--frames artifacts/frames/scene0000_00 --output artifacts/sources/scene0000_00/gpt_labels</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">2</div>
+      <div class="body">
+        <div class="name">感知：GPT + SAM 出 mask</div>
+        <div class="io2"><em>python -m src.inference.gpt_sam31</em><br>--labels artifacts/sources/scene0000_00/gpt_labels --output artifacts/sources/scene0000_00/gpt_sam31_uniform500_v1 --min-mask-area 0.005</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">3</div>
+      <div class="body">
+        <div class="name">投影：生成 source（含 camera_to_world）</div>
+        <div class="io2"><em>python -m src.geometry.amb3r_mask_source</em><br>--output artifacts/sources/scene0000_00/scene_amb3r_v2</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">4</div>
+      <div class="body">
+        <div class="name">harness 归属决策</div>
+        <div class="io2"><em>python -m src.harness.run</em><br>--source artifacts/sources/scene0000_00/scene_amb3r_v2<br>--output artifacts/experiments/harness-1105v1-500frames-YYYYMMDD-HHMM</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">5</div>
+      <div class="body">
+        <div class="name">只重建页面（已有 run）</div>
+        <div class="io2"><em>python -m src.harness.run</em> --publish-only --output &lt;run_dir&gt;</div>
+      </div>
     </div>
   </div>
 </section>
 
 <footer>
-  <p>InstanceRecognition · 1105-v1 algorithm design · 核对日期 2026-11</p>
+  <p>InstanceRecognition · Pipeline Design · 1105-v1 · 核对日期 2026-11</p>
 </footer>
 
 </main>
