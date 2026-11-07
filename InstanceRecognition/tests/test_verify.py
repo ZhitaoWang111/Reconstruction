@@ -60,8 +60,9 @@ def test_hold_check_note_without_camera_pose():
     assert len(checks) == 1
     assert checks[0]['action'] == 'hold'
     assert checks[0]['object_id'] == 'Object1'
-    # No camera_to_world → back-projection unavailable, not a hard failure.
-    assert 'unavailable' in checks[0]['note'].lower()
+    # No camera_to_world: no comparison is possible, and that is not a failure.
+    assert 'no comparison' in checks[0]['note'].lower()
+    assert checks[0]['hit_rate'] is None
     assert not checks[0]['verify_fail']
 
 
@@ -200,3 +201,119 @@ def test_format_verify_message_contains_warnings():
     assert '⚠' in msg
     assert '✓' in msg
     assert 'commit_update' in msg
+
+
+# ── hold checks against a real projection ─────────────────────────────────────
+
+W, H = 200, 100
+K = [[100.0, 0, 100.0, 0], [0, 100.0, 50.0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+
+
+def _camera_source(tmp_path, seqs):
+    """A source whose frames all look down +z from the origin."""
+    from PIL import Image
+    src = tmp_path / 'src'
+    (src / 'frames').mkdir(parents=True)
+    for seq in seqs:
+        np.savez(src / 'frames' / f'{seq:04d}.npz', camera_to_world=np.eye(4))
+    (src / 'manifest.json').write_text(json.dumps({'intrinsic_color': K, 'frames': []}))
+    rgb = tmp_path / 'rgb.jpg'
+    Image.new('RGB', (W, H), 'grey').save(rgb)
+    return src, rgb
+
+
+def _mask(tmp_path, name, box):
+    from PIL import Image
+    m = Image.new('L', (W, H), 0)
+    m.paste(255, box)
+    path = tmp_path / f'{name}.png'
+    m.save(path)
+    return str(path)
+
+
+def _hold_case(tmp_path, new_mask_box, monkeypatch):
+    src, rgb = _camera_source(tmp_path, [0, 5])
+    monkeypatch.setattr(verify, '_load_frame_assets',
+                        lambda data, seq: (np.eye(4), np.asarray(K)[:3, :3], (W, H)))
+    # Object1 already holds a patch 2 m ahead, which projects near the image centre.
+    rng = np.random.default_rng(1)
+    patch = np.c_[rng.uniform(-0.2, 0.2, 300), rng.uniform(-0.2, 0.2, 300), np.full(300, 2.0)]
+    state = _state(
+        objects={'Object1': {'object_label': 'box', 'status': 'provisional', 'created_at': 0}},
+        assignments={'0000:001': {'object_id': 'Object1', 'status': 'held',
+                                  'reason': 'x', 'evidence': [], 'decided_at': 0}})
+    proposed = {**state, 'assignments': {**state['assignments'],
+                '0005:001': {'object_id': 'Object1', 'status': 'held',
+                             'reason': 'x', 'evidence': [], 'decided_at': 5}}}
+    pending = _pending([{'action': 'hold', 'object_id': 'Object1',
+                         'observations': ['0005:001'], 'evidence': ['0005:001'],
+                         'reason': 't'}], proposed)
+    data = _data(points={'0000:001': patch.astype(np.float32),
+                         '0005:001': patch.astype(np.float32) + [0, 0, 0.01]},
+                 items={'0005:001': {'seq': 5, 'image': str(rgb),
+                                     'mask': _mask(tmp_path, 'm5', new_mask_box),
+                                     'bbox_xyxy': list(new_mask_box)}},
+                 source=src, out=tmp_path / 'out')
+    return verify.build_checks(pending, data, state)
+
+
+def test_a_hold_whose_object_lands_in_the_mask_passes_without_an_image(tmp_path, monkeypatch):
+    checks, images = _hold_case(tmp_path, (80, 40, 120, 60), monkeypatch)
+    assert checks[0]['hit_rate'] > 0.9
+    assert not checks[0]['verify_fail']
+    assert images == []
+
+
+def test_a_hold_whose_object_lands_elsewhere_is_flagged_with_its_image(tmp_path, monkeypatch):
+    checks, images = _hold_case(tmp_path, (0, 0, 30, 20), monkeypatch)
+    assert checks[0]['hit_rate'] < verify.HOLD_HIT_THRESHOLD
+    assert checks[0]['verify_fail']
+    assert len(images) == 1 and images[0].is_file()
+
+
+def test_the_new_observation_is_not_compared_against_itself(tmp_path, monkeypatch):
+    """With only the new observation held, there is nothing to compare."""
+    src, rgb = _camera_source(tmp_path, [5])
+    monkeypatch.setattr(verify, '_load_frame_assets',
+                        lambda data, seq: (np.eye(4), np.asarray(K)[:3, :3], (W, H)))
+    proposed = _state(
+        objects={'Object1': {'object_label': 'box', 'status': 'provisional', 'created_at': 5}},
+        assignments={'0005:001': {'object_id': 'Object1', 'status': 'held',
+                                  'reason': 'x', 'evidence': [], 'decided_at': 5}})
+    pending = _pending([{'action': 'hold', 'object_id': 'Object1',
+                         'observations': ['0005:001'], 'evidence': ['0005:001'],
+                         'reason': 't'}], proposed)
+    data = _data(points={'0005:001': np.array([[0, 0, 2.0]] * 50, np.float32)},
+                 items={'0005:001': {'seq': 5, 'image': str(rgb),
+                                     'mask': _mask(tmp_path, 'm', (0, 0, 10, 10))}},
+                 source=src, out=tmp_path / 'out')
+    checks, images = verify.build_checks(pending, data, _state())
+    assert checks[0]['hit_rate'] is None and not checks[0]['verify_fail']
+    assert images == []
+
+
+def test_verify_attaches_at_most_the_image_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(verify, 'MAX_VERIFY_IMAGES', 2)
+    src, rgb = _camera_source(tmp_path, [0, 5])
+    monkeypatch.setattr(verify, '_load_frame_assets',
+                        lambda data, seq: (np.eye(4), np.asarray(K)[:3, :3], (W, H)))
+    rng = np.random.default_rng(2)
+    patch = np.c_[rng.uniform(-0.2, 0.2, 300), rng.uniform(-0.2, 0.2, 300),
+                  np.full(300, 2.0)].astype(np.float32)
+    held = {'0000:001': {'object_id': 'Object1', 'status': 'held', 'reason': 'x',
+                         'evidence': [], 'decided_at': 0}}
+    new = [f'0005:{i:03d}' for i in range(1, 6)]
+    proposed = _state(
+        objects={'Object1': {'object_label': 'box', 'status': 'provisional', 'created_at': 0}},
+        assignments={**held, **{k: {**held['0000:001'], 'decided_at': 5} for k in new}})
+    pending = _pending([{'action': 'hold', 'object_id': 'Object1', 'observations': new,
+                         'evidence': new, 'reason': 't'}], proposed)
+    corner = _mask(tmp_path, 'corner', (0, 0, 10, 10))
+    data = _data(points={'0000:001': patch, **{k: patch + [5, 0, 0] for k in new}},
+                 items={k: {'seq': 5, 'image': str(rgb), 'mask': corner} for k in new},
+                 source=src, out=tmp_path / 'out')
+    checks, images = verify.build_checks(pending, data, _state(
+        objects=proposed['objects'], assignments=held))
+    assert sum(c['verify_fail'] for c in checks) == 5
+    assert len(images) == 2
+    assert sum('No image' in c['note'] for c in checks) == 3

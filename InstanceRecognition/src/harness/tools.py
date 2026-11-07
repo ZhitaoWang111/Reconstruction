@@ -227,15 +227,21 @@ class Tools:
             verify_checks, verify_images = build_checks(checked, self.data, self.state)
             fail_checks = [c for c in verify_checks if c.get('verify_fail')]
             if fail_checks:
-                verify_descriptors = []
+                # attach_image drops images already sent this window into
+                # `reused`; only the ones it keeps are returned, so the caller's
+                # descriptor and image lists line up one for one.
+                owner = {img: c for c in fail_checks for img in c['images']}
+                attached, descriptors, reused = [], [], []
                 for vimg in verify_images:
-                    self.attach_image(vimg, {'kind': 'verify', 'object_id': fail_checks[0]['object_id']},
-                                      [], verify_descriptors, [])
+                    c = owner.get(str(vimg), {})
+                    self.attach_image(vimg, {'kind': 'verify', 'object_id': c.get('object_id'),
+                                             'observation_id': c.get('observation_id')},
+                                      attached, descriptors, reused)
                 return {'status': 'verify_required', 'proposal_id': checked['id'],
                         'verify_message': format_verify_message(verify_checks),
                         'checks': fail_checks,
-                        'visual_images': verify_descriptors,
-                        'base_version': self.state['version']}, verify_images
+                        'visual_images': descriptors, 'reused_images': reused,
+                        'base_version': self.state['version']}, attached
             return {'proposal_id':checked['id'],'affected':checked['affected'],'object_count':len(checked['state']['objects']),
                     'actions':checked['proposal']['actions'],'base_version':self.state['version']},images
         if name=='commit_update':

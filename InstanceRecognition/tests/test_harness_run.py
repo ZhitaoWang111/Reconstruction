@@ -196,3 +196,71 @@ def test_unknown_policy_is_still_rejected(runner):
     (runner.source/'manifest.json').write_text(json.dumps(manifest))
     with pytest.raises(SystemExit):
         runner.invoke()
+
+
+def test_verify_rounds_attach_images_once_and_force_without_duplicate_results(runner, monkeypatch, tmp_path):
+    """A proposal verify keeps flagging is shown twice, then let through.
+
+    Each round's images arrive in one user turn, not also as ordinary tool
+    evidence, and the forced round replaces its tool result rather than adding
+    a second one for the same call.
+    """
+    from PIL import Image
+    from src.harness import verify
+    shots = []
+
+    def checks(pending, data, state):
+        path = tmp_path / f'shot{len(shots)}.jpg'
+        Image.new('RGB', (8, 8), (40 * len(shots), 0, 0)).save(path)
+        shots.append(path)
+        return ([{'action_index': 0, 'action': 'discard', 'object_id': 'Object1',
+                  'observation_id': None, 'note': 'look', 'verify_fail': True,
+                  'images': [str(path)]}], [path])
+    monkeypatch.setattr(verify, 'build_checks', checks)
+
+    # The gateway answers every tool result with another proposal until it is
+    # given a proposal_id outside a verify, then commits.
+    def gateway(request, timeout):
+        payload = json.loads(request.data)
+        runner.requests.append(copy.deepcopy(payload))
+        messages = payload['messages']
+        first = int(messages[1]['content'].split()[-1])
+        last_tool = next((m for m in reversed(messages) if m['role'] == 'tool'), None)
+        result = json.loads(last_tool['content']) if last_tool else {}
+        if result.get('forced_after_verify'):
+            name, args = 'commit_update', {'proposal_id': result['proposal_id']}
+        elif 'committed' in result or 'verify_required' not in json.dumps(result) and result.get('proposal_id'):
+            name, args = 'commit_update', {'proposal_id': result['proposal_id']}
+        else:
+            obs = f'{first:04d}:001'
+            name, args = 'propose_update', {'proposal_json': json.dumps({'base_version': first, 'actions': [{
+                'action': 'discard', 'observations': [obs], 'reason': 'r', 'evidence': [obs]}]})}
+        n = len(runner.requests)
+        response = {'choices': [{'finish_reason': 'tool_calls', 'message': {
+            'role': 'assistant', 'tool_calls': [{'id': f'c{n}', 'type': 'function',
+                                               'function': {'name': name, 'arguments': json.dumps(args)}}]}}]}
+        stream = io.BytesIO(json.dumps(response).encode())
+        stream.headers = {'Content-Type': 'application/json'}
+        return stream
+    monkeypatch.setattr(client.urllib.request, 'urlopen', gateway)
+
+    monkeypatch.setattr(sys, 'argv', ['run', '--source', str(runner.source), '--output', 'test-run',
+                                      '--run-dir', str(runner.out), '--site-dir', str(runner.site),
+                                      '--frames', '2', '--window', '1', '--max-calls', '6',
+                                      '--network-retries', '1', '--window-network-retries', '1'])
+    run.main()
+
+    assert json.loads((runner.out/'checkpoint.json').read_text()) == {'version': 2, 'cutoff': 1}
+    assert len(list((runner.out/'verify').glob('*_force.json'))) == 2
+    for payload in runner.requests:
+        ids = [m['tool_call_id'] for m in payload['messages'] if m['role'] == 'tool']
+        assert len(ids) == len(set(ids)), 'a tool call received two results'
+        # Every verify image is sent exactly once.
+        sent = [p['image_url']['url'] for m in payload['messages'] if m['role'] == 'user'
+                and isinstance(m['content'], list) for p in m['content'] if p.get('type') == 'image_url']
+        assert len(sent) == len(set(sent))
+    # Two shown rounds per window: the last request of window 0 carries both.
+    window0 = [p for p in runner.requests if p['messages'][1]['content'] == 'Window 0']
+    images = [p for m in window0[-1]['messages'] if m['role'] == 'user' and isinstance(m['content'], list)
+              for p in m['content'] if p.get('type') == 'image_url']
+    assert len(images) == 2

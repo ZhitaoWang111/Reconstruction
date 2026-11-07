@@ -94,7 +94,7 @@ The host checks structure and rejects with a specific message. Read it literally
 
 A validated proposal is not yet committed. `commit_update(proposal_id)` writes it, using the id `propose_update` returned; nothing else writes, and this call ends the window.
 
-`propose_update` may return `verify_required` instead of a proposal id. The proposal is valid and held; the host has rendered back-projection images and overlap checks for the actions that change objects (hold, create, merge). Read the verify message and the images it names. If the evidence confirms the decisions, call `commit_update` immediately. If something looks wrong, call `propose_update` again with a corrected proposal (change an object_id, add a discard, or add an evict). Two verify rounds are allowed; after that the host allows commit regardless.
+`propose_update` may return `verify_required` instead of a proposal id. The proposal is valid and held; the host has projected each held Object into the frames of the observations you are adding and found some that do not line up, or a new Object that overlaps an existing one, or a merge that exceeds five. Each flagged hold comes with an image: the cyan dots are the rest of that Object drawn into this frame, the yellow box is the new mask. Read the verify message and the images it names. If the evidence confirms the decisions, call `commit_update` immediately. If something looks wrong, call `propose_update` again with a corrected proposal (change an object_id, add a discard, or add an evict). Two verify rounds are allowed; after that the host allows commit regardless.
 
 ## ORDER OF WORK
 

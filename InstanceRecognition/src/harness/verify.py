@@ -29,6 +29,20 @@ if TYPE_CHECKING:
     pass
 
 
+# A hold is flagged when fewer than this fraction of the object's projected
+# points land inside the new observation's mask. Measured on the first 100
+# frames of scene0000_00 (frames 2-10 apart): pairs with the same label and
+# centroids under 0.3 m fall below it 15% of the time, while pairs within 1 m
+# that are not that pair clear it 13% of the time.
+HOLD_HIT_THRESHOLD = 0.2
+# Fewer projected points than this and the hit rate means nothing; the check
+# says so instead of guessing.
+MIN_PROJECTED = 20
+# Images attached to one verify message. The model reads each at full
+# resolution, and a proposal holds ~40 observations; only the worst are shown.
+MAX_VERIFY_IMAGES = 6
+
+
 # ── projection helpers ────────────────────────────────────────────────────────
 
 def _load_frame_assets(data, seq: int):
@@ -82,8 +96,8 @@ def _project_points(pts: np.ndarray, c2w: np.ndarray, K: np.ndarray,
 
 # ── cloud helpers ─────────────────────────────────────────────────────────────
 
-def _held_cloud(data, state: dict, object_id: str, extra_obs: list | None = None
-                ) -> np.ndarray:
+def _held_cloud(data, state: dict, object_id: str, extra_obs: list | None = None,
+                exclude: list | None = None) -> np.ndarray:
     """Voxelised (2 cm) point cloud from held observations.
 
     ``extra_obs`` is a list of observation ids to include that are not yet held
@@ -94,6 +108,8 @@ def _held_cloud(data, state: dict, object_id: str, extra_obs: list | None = None
             and a.get('status') in ('held', 'assigned')]
     if extra_obs:
         held = list(set(held) | set(extra_obs))
+    if exclude:
+        held = [k for k in held if k not in set(exclude)]
     points_map = getattr(data, 'points', {})
     parts = [points_map[k] for k in held if k in points_map and len(points_map[k])]
     if not parts:
@@ -107,10 +123,40 @@ def _held_cloud(data, state: dict, object_id: str, extra_obs: list | None = None
     return pts[idx]
 
 
+def _mask_hit_rate(data, state, object_id, obs_id):
+    """Fraction of the object's held cloud that projects inside obs_id's mask.
+
+    Only points that land in the frame count. Returns None when the frame has
+    no pose or too few points project to judge.
+    """
+    obs_meta = data.items.get(obs_id)
+    if obs_meta is None:
+        return None
+    c2w, K, wh = _load_frame_assets(data, obs_meta['seq'])
+    if c2w is None:
+        return None
+    cloud = _held_cloud(data, state, object_id, exclude=[obs_id])
+    if not len(cloud):
+        return None
+    px = _project_points(cloud[::max(1, len(cloud) // 3000)], c2w, K, wh)
+    ok = ~np.isnan(px[:, 0])
+    if ok.sum() < MIN_PROJECTED:
+        return None
+    mask_path = Path(obs_meta.get('mask', ''))
+    if not mask_path.is_file():
+        return None
+    with Image.open(mask_path) as m:
+        mask = np.asarray(m.convert('L').resize(wh)) > 0
+    u = px[ok, 0].astype(int)
+    v = px[ok, 1].astype(int)
+    return float(mask[v, u].mean())
+
+
 # ── rendering ─────────────────────────────────────────────────────────────────
 
 def _render_backprojection(data, state: dict, object_id: str,
-                           obs_id: str, extra_obs: list | None = None) -> Path | None:
+                           obs_id: str, extra_obs: list | None = None,
+                           exclude: list | None = None) -> Path | None:
     """Render the object's cloud back-projected onto the observation's RGB frame.
 
     Returns the path to the rendered JPEG, or None if rendering is not possible
@@ -123,7 +169,7 @@ def _render_backprojection(data, state: dict, object_id: str,
     c2w, K, wh = _load_frame_assets(data, seq)
     if c2w is None:
         return None
-    cloud = _held_cloud(data, state, object_id, extra_obs)
+    cloud = _held_cloud(data, state, object_id, extra_obs, exclude)
     if not len(cloud):
         return None
 
@@ -198,25 +244,32 @@ def build_checks(pending: dict, data, state: dict) -> tuple[list[dict], list[Pat
         oid = action.get('object_id')
 
         if kind == 'hold':
+            # The question a hold answers is whether the object, as already
+            # held, is what the new mask shows. So the cloud is the object's
+            # other held observations, projected into the new one's frame.
+            # A new object's first holds have nothing else to compare against.
             obs_ids = action.get('observations', [])
             for obs_id in obs_ids:
-                img = _render_backprojection(data, proposed_state, oid, obs_id,
-                                             extra_obs=obs_ids)
                 check: dict = {
                     'action_index': idx, 'action': 'hold',
                     'object_id': oid, 'observation_id': obs_id,
                     'images': [], 'verify_fail': False,
                 }
-                if img:
-                    check['images'].append(str(img))
-                    image_paths.append(img)
-                    check['note'] = (
-                        f'Back-projection of {oid} onto the frame where {obs_id} '
-                        f'was taken.  Cyan dots are the object cloud; the yellow '
-                        f'box is the mask.  Confirm they align, or re-propose.')
-                    check['verify_fail'] = True
+                rate = _mask_hit_rate(data, proposed_state, oid, obs_id)
+                check['hit_rate'] = rate
+                if rate is None:
+                    check['note'] = (f'{obs_id}: no comparison (no pose, or the rest '
+                                     f'of {oid} does not project into this frame).')
+                elif rate >= HOLD_HIT_THRESHOLD:
+                    check['note'] = (f'{obs_id}: {rate:.0%} of {oid} projects inside '
+                                     f'the mask.')
                 else:
-                    check['note'] = 'Back-projection unavailable (no camera pose).'
+                    check['verify_fail'] = True
+                    check['note'] = (
+                        f'{obs_id}: only {rate:.0%} of {oid} projects inside the mask. '
+                        f'Cyan dots are the rest of {oid} drawn into this frame; the '
+                        f'yellow box is the mask. If they do not cover the same thing, '
+                        f'this observation is not {oid}.')
                 checks.append(check)
 
         elif kind == 'create':
@@ -283,6 +336,18 @@ def build_checks(pending: dict, data, state: dict) -> tuple[list[dict], list[Pat
                     f'observation(s), within the limit of {HOLD_LIMIT}.')
             checks.append(check)
 
+    holds = sorted((c for c in checks if c['action'] == 'hold' and c['verify_fail']),
+                   key=lambda c: c['hit_rate'])
+    for c in holds:
+        if len(image_paths) >= MAX_VERIFY_IMAGES:
+            c['note'] += (f'  (No image: verify attaches at most {MAX_VERIFY_IMAGES}; '
+                          f'use inspect_observations if needed.)')
+            continue
+        img = _render_backprojection(data, proposed_state, c['object_id'],
+                                     c['observation_id'], exclude=[c['observation_id']])
+        if img:
+            c['images'].append(str(img))
+            image_paths.append(img)
     return checks, image_paths
 
 

@@ -65,8 +65,8 @@ blockquote p{margin:0;font-size:14.5px;color:#123f39}
 <p class="lede">这里记录 <code>src/harness/prompt.txt</code> 主要版本的全文（英文原文 + 中文对照），以及每一版相对上一版改了什么、为什么改。
 每版一节，按「依据了什么事实 → 按什么原则组织 → 结构怎么变 → 各节多大 → 措辞差在哪 → 全文」六段写。</p>
 <div class="meta">
-<span class="tag">当前版本 <b>62d75bc</b>（1105-v1）</span>
-<span class="tag">字符 <b>13,984</b></span>
+<span class="tag">当前版本 <b>ef14f9d</b>（1105-v1）</span>
+<span class="tag">字符 <b>14,201</b></span>
 <span class="tag">展开版本 <b>5</b></span>
 <span class="tag">更新 <b>2026-11-06</b></span>
 </div>
@@ -138,8 +138,8 @@ blockquote p{margin:0;font-size:14.5px;color:#123f39}
 </tr>
 <tr>
 <td><b>1105-v1</b><br><span class="small">当前</span></td>
-<td><code>62d75bb…</code></td>
-<td>13,984</td>
+<td><code>ef14f9d…</code></td>
+<td>14,201</td>
 <td>动作改名 <code>assign/defer</code> → <code>hold/discard</code>；每物体最多持有 5 条观测并可 <code>evict</code>；<code>discard</code> 单条上限 10；空间候选改为 gap + overlap、上限 15、2 米截止；删除 <code>compare_geometry</code> 与全局 OBB；新增 <code>verify_required</code> 反投影复核。见 <b>05</b>。</td>
 <td>尚未使用</td>
 </tr>
@@ -1221,7 +1221,7 @@ assign 被扣住了。如果 `propose_update` 返回的是 `verification_require
 <tr><td>整窗打包搁置仍然可能</td><td><code>state.py:19</code>：<code>DISCARD_BATCH_LIMIT = 10</code>（原 4）</td><td>"at most four observations per entry"</td></tr>
 <tr><td>候选只给距离、不给重叠</td><td><code>spatial_context.py:46-50</code>：gap（最近距离 5 分位）+ overlap（10 cm 内比例），2 m 截止，8 条 + 稠密带扩展到 15</td><td>"rank the nearest archived surfaces by median distance, truncated at three"</td></tr>
 <tr><td><code>compare_geometry</code> 从未被真正使用</td><td>v9 用 2 次、v11 用 2 次，共 4 次 / 1,649 次工具调用</td><td>仍作为第三个取证工具列出，占一段 162 字符</td></tr>
-<tr><td>提交前没有任何视觉复核</td><td><code>verify.py</code>、<code>run.py:52</code>：<code>MAX_VERIFY_ROUNDS = 2</code>，与 <code>max_calls</code> 分开计</td><td>只靠 <code>propose_update</code> 的结构校验，身份错误一律放行</td></tr>
+<tr><td>提交前没有任何视觉复核</td><td><code>verify.py</code>：物体其余点投进新观测的帧，落在 mask 内不足 20% 才标出（前 100 帧实测：同物体误标 15%，1 m 内异物放过 13%）；<code>run.py:52</code>：<code>MAX_VERIFY_ROUNDS = 2</code>，与 <code>max_calls</code> 分开计</td><td>只靠 <code>propose_update</code> 的结构校验，身份错误一律放行</td></tr>
 <tr><td>点云背景与 mask 过滤</td><td><code>sam31_segment.py:22</code>：面积小于全帧 0.5% 的 mask 在感知阶段就被丢弃</td><td>没有提及——删掉的 mask 不会出现在任何窗口里</td></tr>
 </tbody>
 </table>
@@ -1246,9 +1246,9 @@ assign 被扣住了。如果 `propose_update` 返回的是 `verification_require
 <tr><td>ONE COMMIT PER WINDOW</td><td>738</td><td>738</td><td>—</td></tr>
 <tr><td>ACTIONS ON OBSERVATIONS AND ON OBJECTS</td><td>5,090</td><td><b>5,495</b></td><td>+405：改名、持有上限与 evict、"holding is ownership"、discard 的三种理由</td></tr>
 <tr><td>HOW TO GET MORE INFORMATION</td><td>1,567</td><td><b>1,681</b></td><td>+114：<code>compare_geometry</code> 整段删除（−162），<code>inspect_object</code> 增加几何摘要与 <code>all_observations</code>（+276）</td></tr>
-<tr><td>SUBMITTING A PROPOSAL</td><td>1,693</td><td><b>2,203</b></td><td>+510：<code>verify_required</code> 整段</td></tr>
+<tr><td>SUBMITTING A PROPOSAL</td><td>1,693</td><td><b>2,420</b></td><td>+727：<code>verify_required</code> 整段</td></tr>
 <tr><td>ORDER OF WORK</td><td>1,689</td><td><b>1,736</b></td><td>+47：第 2、3、4 步各补一句</td></tr>
-<tr><td><b>合计</b></td><td><b>12,556</b></td><td><b>13,984</b></td><td>+1,428（<b>+11.4%</b>）</td></tr>
+<tr><td><b>合计</b></td><td><b>12,556</b></td><td><b>14,201</b></td><td>+1,645（<b>+13.1%</b>）</td></tr>
 </tbody>
 </table>
 
@@ -1258,13 +1258,13 @@ assign 被扣住了。如果 `propose_update` 返回的是 `verification_require
 <thead><tr><th>小节</th><th>字符</th><th>占比</th><th>作用</th></tr></thead>
 <tbody>
 <tr><td>开头</td><td>197</td><td>1.4%</td><td>任务陈述</td></tr>
-<tr><td>WHAT THE WINDOW CONTAINS</td><td>1,934</td><td>13.8%</td><td>窗口内容；候选的 gap/overlap 读法与几何可靠范围</td></tr>
-<tr><td>ONE COMMIT PER WINDOW</td><td>738</td><td>5.3%</td><td>提交即终止</td></tr>
-<tr><td>ACTIONS ON OBSERVATIONS AND ON OBJECTS</td><td>5,495</td><td>39.3%</td><td>六种动作；改名说明；五条上限与 evict；标签规则</td></tr>
-<tr><td>HOW TO GET MORE INFORMATION</td><td>1,681</td><td>12.0%</td><td>两个取证工具（含 <code>all_observations</code> 与几何摘要）；三种强制情形</td></tr>
-<tr><td>SUBMITTING A PROPOSAL</td><td>2,203</td><td>15.8%</td><td>提案结构、证据语义、<code>verification_required</code> 与 <code>verify_required</code> 两条不同的返回</td></tr>
-<tr><td>ORDER OF WORK</td><td>1,736</td><td>12.4%</td><td>五步</td></tr>
-<tr><td><b>合计</b></td><td><b>13,984</b></td><td></td><td>比 P7 长 11.4%</td></tr>
+<tr><td>WHAT THE WINDOW CONTAINS</td><td>1,934</td><td>13.6%</td><td>窗口内容；候选的 gap/overlap 读法与几何可靠范围</td></tr>
+<tr><td>ONE COMMIT PER WINDOW</td><td>738</td><td>5.2%</td><td>提交即终止</td></tr>
+<tr><td>ACTIONS ON OBSERVATIONS AND ON OBJECTS</td><td>5,495</td><td>38.7%</td><td>六种动作；改名说明；五条上限与 evict；标签规则</td></tr>
+<tr><td>HOW TO GET MORE INFORMATION</td><td>1,681</td><td>11.8%</td><td>两个取证工具（含 <code>all_observations</code> 与几何摘要）；三种强制情形</td></tr>
+<tr><td>SUBMITTING A PROPOSAL</td><td>2,420</td><td>17.0%</td><td>提案结构、证据语义、<code>verification_required</code> 与 <code>verify_required</code> 两条不同的返回</td></tr>
+<tr><td>ORDER OF WORK</td><td>1,736</td><td>12.2%</td><td>五步</td></tr>
+<tr><td><b>合计</b></td><td><b>14,201</b></td><td></td><td>比 P7 长 13.1%</td></tr>
 </tbody>
 </table>
 
@@ -1278,13 +1278,13 @@ assign 被扣住了。如果 `propose_update` 返回的是 `verification_require
 <tr><td>归属语义</td><td>隐含在 assign 里</td><td>"Holding is ownership. An observation a valid proposal holds belongs to that Object and stays with it; there is no separate ownership without a kept observation."</td></tr>
 <tr><td>丢弃</td><td>defer：说不出／选不出两种理由</td><td>discard：<b>三种</b>理由（说不出、选不出、真实但太小/太远/遮挡太重），并写明"Discarding is final"</td></tr>
 <tr><td>空间候选</td><td>最近三个，按中位距离</td><td>最多 15 条，各带 gap 与 overlap；"a high overlap supports a hold, a low gap with low overlap may mean a nearby but different object"；并写明几何在什么尺度上失效（分不开相距 10 cm 的东西）</td></tr>
-<tr><td>提交返回</td><td>只有 <code>verification_required</code></td><td>再加 <code>verify_required</code>：宿主渲染反投影图与重叠检查，模型看过再决定提交或改正；允许两轮，之后放行</td></tr>
+<tr><td>提交返回</td><td>只有 <code>verification_required</code></td><td>再加 <code>verify_required</code>：宿主把物体投影进新观测的帧，<b>只对命中 mask 不足 20% 的 hold 出图</b>（每次最多 6 张），另查新物体重叠与合并超限；允许两轮，之后放行</td></tr>
 </tbody>
 </table>
 
 <h3>全文</h3>
 
-<p class="small">上为英文原文，下为中文对照。文件是 <code>src/harness/prompt.txt</code>（<code>62d75bb…</code>），尚未跑过完整实验。</p>
+<p class="small">上为英文原文，下为中文对照。文件是 <code>src/harness/prompt.txt</code>（<code>ef14f9d…</code>）。</p>
 
 <pre class="en">You are given one window of observed mask surfaces from a static indoor scene and must decide, for each observation, which Object it belongs to. A window holds 20-45 observations across 5 frames.
 
@@ -1382,7 +1382,7 @@ The host checks structure and rejects with a specific message. Read it literally
 
 A validated proposal is not yet committed. `commit_update(proposal_id)` writes it, using the id `propose_update` returned; nothing else writes, and this call ends the window.
 
-`propose_update` may return `verify_required` instead of a proposal id. The proposal is valid and held; the host has rendered back-projection images and overlap checks for the actions that change objects (hold, create, merge). Read the verify message and the images it names. If the evidence confirms the decisions, call `commit_update` immediately. If something looks wrong, call `propose_update` again with a corrected proposal (change an object_id, add a discard, or add an evict). Two verify rounds are allowed; after that the host allows commit regardless.
+`propose_update` may return `verify_required` instead of a proposal id. The proposal is valid and held; the host has projected each held Object into the frames of the observations you are adding and found some that do not line up, or a new Object that overlaps an existing one, or a merge that exceeds five. Each flagged hold comes with an image: the cyan dots are the rest of that Object drawn into this frame, the yellow box is the new mask. Read the verify message and the images it names. If the evidence confirms the decisions, call `commit_update` immediately. If something looks wrong, call `propose_update` again with a corrected proposal (change an object_id, add a discard, or add an evict). Two verify rounds are allowed; after that the host allows commit regardless.
 
 ## ORDER OF WORK
 
@@ -1495,7 +1495,7 @@ RELABEL 一个外观与名字相矛盾的归档 Object。它只改标签，不�
 
 通过校验的提案还没有落到磁盘上。`commit_update(proposal_id)` 才会写入，参数用 `propose_update` 返回的那个 id；除此之外没有别的写入，这次调用也就终止了窗口。
 
-`propose_update` 可能返回 `verify_required` 而不是提案 id。提案有效并被保留；宿主已经为会改变物体的动作（hold、create、merge）渲染了反投影图与重叠检查。读验证消息和它点名的图像。如果证据支持这些决定，立刻调用 `commit_update`。如果哪里看着不对，带一份改正后的提案再次调用 `propose_update`（改 object_id、补一条 discard、或补一个 evict）。允许两轮 verify；此后宿主无论如何都放行提交。
+`propose_update` 可能返回 `verify_required` 而不是提案 id。提案有效并被保留；宿主把每个被 hold 的 Object 投影到你新加入的观测所在的帧里，发现有些对不上，或者有新建的 Object 与已有物体重叠，或者某次合并超过了五条。每条被标出的 hold 都附一张图：青色点是该 Object 其余部分画进这一帧的样子，黄框是新的 mask。读验证消息和它点名的图像。如果证据支持这些决定，立刻调用 `commit_update`。如果哪里看着不对，带一份改正后的提案再次调用 `propose_update`（改 object_id、补一条 discard、或补一个 evict）。允许两轮 verify；此后宿主无论如何都放行提交。
 
 ## 工作顺序
 

@@ -105,7 +105,8 @@ def process_window(data, state, first, cutoff, args, prompt, out, client):
             except (ValueError,KeyError,TypeError,json.JSONDecodeError) as exc:result={'error':str(exc)}
             save(out/'calls'/f'{tag}_tool{tool_index:02d}.json',{'name':name,'arguments':call['function']['arguments'],'result':result,'images':[str(p) for p in images]})
             messages.append({'role':'tool','tool_call_id':call['id'],'content':json.dumps(result,ensure_ascii=False)})
-            if images:
+            verify_turn=name=='propose_update' and isinstance(result,dict) and result.get('status')=='verify_required'
+            if images and not verify_turn:
                 visual=[{'type':'text','text':f'Visual evidence from {name}; tool_call_id={call["id"]}'}]
                 for descriptor,path in zip(result['visual_images'],images,strict=True):
                     visual.extend([{'type':'text','text':json.dumps(descriptor,ensure_ascii=False)},image(path)])
@@ -115,17 +116,19 @@ def process_window(data, state, first, cutoff, args, prompt, out, client):
             # images so the model can react.  Verify rounds are counted
             # separately from max_calls; after MAX_VERIFY_ROUNDS the host forces
             # the proposal through.
-            if name=='propose_update' and isinstance(result,dict) and result.get('status')=='verify_required':
+            if verify_turn:
                 verify_rounds+=1
                 if verify_rounds>MAX_VERIFY_ROUNDS:
                     # Force-allow commit: the model has seen the evidence twice
                     # and not acted on it; record and continue.
                     save(out/'verify'/f'{tag}_force.json',{'reason':'max_verify_rounds_exceeded',
                         'checks':result.get('checks',[])})
+                    # Replace, not append: one tool call takes exactly one
+                    # tool result, and a second one is rejected by the API.
                     result={'proposal_id':result['proposal_id'],
                             'forced_after_verify':True}
-                    messages.append({'role':'tool','tool_call_id':call['id'],
-                        'content':json.dumps(result,ensure_ascii=False)})
+                    messages[-1]={'role':'tool','tool_call_id':call['id'],
+                        'content':json.dumps(result,ensure_ascii=False)}
                 else:
                     verify_visual=[{'type':'text','text':result.get('verify_message','Verify required.')}]
                     for descriptor,path in zip(result.get('visual_images',[]),images,strict=True):

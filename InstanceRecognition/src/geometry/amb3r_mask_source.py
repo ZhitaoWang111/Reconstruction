@@ -35,6 +35,7 @@ import numpy as np
 from PIL import Image
 
 from src import config
+from src.inference.sam31_segment import DEFAULT_MIN_MASK_AREA_FRACTION
 from src.geometry.backproject_masks import (
     align_mask,
     crop_box,
@@ -177,6 +178,7 @@ def build(
     first: int = 0,
     count: int | None = None,
     frames_dir: Path = DEFAULT_FRAMES,
+    min_area_fraction: float = DEFAULT_MIN_MASK_AREA_FRACTION,
 ) -> Path:
     npz_path, sim3_path, source, output = (
         Path(p).resolve() for p in (npz_path, sim3_path, source, output)
@@ -206,6 +208,7 @@ def build(
     out_frames = []
     total_points = 0
     total_masks = 0
+    total_dropped = 0
 
     for frame in frames:
         seq = int(frame["sequence_index"])
@@ -215,7 +218,15 @@ def build(
         pts_frame = np.array(pts_all[seq])   # (392, 518, 3)
         conf_frame = np.array(conf_all[seq]) # (392, 518)
 
-        instances = frame.get("instances") or []
+        # Masks segmented before SAM gained its area filter still carry the
+        # small ones; drop them here with the same rule so a source lifted from
+        # old perception output matches what a fresh SAM run would have kept.
+        # The rule is applied to the original-resolution pixel count, as in SAM.
+        all_instances = frame.get("instances") or []
+        frame_area = int(frame.get("image_width") or 1296) * int(frame.get("image_height") or 968)
+        instances = [item for item in all_instances
+                     if item["mask_pixels"] >= min_area_fraction * frame_area]
+        total_dropped += len(all_instances) - len(instances)
         masks_aligned = []
         for item in instances:
             mask_path = (source / item["mask_file"]).resolve()
@@ -368,6 +379,8 @@ def build(
             "maximum": backdrop_points.max(axis=0).tolist(),
         },
         "conf_threshold": conf_threshold,
+        "min_mask_area_fraction": min_area_fraction,
+        "masks_dropped_by_area": total_dropped,
         "sim3_source": str(sim3_path),
         # RGB camera intrinsics (1296×968).  Stored here so downstream never has
         # to locate a separate manifest.  Read from the ScanNet extraction manifest
@@ -417,9 +430,13 @@ def main() -> None:
                         help="AMB3R confidence threshold (default 0.3)")
     parser.add_argument("--first", type=int, default=0)
     parser.add_argument("--count", type=int, default=None)
+    parser.add_argument("--min-area-fraction", type=float,
+                        default=DEFAULT_MIN_MASK_AREA_FRACTION,
+                        help="Drop masks below this fraction of the frame (0 keeps all)")
     args = parser.parse_args()
     build(args.npz, args.sim3, args.source, args.output,
-          args.conf, args.first, args.count, args.frames_dir)
+          args.conf, args.first, args.count, args.frames_dir,
+          args.min_area_fraction)
 
 
 if __name__ == "__main__":

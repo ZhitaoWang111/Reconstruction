@@ -40,7 +40,7 @@ def instance(instance_id=1, class_name="office chair"):
         "sam_prompt": class_name, "sam_prompt_type": "text",
         "gpt_certainty": "clear", "visible_scope": "partial",
         "evidence": "visible", "ambiguity": "", "sam_score": 0.9,
-        "sam_box_xyxy": [1.0, 1.0, 4.0, 4.0], "mask_pixels": 4,
+        "sam_box_xyxy": [100.0, 100.0, 300.0, 300.0], "mask_pixels": 200 * 200,
         "mask_file": f"masks/raw_masks/{instance_id:03d}_{class_name.replace(' ', '_')}.png",
     }
 
@@ -284,3 +284,24 @@ def test_the_output_directory_must_be_new(tmp_path):
     perception.build(tmp_path / "source")
     with pytest.raises(ValueError, match="must be empty"):
         perception.build(tmp_path / "source")
+
+
+def test_a_mask_below_the_area_floor_is_dropped_before_lifting(tmp_path):
+    """Old perception output predates SAM's area filter; the lift applies it."""
+    perception = Amb3r(tmp_path)
+    recorded = json.loads((perception.source / "manifest.json").read_text())
+    for frame in recorded["frames"]:
+        frame["instances"][1]["mask_pixels"] = 100
+    (perception.source / "manifest.json").write_text(json.dumps(recorded))
+
+    output = perception.build(tmp_path / "source")
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert [[i["instance_id"] for i in f["instances"]] for f in manifest["frames"]] == [[1], [1]]
+    assert manifest["masks_dropped_by_area"] == 2
+    with np.load((output / manifest["frames"][0]["npz"]).resolve()) as z:
+        assert set(np.unique(z["mask_bits"]).tolist()) == {1}
+
+    kept = perception.build(tmp_path / "unfiltered", min_area_fraction=0)
+    manifest = json.loads((kept / "manifest.json").read_text())
+    assert manifest["masks_dropped_by_area"] == 0
+    assert len(manifest["frames"][0]["instances"]) == 2
