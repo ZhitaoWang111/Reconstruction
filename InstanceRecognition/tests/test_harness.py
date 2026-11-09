@@ -36,7 +36,7 @@ def test_tools_block_future_and_unchecked_commit():
  with pytest.raises(ValueError):tools.observe(['0005:001'])
  with pytest.raises(ValueError):tools.call('commit_update',{'proposal_id':'guess'})
 def test_duplicate_updates_rejected():
- with pytest.raises(ValueError,match='twice'):
+ with pytest.raises(ValueError,match=r'0000:001 is in action 0 \(discard\) and action 1 \(exclude\)'):
   propose(initial(),{'base_version':0,'actions':[action('discard',observations=['0000:001']),action('repair',observations=['0000:001'])]},OBS,0,E)
 
 def test_materialization_reassignment_rebuilds_from_original(tmp_path):
@@ -243,7 +243,7 @@ def test_hold_over_limit_is_rejected():
     ids = sorted(obs)
     actions = [action('create', object_id='Object1', object_label='bin'),
                action('hold', object_id='Object1', observations=ids)]
-    with pytest.raises(ValueError, match='exceeding the limit'):
+    with pytest.raises(ValueError, match=r'Object1 would hold 6 \(.*\), 1 too many'):
         propose(initial(), {'base_version': 0, 'actions': actions}, obs, 0, evidence)
 
 
@@ -290,3 +290,85 @@ def test_listing_hides_discards_but_state_keeps_them():
  assert '0000:001' not in json.dumps(listing)
  assert s['assignments']['0000:001']['status']=='discard'
  assert s['assignments']['0001:001']['status']=='exclude'
+
+
+# ── rejection messages name what to fix ──────────────────────────────────────
+# Each case is one the v12 trial hit; the old message named neither the id nor
+# the action, and the model spent rounds guessing.
+
+def _held(oid, ids, cutoff=0):
+    return {i: {'object_id': oid, 'status': 'held', 'reason': 'r', 'evidence': [], 'decided_at': cutoff}
+            for i in ids}
+
+
+def _two_full_objects():
+    obs, ev = _window(12)
+    ids = sorted(obs)
+    state = {'version': 1, 'cutoff': -1, 'aliases': {},
+             'objects': {'Object1': {'object_label': 'chair', 'status': 'provisional', 'created_at': 0},
+                         'Object2': {'object_label': 'shoe', 'status': 'provisional', 'created_at': 0}},
+             'assignments': {**_held('Object1', ids[:5]), **_held('Object2', ids[5:10])}}
+    return state, obs, ev, ids
+
+
+def test_every_object_over_the_hold_limit_is_named_at_once():
+    state, obs, ev, ids = _two_full_objects()
+    actions = [action('hold', object_id='Object1', observations=[ids[10]]),
+               action('hold', object_id='Object2', observations=[ids[11]])]
+    with pytest.raises(ValueError) as err:
+        propose(state, {'base_version': 1, 'actions': actions}, obs, 0, ev)
+    message = str(err.value)
+    assert 'Object1 would hold 6' in message and 'Object2 would hold 6' in message
+    assert ids[0] in message and ids[5] in message
+
+
+def test_an_observation_in_two_actions_names_the_id_and_both_actions():
+    """R17: 0006:009 held on the desk and pasted into a discard."""
+    state, obs, ev, ids = _two_full_objects()
+    actions = [action('hold', object_id='Object1', observations=[ids[10]], evict=ids[0]),
+               action('discard', observations=[ids[11], ids[10]])]
+    with pytest.raises(ValueError) as err:
+        propose(state, {'base_version': 1, 'actions': actions}, obs, 0, ev)
+    assert f'{ids[10]} is in action 0 (hold Object1) and action 1 (discard)' in str(err.value)
+
+
+def test_evicting_another_objects_observation_names_its_owner_and_what_is_held():
+    """R10: the model evicted Object3's observation from Object1."""
+    state, obs, ev, ids = _two_full_objects()
+    actions = [action('hold', object_id='Object1', observations=[ids[10]], evict=ids[5]),
+               action('discard', observations=[ids[11]])]
+    with pytest.raises(ValueError) as err:
+        propose(state, {'base_version': 1, 'actions': actions}, obs, 0, ev)
+    message = str(err.value)
+    assert f'{ids[5]} belongs to Object2' in message
+    assert f'Object1 holds: {", ".join(ids[:5])}' in message
+
+
+def test_an_evicted_observation_cannot_also_be_listed_elsewhere():
+    state, obs, ev, ids = _two_full_objects()
+    actions = [action('hold', object_id='Object1', observations=[ids[10]], evict=ids[0]),
+               action('discard', observations=[ids[11], ids[0]])]
+    with pytest.raises(ValueError, match=f'{ids[0]} is in action 0 \\(evict by hold Object1\\)'):
+        propose(state, {'base_version': 1, 'actions': actions}, obs, 0, ev)
+
+
+def test_bad_observation_lists_say_which_fault_and_which_id():
+    obs, ev = _window(3)
+    ids = sorted(obs)
+    later = {'0009:000': {'seq': 9}}
+    cases = [([ids[0], ids[0]], f'lists {ids[0]} more than once'),
+             (['9999:999'], 'not observations: 9999:999'),
+             (['0009:000'], 'after this window: 0009:000')]
+    for listed, expected in cases:
+        with pytest.raises(ValueError, match=expected):
+            propose(initial(), {'base_version': 0, 'actions': [action('discard', observations=listed)]},
+                    {**obs, **later}, 0, ev | set(later))
+
+
+def test_a_hold_on_a_merged_object_names_where_it_went():
+    state, obs, ev, ids = _two_full_objects()
+    state['aliases'] = {'Object9': 'Object1'}
+    actions = [action('hold', object_id='Object9', observations=[ids[10]]),
+               action('discard', observations=[ids[11]])]
+    with pytest.raises(ValueError, match="'Object9', which is not an active object; it was merged into Object1"):
+        propose(state, {'base_version': 1, 'actions': actions}, obs, 0, ev)

@@ -78,6 +78,11 @@ def initial():
     return {'version': 0, 'cutoff': -1, 'objects': {}, 'assignments': {}, 'aliases': {}}
 
 
+def _describe(action, kind):
+    """Short label for an action in an error message: its kind and target."""
+    return f'{kind} {action["object_id"]}' if kind == 'hold' and action.get('object_id') else kind
+
+
 def propose(state, proposal, observations, cutoff, evidence):
     """Build a detached next state; caller publishes only after geometry succeeds."""
     if proposal.get('base_version') != state['version']:
@@ -90,7 +95,9 @@ def propose(state, proposal, observations, cutoff, evidence):
     new = copy.deepcopy(state)
     affected = set()
     visible = {k for k, o in observations.items() if o['seq'] <= cutoff}
-    touched=set()
+    # Where each observation was first placed, so a second placement can name
+    # both actions instead of only saying that one exists somewhere.
+    touched = {}
     for index, a in enumerate(actions):
         refs = a.get('evidence', [])
         # One combined check used to answer "Every action needs a reason and
@@ -167,8 +174,18 @@ def propose(state, proposal, observations, cutoff, evidence):
             # affected tracks geometry changes; a category correction reuses the cloud.
         elif kind in ('hold', 'discard', 'exclude'):
             ids = a.get('observations')
-            if not isinstance(ids, list) or not ids or len(set(ids)) != len(ids) or any(x not in visible for x in ids):
-                raise ValueError('Invalid, repeated, or future observation IDs')
+            # Three faults used to share one sentence with no id in it.
+            if not isinstance(ids, list) or not ids:
+                raise ValueError(f'Action {index} ({kind}) needs a nonempty observations list')
+            repeated = sorted({x for x in ids if ids.count(x) > 1})
+            if repeated:
+                raise ValueError(f'Action {index} ({kind}) lists {", ".join(repeated)} more than once')
+            unknown = [x for x in ids if x not in observations]
+            if unknown:
+                raise ValueError(f'Action {index} ({kind}) lists ids that are not observations: {", ".join(unknown)}')
+            future = [x for x in ids if x not in visible]
+            if future:
+                raise ValueError(f'Action {index} ({kind}) lists observations after this window: {", ".join(future)}')
             # One discard is one decision. Without a ceiling, "discard everything
             # in this window under one reason" is a legal, zero-cost action: the
             # window's own ids are already in evidence, so it needs no inspection
@@ -181,9 +198,19 @@ def propose(state, proposal, observations, cutoff, evidence):
                     'Each discard needs its own reason, because a group discard under one '
                     'reason is not a decision. Submit one discard action per observation you '
                     'actually judged unusable, after inspecting it.')
-            if touched.intersection(ids): raise ValueError('Observation changed twice in one proposal')
-            touched.update(ids)
-            if kind == 'hold' and oid not in new['objects']: raise ValueError('Unknown target object')
+            # The message names every clash and both places it sits. Said without
+            # them, a model with forty actions cannot find the one id it pasted
+            # twice; in the v12 trial it resubmitted for eleven rounds.
+            clashes = [x for x in ids if x in touched]
+            if clashes:
+                raise ValueError('Each observation may appear in only one action; ' + '; '.join(
+                    f'{x} is in action {touched[x]} and action {index} ({_describe(a, kind)})'
+                    for x in clashes) + '. Keep it in the one you mean and remove it from the other.')
+            for x in ids:
+                touched[x] = f'{index} ({_describe(a, kind)})'
+            if kind == 'hold' and oid not in new['objects']:
+                raise ValueError(f'Action {index} (hold) targets {oid!r}, which is not an active object'
+                                 + (f'; it was merged into {new["aliases"][oid]}' if oid in new['aliases'] else ''))
             if kind == 'hold':
                 evict = a.get('evict')
                 if evict is not None:
@@ -193,8 +220,21 @@ def propose(state, proposal, observations, cutoff, evidence):
                         raise ValueError('evict must be a single observation id string')
                     evict_rec = new['assignments'].get(evict, {})
                     if evict_rec.get('object_id') != oid or evict_rec.get('status') not in ('held', 'assigned'):
+                        # Name what the object does hold: the window lists counts,
+                        # not ids, so a guessed id is the usual cause.
+                        holding = sorted(k for k, r in new['assignments'].items()
+                                         if r.get('object_id') == oid and r.get('status') in ('held', 'assigned'))
+                        owner = evict_rec.get('object_id')
                         raise ValueError(
-                            f'evict target {evict!r} is not a currently held observation of {oid}')
+                            f'Action {index} (hold {oid}) evicts {evict}, which {oid} does not hold'
+                            + (f' ({evict} belongs to {owner})' if owner else '')
+                            + f'. {oid} holds: {", ".join(holding) or "nothing"}.')
+                    if evict in touched:
+                        raise ValueError(
+                            f'Each observation may appear in only one action; {evict} is in action '
+                            f'{touched[evict]} and is evicted by action {index} ({_describe(a, kind)}). '
+                            'An evicted observation is discarded already; remove it from the other action.')
+                    touched[evict] = f'{index} (evict by hold {oid})'
                     new['assignments'][evict] = {**evict_rec,
                         'object_id': None, 'status': 'discard',
                         'reason': f'evicted to make room: {a["reason"]}',
@@ -209,8 +249,12 @@ def propose(state, proposal, observations, cutoff, evidence):
             if kind == 'hold': affected.add(oid)
         elif kind == 'merge':
             source = a.get('source_object')
-            if source == oid or source not in new['objects'] or oid not in new['objects']:
-                raise ValueError('Invalid merge endpoints')
+            if source == oid:
+                raise ValueError(f'Action {index} (merge) merges {oid} into itself')
+            for role, end in (('source_object', source), ('object_id', oid)):
+                if end not in new['objects']:
+                    raise ValueError(f'Action {index} (merge) {role} {end!r} is not an active object'
+                                     + (f'; it was merged into {new["aliases"][end]}' if end in new['aliases'] else ''))
             for record in new['assignments'].values():
                 if record['object_id'] == source:
                     record.update(object_id=oid, reason=a['reason'], evidence=refs, decided_at=cutoff)
@@ -222,19 +266,27 @@ def propose(state, proposal, observations, cutoff, evidence):
         else:
             raise ValueError(f'Unknown action {kind}')
     if set(new['assignments']) != visible:
-        raise ValueError('Every visible observation needs assigned/discard/exclude status; missing: '+str(sorted(visible-set(new['assignments']))))
+        raise ValueError('Every visible observation needs a hold, discard or exclude; missing: '
+                         + ', '.join(sorted(visible - set(new['assignments']))))
     # Enforce the per-object hold cap. Count both 'held' (new name) and
     # 'assigned' (pre-rename runs read back as held) so the check works
-    # consistently regardless of which run wrote the state.
-    for oid in new['objects']:
-        held = [k for k, a in new['assignments'].items()
-                if a.get('object_id') == oid and a.get('status') in ('held', 'assigned')]
-        if len(held) > HOLD_LIMIT:
-            raise ValueError(
-                f'{oid} now holds {len(held)} observations, exceeding the limit of {HOLD_LIMIT}. '
-                f'Add an evict field to the hold action naming the observation to replace.')
-        if not held:
-            raise ValueError(f'Empty object {oid}; hold observations or merge it')
+    # consistently regardless of which run wrote the state. Every object over
+    # the cap is reported at once: reporting the first only made the v12 trial
+    # fix them one per round, each fix revealing the next.
+    held = {oid: sorted(k for k, a in new['assignments'].items()
+                        if a.get('object_id') == oid and a.get('status') in ('held', 'assigned'))
+            for oid in new['objects']}
+    over = {oid: ids for oid, ids in held.items() if len(ids) > HOLD_LIMIT}
+    if over:
+        raise ValueError(
+            f'Each object holds at most {HOLD_LIMIT} observations. Over the limit: ' + '; '.join(
+                f'{oid} would hold {len(ids)} ({", ".join(ids)}), {len(ids) - HOLD_LIMIT} too many'
+                for oid, ids in over.items())
+            + '. For each, evict held observations to make room or discard new ones.')
+    empty = [oid for oid, ids in held.items() if not ids]
+    if empty:
+        raise ValueError(f'These objects would hold nothing: {", ".join(empty)}. '
+                         'Hold an observation on each, or merge it into another object.')
     new.update(version=state['version']+1, cutoff=cutoff)
     proposal_id = hashlib.sha256(json.dumps({'before':state, 'proposal':proposal,'cutoff':cutoff},sort_keys=True).encode()).hexdigest()[:20]
     return {'id': proposal_id, 'state': new, 'affected': sorted(affected), 'proposal': copy.deepcopy(proposal)}
