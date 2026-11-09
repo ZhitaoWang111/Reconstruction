@@ -65,8 +65,8 @@ blockquote p{margin:0;font-size:14.5px;color:#123f39}
 <p class="lede">这里记录 <code>src/harness/prompt.txt</code> 主要版本的全文（英文原文 + 中文对照），以及每一版相对上一版改了什么、为什么改。
 每版一节，按「依据了什么事实 → 按什么原则组织 → 结构怎么变 → 各节多大 → 措辞差在哪 → 全文」六段写。</p>
 <div class="meta">
-<span class="tag">当前版本 <b>68189933</b>（1105-v1）</span>
-<span class="tag">字符 <b>14,371</b></span>
+<span class="tag">当前版本 <b>b91d6a89</b>（1105-v1）</span>
+<span class="tag">字符 <b>14,425</b></span>
 <span class="tag">展开版本 <b>5</b></span>
 <span class="tag">更新 <b>2026-11-06</b></span>
 </div>
@@ -138,8 +138,8 @@ blockquote p{margin:0;font-size:14.5px;color:#123f39}
 </tr>
 <tr>
 <td><b>1105-v1</b><br><span class="small">当前</span></td>
-<td><code>68189933…</code></td>
-<td>14,371</td>
+<td><code>b91d6a89…</code></td>
+<td>14,425</td>
 <td>动作改名 <code>assign/defer</code> → <code>hold/discard</code>；每物体最多持有 5 条观测并可 <code>evict</code>；<code>discard</code> 单条上限 10；空间候选改为 gap + overlap、上限 15、2 米截止；删除 <code>compare_geometry</code> 与全局 OBB；新增 <code>verify_required</code> 反投影复核。见 <b>05</b>。</td>
 <td>尚未使用</td>
 </tr>
@@ -1290,7 +1290,7 @@ assign 被扣住了。如果 `propose_update` 返回的是 `verification_require
 
 ## WHAT THE WINDOW CONTAINS
 
-The first message already contains everything the window will ever show you: each observation's id (`seq:instance`), category_label, bbox_xyxy, image_size_wh, point_count, centroid and bounds in metres, and spatial_candidates (up to 15, each with gap and overlap); ten images (five frames, each as full-frame RGB then the same frame with retained masks drawn on it); and the complete archived registry, with every Object's label and observation count. It does not list an archived Object's observation ids: those arrive only through `inspect_object`.
+The first message already contains everything the window will ever show you: each observation's id (`seq:instance`), category_label, bbox_xyxy, image_size_wh, point_count, centroid and bounds in metres, and spatial_candidates (up to 15, each with gap and overlap); ten images (five frames, each as full-frame RGB then the same frame with retained masks drawn on it); and the complete archived registry, with every Object's label, observation count, held observation ids, and centroid. It does not list archived observation images: those arrive only through `inspect_object`.
 
 Nothing in that payload changes while the window is open. State advances only when a proposal commits, and a commit ends the window. Re-reading the registry tells you what you already have.
 
@@ -1352,7 +1352,7 @@ The same label rule applies to `relabel`: an archived Object named by an address
 
 ## HOW TO GET MORE INFORMATION
 
-`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it, plus a geometry summary (centroid, size, axis-aligned bounds) computed from its held observations. Pass `all_observations: true` to see every held observation (up to 5) with its own image; use this when you want to judge which held observation to name in `evict`. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
+`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it, plus a geometry summary (centroid, size, axis-aligned bounds) computed from its held observations. Pass `all_observations: true` to see every held observation (up to 5) with its own image; use this when you want to judge which held observation to name in `evict` and seeing the images matters. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
 
 `inspect_observations(ids)` returns one to four observations, current or archived, as metadata plus a full-frame RGB and a per-mask overlay. Use it when a decision turns on what a mask actually covers.
 
@@ -1400,11 +1400,11 @@ The window runs in one order. Read this once; the sections above say what each s
 
 Every reply contains exactly one tool call. When you are about to describe what you intend to do, do it instead.</pre>
 
-<pre class="zh">你拿到的是静态室内场景中一个窗口的已观测 mask 表面，需要判断每条观测各自属于哪个 Object。一个窗口包含 5 帧、20–45 条观测。
+<pre class="zh">你拿到的第一条消息已经包含这个窗口所有能给你的内容：每条观测的 id（`seq:instance`）、category_label、bbox_xyxy、image_size_wh、point_count、centroid 和以米为单位的 bounds，以及 spatial_candidates（最多 15 个，各带 gap 和 overlap）；十张图（五帧，每帧先给完整原始 RGB，再给同帧 mask overlay）；以及完整的归档物体注册表，每个 Object 给出标签、观测数量、持有观测 id 和 centroid。归档物体的观测图像不在这里——只能通过 `inspect_object` 取。
 
 ## 窗口里有什么
 
-第一条消息里已经装下了这个窗口会展示的全部内容：每条观测的 id（`seq:instance`）、category_label、bbox_xyxy、image_size_wh、point_count、以米为单位的 centroid 与 bounds，以及 spatial_candidates（最多 15 条，各带 gap 与 overlap）；十张图（五帧，每帧先是整帧 RGB，再是同一帧画上保留下来的 mask）；以及完整的归档清单，含每个 Object 的标签与观测数。清单不列归档 Object 的观测 id：那些只能通过 `inspect_object` 取得。
+你拿到的第一条消息已经包含这个窗口所有能给你的内容：每条观测的 id（`seq:instance`）、category_label、bbox_xyxy、image_size_wh、point_count、centroid 和以米为单位的 bounds，以及 spatial_candidates（最多 15 个，各带 gap 和 overlap）；十张图（五帧，每帧先给完整原始 RGB，再给同帧 mask overlay）；以及完整的归档物体注册表，每个 Object 给出标签、观测数量、持有观测 id 和 centroid。归档物体的观测图像不在这里——只能通过 `inspect_object` 取。
 
 窗口打开期间这份材料不会变。状态只在提案提交时推进，而提交即结束窗口。重读归档清单，读到的就是你已经有的东西。
 
@@ -1466,7 +1466,7 @@ RELABEL 一个外观与名字相矛盾的归档 Object。它只改标签，不�
 
 ## 如何获取更多信息
 
-`inspect_object(object_id)` 返回某个归档 Object 的一条代表观测：整帧 RGB，画上该 mask 的框并标注 Object 编号，另外附带一份由它已持有观测算出的几何摘要（centroid、尺寸、轴对齐 bounds）。传 `all_observations: true` 可以逐张查看它持有的全部观测（最多 5 条）；当你想判断哪条持有观测值得写进 `evict` 时用它。这是一次 hold 应得的检验——hold 同时下了两个判断：这些 mask 是一个东西，这由窗口自己的图像回答；而这个东西就是那个归档 Object，这只有档案能回答。
+`inspect_object(object_id)` 返回某个归档 Object 的一条代表观测：整帧 RGB，画上 mask 框和 Object 编号，另外附带一份由持有观测算出的几何摘要（centroid、尺寸、轴对齐 bounds）。传 `all_observations: true` 可返回全部持有观测（最多 5 条）各自的图和元数据；适合需要看图判断哪条持有观测应被换出时用（持有 id 本身已在物体档案里）。这是一次 hold 应得的检验——hold 同时下了两个判断：这些 mask 是一个东西，这由窗口自己的图像回答；而这个东西就是那个归档 Object，这只有档案能回答。
 
 `inspect_observations(ids)` 返回一到四条观测（当前或归档），含元数据、整帧 RGB 和逐 mask 的叠加图。当决定取决于一张 mask 实际覆盖了什么时用它。
 

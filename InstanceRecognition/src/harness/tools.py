@@ -126,18 +126,18 @@ class Tools:
         objects=[]
         for oid,obj in self.state['objects'].items():
             ids=[i for i,a in self.state['assignments'].items() if a['object_id']==oid]
-            # No archived observation id is listed here in any form. `observation_ids`
-            # went first, then `representative_observation_id`: both are real ids a
-            # model reads and cites, and the evidence check refuses them, because
-            # reading a list is not inspecting. On the 500-frame run 25 of 26
-            # "cites observations you have not inspected" errors quoted the
-            # representative id verbatim. The count stays, because that is what the
-            # decision needs; an id is reached through inspect_object, which records
-            # it as evidence. The representative chosen for that call is still
-            # written in full to window_inputs/*_context.json for audit.
+            held=[i for i,a in self.state['assignments'].items()
+                  if a.get('object_id')==oid and a.get('status') in ('held','assigned')]
+            # Held ids are listed here deliberately: the model needs them to write
+            # evict entries, and knowing the ids upfront avoids inspect_object
+            # round-trips just to learn which ids are held. These ids are NOT
+            # automatically added to evidence — they still have to be inspected
+            # before they can be cited in a proposal. The evidence check enforces
+            # that; listing them only answers "what does this object currently hold".
             geo = _object_geometry(self.data, self.state, oid)
             centroid = geo['centroid'] if geo else None
-            objects.append({'id':oid,**obj,'observation_count':len(ids),'centroid':centroid})
+            objects.append({'id':oid,**obj,'observation_count':len(ids),
+                            'held_observation_ids':held,'centroid':centroid})
         # `pending` used to be re-sent here on every window: every assignment with
         # no owner, full record, `reason` and `evidence` included. Two things made
         # that dead weight. First, `exclude` is a closed decision - "this mask

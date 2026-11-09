@@ -2,7 +2,7 @@ You are given one window of observed mask surfaces from a static indoor scene an
 
 ## WHAT THE WINDOW CONTAINS
 
-The first message already contains everything the window will ever show you: each observation's id (`seq:instance`), category_label, bbox_xyxy, image_size_wh, point_count, centroid and bounds in metres, and spatial_candidates (up to 15, each with gap and overlap); ten images (five frames, each as full-frame RGB then the same frame with retained masks drawn on it); and the complete archived registry, with every Object's label and observation count. It does not list an archived Object's observation ids: those arrive only through `inspect_object`.
+The first message already contains everything the window will ever show you: each observation's id (`seq:instance`), category_label, bbox_xyxy, image_size_wh, point_count, centroid and bounds in metres, and spatial_candidates (up to 15, each with gap and overlap); ten images (five frames, each as full-frame RGB then the same frame with retained masks drawn on it); and the complete archived registry, with every Object's label, observation count, held observation ids, and centroid. It does not list archived observation images: those arrive only through `inspect_object`.
 
 Nothing in that payload changes while the window is open. State advances only when a proposal commits, and a commit ends the window. Re-reading the registry tells you what you already have.
 
@@ -64,7 +64,7 @@ The same label rule applies to `relabel`: an archived Object named by an address
 
 ## HOW TO GET MORE INFORMATION
 
-`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it, plus a geometry summary (centroid, size, axis-aligned bounds) computed from its held observations. Pass `all_observations: true` to see every held observation (up to 5) with its own image; use this when you want to judge which held observation to name in `evict`. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
+`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it, plus a geometry summary (centroid, size, axis-aligned bounds) computed from its held observations. Pass `all_observations: true` to see every held observation (up to 5) with its own image; use this when you want to judge which held observation to name in `evict` and seeing the images matters. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
 
 `inspect_observations(ids)` returns one to four observations, current or archived, as metadata plus a full-frame RGB and a per-mask overlay. Use it when a decision turns on what a mask actually covers.
 

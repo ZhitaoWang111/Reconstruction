@@ -399,8 +399,8 @@
     ├── 物体档案包含的信息（listing() 输出，见第 1 块）：
     │   ├── id、object_label、status（恒为 provisional）、created_at
     │   ├── observation_count   <i>持有观测数量，1–5</i>
+    │   ├── <b>held_observation_ids</b>   <i>持有观测 id 列表（最多 5 条）；不自动计入 evidence，需通过 inspect 才可引用</i>
     │   └── centroid            <i>持有点云的质心均值，米</i>
-    ✗ 不含持有观测的 id     <i>读 id 列表不等于"看过"；见下方设计注记</i>
     │   ✗ 不含 reason / evidence / decided_at 等归属字段
     │   ✗ 不含 discard / exclude 记录（不广播）
     │
@@ -425,11 +425,11 @@
   <div class="marks">
     <div class="mark w">
       <div class="who">设计注记</div>
-      <div>物体档案里有 <code>observation_count</code> 但没有观测 id，是故意的。500 帧的运行里，
-      25 次「引用了未检视的 id」错误中有 25 次引用的正是档案里暴露的代表观测 id——读一个列表不等于看过那张图。
-      id 必须通过 <code>inspect_object</code> 或 <code>inspect_observations</code> 取，调用时宿主把它加进
-      evidence，proposal 的证据检查才能通过。<code>observation_count</code> 保留，因为这是决策需要的：
-      持有数量告诉模型物体是否已满（5 条），而不需要暴露 id 就能做到这件事。</div>
+      <div>物体档案里的 <code>held_observation_ids</code> 给出持有的 id 列表，但这些 id <b>不自动计入 evidence</b>——
+      知道一个 id 不等于看过那张观测图。只有通过 <code>inspect_object</code> 或 <code>inspect_observations</code>
+      调用之后，宿主才把对应的 id 写进 evidence，proposal 的证据检查才能通过。
+      暴露 id 列表是为了让模型在写 <code>evict</code> 时不必先调一次 inspect 才能知道持有了哪几条；
+      引用历史观测作为归属证据仍然需要 inspect。</div>
     </div>
   </div>
 
@@ -481,8 +481,8 @@
         <td>代表观测图 + 元数据 + <b>geometry 摘要</b></td>
         <td>
           返回物体的 centroid、bounds_min/max、size_xyz（持有点云计算，最多 5 条）。
-          可传 <code>all_observations: true</code> 返回全部持有观测（最多 5 条），每条附图；
-          适合想判断哪条持有观测应该被换出时用。
+          可传 <code>all_observations: true</code> 返回全部持有观测（最多 5 条）各自的图和元数据；
+          适合需要<b>看图判断</b>哪条持有观测应被换出时用（持有 id 本身已在物体档案里）。
         </td>
       </tr>
       <tr>
