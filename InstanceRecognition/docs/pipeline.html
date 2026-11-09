@@ -951,6 +951,137 @@ response = predictor.handle_request({
 
   </div>
 
+  <h3>实例：窗口 7（帧 30–34）的完整流程图</h3>
+  <p>
+    下面是 <code>harness-v13-amb3r-100frames-20261109-1130</code> 里第 7 个窗口的原样复盘。
+    选它是因为它展示了新版本两项关键变化的实际效果：<b>宿主自动淘汰超员观测</b>（本窗触发 20 次）
+    和<b>报错点名具体观测 id</b>（R2 的拒绝直接说出了问题所在）；同时全窗只用 4 轮，结构干净。
+  </p>
+  <div class="chain">
+
+    <div class="node b">
+      <div class="k">窗口开始 · 磁盘状态</div>
+      <div class="t">checkpoint = {version: 6, cutoff: 29}</div>
+      <div class="d">已归档物体 <b>19</b> 个（含 5 个满员对象：Object1/2/3/4/5 各持有 5 条）<br>
+        本窗新观测 <b>38</b> 条：帧 30→6、31→8、32→9、33→9、34→6</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node b">
+      <div class="k">① 组装输入 · 纯本地</div>
+      <div class="t">inputs.build_window_content</div>
+      <div class="d">一条状态 text（19 个物体，各带 <code>held_observation_ids</code>）+
+        逐帧「观测 text + RGB + overlay」× 5 + 历史访问说明<br>
+        满员物体无需 inspect 即可知持有的具体 id</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node g wide">
+      <div class="k">② 工具循环 · 轮 1/4 · 4 次并行 inspect_object</div>
+      <div class="t">inspect_object(Object2) · inspect_object(Object6) · inspect_object(Object10) · inspect_object(Object18)</div>
+      <div class="d">查看 4 个与本窗新观测空间上相近的物体：
+        <ul style="margin:8px 0 0;padding-left:22px">
+          <li><b>Object2</b> coffee table — 满员（5 条），确认质感与形状</li>
+          <li><b>Object6</b> fabric wardrobe — 满员（5 条），确认白色织物外观</li>
+          <li><b>Object10</b> paper — 1 条持有，确认桌面纸张</li>
+          <li><b>Object18</b> storage box — 1 条持有，确认纸箱</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node y">
+      <div class="k">模型判断</div>
+      <div class="t">新建 Object20（纸箱）· 13 个 hold 动作覆盖 38 条观测</div>
+      <div class="d">将 38 条新观测全部归属或创建；多个满员物体（Object1/2/3/4/5/6/8 等）
+        要在本窗各再 hold 3–5 条，会超出上限 5</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node r">
+      <div class="k">③ 校验拒绝 · 轮 2/4</div>
+      <div class="t">propose_update ✗ 引用了未检视的观测 id</div>
+      <div class="d"><code>Action 1 (hold) cites observations you have not inspected:
+0029:001 is not an observation id you can cite</code><br>
+        提案里把 <code>0029:001</code>（上一窗的历史观测）写进了 evidence，
+        而 evidence 检查要求该 id 在本窗口通过 inspect 取得过。
+        报错直接点名观测 id，模型一轮就能修正。<br>
+        <b>磁盘仍是 version 6；提案在内存中丢弃。</b></div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node p">
+      <div class="k">③ 校验通过 · 轮 3/4</div>
+      <div class="t">propose_update ✓ 14 个动作（create 1 + hold 13）</div>
+      <div class="d"><code>proposal_id = 527529ed2887a131555b</code><br>
+        14 个动作覆盖全部 38 条新观测；verify 未触发（无命中率 &lt;20% 的 hold）<br>
+        <b>宿主自动淘汰：</b>13 个 hold 动作中有 9 个物体超过 5 条上限，
+        宿主按点数 + 视角分散度保留最优 5 条，本窗共自动淘汰 <b>20</b> 条观测，
+        各记为 <code>reason: "auto-evicted: lower score (point count + view diversity)"</code>。
+        模型未写任何 evict 字段，宿主全部自动处理。<br>
+        <b>只在内存里生成新状态，磁盘未动。</b></div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node p">
+      <div class="k">④ 提交 · 轮 4/4</div>
+      <div class="t">commit_update(527529ed…)</div>
+      <div class="d">committed = 7 · cutoff = 34</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node p">
+      <div class="k">④ 落盘 · 程序完成，模型不参与</div>
+      <div class="t">versions/0007/ ← 20 个物体</div>
+      <div class="d">affected 物体重新 <code>voxelize(0.02 m)</code>，其余硬链接上一版本<br>
+        写 <code>state.json</code> / <code>transaction.json</code> 后原子改名<br>
+        <code>checkpoint.json ← {version: 7, cutoff: 34}</code></div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node y">
+      <div class="k">本窗 14 个动作</div>
+      <div class="t">create 1 · hold 13（覆盖 38 条观测）· 宿主自动淘汰 20 条</div>
+      <div class="d">
+        create：<code>Object20</code> cardboard box（纸箱）<br>
+        hold：Object19 (bed) 5 条、Object14 (side table) 3 条、Object3 (desk) 5 条、
+        Object1 (office chair) 5 条、Object8 (wastebasket) 5 条、Object6 (wardrobe) 2 条、
+        Object5 (curtain) 1 条、Object16 (tissue box) 3 条、Object13 (rug) 3 条、
+        Object17 (bag) 1 条、Object2 (coffee table) 1 条、Object10 (paper) 1 条、
+        Object20 (cardboard box) 3 条<br>
+        宿主自动 discard 20 条（超员淘汰）· 模型 discard 0 条<br>
+        38 条新观测 = 18 条持有 + 20 条自动淘汰，覆盖率 100%
+      </div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node b">
+      <div class="k">⑤ 进入窗口 8</div>
+      <div class="t">20 个物体 · checkpoint 停在 cutoff 34</div>
+      <div class="d">下一窗重新组装输入；历史图片再次不发，档案含持有观测 id 列表</div>
+    </div>
+
+  </div>
+
+  <div class="marks" style="margin-bottom:24px">
+    <div class="mark a"><div class="who">要点</div><div>
+      R2 拒绝用的是 <b>evidence 检查</b>，不是覆盖率检查：<code>0029:001</code> 是前一窗已归属的历史观测，
+      id 本身合法，但在本窗口没有通过 inspect 取得，所以不能写进 evidence。
+      这是"读到 id ≠ 看过"原则的体现：id 只有通过 inspect 调用才进入 evidence，proposal 检查才能通过。
+    </div></div>
+    <div class="mark a"><div class="who">要点</div><div>
+      宿主自动淘汰让模型在 <b>4 轮</b>内提交了 38 条观测、9 个超员物体——
+      对比 v12 试跑的第 2 窗：同样的情形下 28 轮用完也没能提交。
+      模型不再需要 inspect-to-see-held-ids 再逐条写 evict，这 9 个物体全部一次通过。
+    </div></div>
+    <div class="mark a"><div class="who">对比 v11 窗口 8</div><div>
+      v11 窗口 8 用了 6 轮，含 2 次校验拒绝（JSON 语法错 + 覆盖不全）；
+      本窗用了 4 轮，含 1 次拒绝（evidence id 引用错）。
+      最大的差异是超员处理：v11 没有上限，所有观测全部写进物体；
+      本窗有 5 条上限，宿主自动保留质量最好的 5 条，其余 20 条按固定规则淘汰，模型不需要逐条决策。
+    </div></div>
+  </div>
+
   <div class="legend" style="display:flex;flex-wrap:wrap;gap:8px 20px;margin:0 0 24px;font-size:12.5px;color:var(--ink-3)">
     <span><b style="color:#2563eb">■</b> 输入 / 磁盘状态</span>
     <span><b style="color:#15803d">■</b> 工具调用</span>
