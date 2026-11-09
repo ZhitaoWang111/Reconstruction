@@ -393,14 +393,45 @@
 │   ├── image：完整原始 RGB
 │   └── image：全帧彩色 mask overlay
 │
-└── 3. 历史访问说明           <i>最后一条 text</i>
-    └── 只有文字档案；历史图片走 inspect_object / inspect_observations 按需取
+└── 3. 历史访问说明           <i>最后一条 text，固定措辞</i>
+    ├── 说明只有文字档案（状态块里的物体记录）；历史图片走工具按需取
+    │
+    ├── 物体档案包含的信息（listing() 输出，见第 1 块）：
+    │   ├── id、object_label、status（恒为 provisional）、created_at
+    │   ├── observation_count   <i>持有观测数量，1–5</i>
+    │   └── centroid            <i>持有点云的质心均值，米</i>
+    ✗ 不含持有观测的 id     <i>读 id 列表不等于"看过"；见下方设计注记</i>
+    │   ✗ 不含 reason / evidence / decided_at 等归属字段
+    │   ✗ 不含 discard / exclude 记录（不广播）
+    │
+    └── 取历史图片与观测元数据的途径：
+        ├── inspect_object(object_id)
+        │   ├── 返回：代表观测一张图 + 物体元数据 + geometry 摘要
+        │   └── 调用后，代表观测的 id 进入 evidence，可在 proposal 中引用
+        ├── inspect_object(object_id, all_observations=true)
+        │   ├── 返回：全部持有观测（最多 5 条）各自的图 + 元数据
+        │   │   含 view_direction、camera_distance_m（需 v2+ source）
+        │   └── 全部持有观测 id 进入 evidence
+        └── inspect_observations(ids)
+            ├── 传一组本窗口观测 id，返回逐条图
+            └── 调用后这些 id 进入 evidence
 
 <b>与 v11 相比删除的字段：</b>
   ✗ global_object_geometry（全局 OBB 块：center_xyz / size_xyz / axes_world）
   ✗ representative_observation_id（历史观测 id 暴露导致无效引用）
   ✗ observation_ids（同上）
   ✗ state.pending（deferral 不再广播）</div>
+
+  <div class="marks">
+    <div class="mark w">
+      <div class="who">设计注记</div>
+      <div>物体档案里有 <code>observation_count</code> 但没有观测 id，是故意的。500 帧的运行里，
+      25 次「引用了未检视的 id」错误中有 25 次引用的正是档案里暴露的代表观测 id——读一个列表不等于看过那张图。
+      id 必须通过 <code>inspect_object</code> 或 <code>inspect_observations</code> 取，调用时宿主把它加进
+      evidence，proposal 的证据检查才能通过。<code>observation_count</code> 保留，因为这是决策需要的：
+      持有数量告诉模型物体是否已满（5 条），而不需要暴露 id 就能做到这件事。</div>
+    </div>
+  </div>
 
   <h3>空间候选重写<span class="h">spatial_context.py · 1105-v1 item 2</span></h3>
   <p>
