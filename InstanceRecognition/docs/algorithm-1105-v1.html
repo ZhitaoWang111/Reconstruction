@@ -450,8 +450,8 @@
         <td>代表观测图 + 元数据 + <b>geometry 摘要</b></td>
         <td>
           返回物体的 centroid、bounds_min/max、size_xyz（持有点云计算，最多 5 条）。
-          物体满员（5 条）时自动返回全部持有观测，每条附 view_direction、camera_distance_m、visible_pixels、bbox_truncated。
-          可传 <code>all_observations: true</code> 强制返回全部。
+          可传 <code>all_observations: true</code> 返回全部持有观测（最多 5 条），每条附图；
+          适合想判断哪条持有观测应该被换出时用。
         </td>
       </tr>
       <tr>
@@ -473,20 +473,20 @@
 
   <h3>持有上限与换位<span class="h">HOLD_LIMIT = 5</span></h3>
   <p>
-    每个物体最多持有 5 条观测（status <code>held</code>）。超员时必须在 hold 动作里加 <code>evict</code> 字段指定被替换的观测；
-    宿主把被替换的那条转为 discard，再 hold 新观测，持有数保持 5。
+    每个物体最多持有 5 条观测（status <code>held</code>）。超员时宿主自动按点数和视角分散度保留最优的 5 条，多余的转为 discard。
+    模型可以在 hold 动作里加 <code>evict</code> 字段覆盖这个选择：写一个 id 字符串或 id 列表，指定想换出的持有观测；不写也不报错，宿主会自动选。
   </p>
   <pre><code>{<span class="k">"action"</span>:<span class="s">"hold"</span>,<span class="k">"object_id"</span>:<span class="s">"Object3"</span>,
  <span class="k">"observations"</span>:[<span class="s">"0185:003"</span>],
- <span class="k">"evict"</span>:<span class="s">"0042:001"</span>,  <span class="c">// 指定被换出的持有观测</span>
+ <span class="k">"evict"</span>:<span class="s">"0042:001"</span>,  <span class="c">// 可选；检视发现此条持有是错的时才需要写</span>
  <span class="k">"evidence"</span>:[<span class="s">"0185:003"</span>,<span class="s">"0042:001"</span>],
- <span class="k">"reason"</span>:<span class="s">"0042:001 与新观测视角重复，换掉"</span>}</code></pre>
+ <span class="k">"reason"</span>:<span class="s">"0042:001 是错误归属，换掉"</span>}</code></pre>
 
   <h3>六种动作</h3>
   <table>
     <thead><tr><th>动作</th><th>含义</th><th>1105-v1 变化</th></tr></thead>
     <tbody>
-      <tr><td><code>hold</code></td><td>把观测归到已有物体</td><td>改名自 assign；上限 5 条；超员需 evict；verify 检查</td></tr>
+      <tr><td><code>hold</code></td><td>把观测归到已有物体</td><td>改名自 assign；上限 5 条；超员由宿主自动淘汰（evict 可选）；verify 检查</td></tr>
       <tr><td><code>discard</code></td><td>丢弃观测（最终决定）</td><td>改名自 defer；批量上限从 4 提高到 10</td></tr>
       <tr><td><code>create</code></td><td>新建物体（不含观测）</td><td>verify 新增重叠检查</td></tr>
       <tr><td><code>exclude</code></td><td>排除观测（跨物体 mask）</td><td>无变化</td></tr>
@@ -530,8 +530,8 @@
     <tbody>
       <tr>
         <td><code>hold</code></td>
-        <td>把目标物体的持有点云反投影到观测所在帧的 RGB 上；青色点 = 物体云，黄框 = mask bbox</td>
-        <td>有 camera_to_world 时始终渲染</td>
+        <td>有 camera_to_world 时，把目标物体的其余持有点云投进新观测所在帧；命中率（落在 mask 内的比例）&lt; 20% 时渲染，每次最多 6 张（最差的排前面）</td>
+        <td>命中率 &lt; HOLD_HIT_THRESHOLD（0.2）</td>
       </tr>
       <tr>
         <td><code>create</code></td>
@@ -573,7 +573,7 @@
       <div class="dot m">3b</div>
       <div class="body">
         <div class="name">发现问题</div>
-        <div class="io2">模型重新调 propose_update（修改 object_id / 加 discard / 加 evict）→ 回到步骤 2</div>
+        <div class="io2">模型重新调 propose_update（修改 object_id / 加 discard / 在 evict 里指定换出的观测）→ 回到步骤 2</div>
       </div>
     </div>
     <div class="step">
