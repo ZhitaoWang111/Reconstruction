@@ -18,17 +18,17 @@ The registry is complete, and an Object outside it does not exist yet. No image 
 
 ## ONE COMMIT PER WINDOW
 
-The first `commit_update` that succeeds ends the window. It is also the only commit you get, and the host rejects any proposal that leaves a visible observation without a state. There is no partial submission and no second pass.
+The first `commit_update` that succeeds ends the window. It is also the only commit you get, and the host rejects any draft that leaves a visible observation without a state. There is no partial submission and no second pass.
 
-Everything follows from that. All the looking happens before the first `propose_update`, because afterwards there is no window left to look in. And because the proposal is total, a decision you cannot reach does not wait outside it - it takes a slot in the same submission as the ones you can.
+Everything follows from that. All the looking happens before the first `propose_update`, because afterwards there is no window left to look in. And because the draft is total, a decision you cannot reach does not wait outside it - it takes a slot in the same submission as the ones you can.
 
 Your budget is API rounds, and the host tells you when two remain. Spending rounds to look is cheap and usually the right purchase. Spending a round to postpone a decision buys nothing.
 
 ## ACTIONS ON OBSERVATIONS AND ON OBJECTS
 
-An action is not a tool call: it is an entry in the `actions` list, tagged by the key `"action"`. One proposal may hold several actions, and one action may carry several observations. Six actions exist, and they split by what they act on.
+An action is not a tool call: it is an entry in the `actions` list, tagged by the key `"action"`. One draft may hold several actions, and one action may carry several observations. Six actions exist, and they split by what they act on.
 
-Three act on observations - `hold`, `discard`, `exclude`. These are the only actions that set an observation's state, and every visible observation must end in exactly one of them; the host rejects any proposal that leaves one out. Only these three carry an `observations` list. An observation listed under two actions rejects the whole proposal, whichever two. The old names for these actions are gone: the host rejects a proposal that uses them.
+Three act on observations - `hold`, `discard`, `exclude`. These are the only actions that set an observation's state, and every visible observation must end in exactly one of them; the host rejects any draft that leaves one out. Only these three carry an `observations` list. An observation listed under two actions rejects the whole draft, whichever two. The old names for these actions are gone: the host rejects a draft that uses them.
 
 Holding is ownership. An observation a valid proposal holds belongs to that Object and stays with it; there is no separate "ownership without a kept observation".
 
@@ -47,8 +47,8 @@ Two masks retained in one frame that show the same surface are duplicates, not d
 
 Three act on Objects - `create`, `merge`, `relabel`. They carry no `observations` list; whatever they leave behind for ownership follows from the Object they name.
 
-CREATE an Object when you can name what the observation is and the registry holds nothing that matches it. Naming what it is ranks below recognising which archived Object it is, and both rank above silence: an unfamiliar floor fan is an Object even when the archive holds nothing like one. When several masks in this window show the surface of one independent thing, create it once and hold all of them in the same proposal; splitting one thing across two creates is a duplicate you must then merge. An Object that ends the proposal owning nothing is a permanent error; there is no delete.
-  `{"action":"create","object_id":"ObjectN","object_label":"...","evidence":[...],"reason":"..."}`, plus a separate hold entry in the same proposal. `object_id` is a fresh number and is never reused. A `create` carries no `observations` key: an `observations` list on a create is ignored, and those observations are then reported missing. Give them their own `hold`.
+CREATE an Object when you can name what the observation is and the registry holds nothing that matches it. Naming what it is ranks below recognising which archived Object it is, and both rank above silence: an unfamiliar floor fan is an Object even when the archive holds nothing like one. When several masks in this window show the surface of one independent thing, create it once and hold all of them in the same draft; splitting one thing across two creates is a duplicate you must then merge. An Object that ends the draft owning nothing is a permanent error; there is no delete.
+  `{"action":"create","object_id":"ObjectN","object_label":"...","evidence":[...],"reason":"..."}`, plus a separate hold entry in the same draft. `object_id` is a fresh number and is never reused. A `create` carries no `observations` key: an `observations` list on a create is ignored, and those observations are then reported missing. Give them their own `hold`.
 
 The label answers what kind of thing it is, not which one. Use one to three words: a common English category noun for what you saw - `shoe`, `office chair`, `wall picture`. Several separate things of the same kind are still separate Objects, because one Object is one physical thing and never a kind; but they may all carry the same label. `object_id` is what tells them apart, and the label never does. Do not widen a label to make it unique. A position, a neighbour, a colour, a size - `left shoe beside console`, `paper on computer desk` - turns the label into an address, and an address goes stale the moment the thing it points at is merged or relabelled. Say which one you mean in `reason`, where a sentence costs nothing and can be wrong harmlessly.
 
@@ -77,24 +77,24 @@ A hold stays in the proposal. If `propose_update` answers `verification_required
 
 You cannot name the cue the decision rests on. The reason is the decision in words, so if the cue will not come, there is no decision yet - go and look.
 
-## SUBMITTING A PROPOSAL
+## SUBMITTING A DRAFT
 
-`propose_update` takes `proposal_json`, a JSON-encoded string with `base_version` and an ordered `actions` list. `base_version` must equal the version shown in the window. Actions run in order, and a failed proposal invalidates the previous pending one.
+`propose_update` takes `proposal_json`, a JSON-encoded string with `base_version` and an ordered `actions` list. `base_version` must equal the version shown in the window. Actions run in order, and a failed draft invalidates the previous pending proposal.
 
-The keyword that names an action is the key `"action"`. Here is one valid proposal - syntax only, not a decision for the actual scene:
+The keyword that names an action is the key `"action"`. Here is one valid draft - syntax only, not a decision for the actual scene:
 
 {"base_version":7,"actions":[
  {"action":"create","object_id":"Object1","object_label":"toilet","evidence":["0000:001"],"reason":"One distinct toilet, and no archived Object matches it."},
  {"action":"hold","object_id":"Object1","observations":["0000:001"],"evidence":["0000:001"],"reason":"Hold the toilet observation on the Object just created."}
 ]}
 
-Every action needs a nonempty `evidence` list and a `reason`, and the host checks that a cited id is accessible rather than that it was earned. This window's own observation ids are in evidence from the start, so citing them proves nothing. What does record a look is a historical observation id returned by `inspect_object` or `inspect_observations`; cite those whenever the decision rested on them. An archived id you have not inspected is not citable, and citing one rejects the proposal by name.
+Every action needs a nonempty `evidence` list and a `reason`, and the host checks that a cited id is accessible rather than that it was earned. This window's own observation ids are in evidence from the start, so citing them proves nothing. What does record a look is a historical observation id returned by `inspect_object` or `inspect_observations`; cite those whenever the decision rested on them. An archived id you have not inspected is not citable, and citing one rejects the draft by name.
 
 The host checks structure and rejects with a specific message. Read it literally - it names the defect, and the fix is the one it names. Identity correctness is checked by nothing except you.
 
 A validated proposal is not yet committed. `commit_update(proposal_id)` writes it, using the id `propose_update` returned; nothing else writes, and this call ends the window.
 
-`propose_update` may return `verify_required` instead of a proposal id. The proposal is valid and held; the host has projected each held Object into the frames of the observations you are adding and found some that do not line up, or a new Object that overlaps an existing one, or a merge that exceeds five. Each flagged hold comes with an image: the cyan dots are the rest of that Object drawn into this frame, the yellow box is the new mask. Read the verify message and the images it names. If the evidence confirms the decisions, call `commit_update` immediately. If something looks wrong, call `propose_update` again with a corrected proposal (change an object_id, add a discard, or name specific observations in `evict`). Two verify rounds are allowed; after that the host allows commit regardless.
+`propose_update` may return `verify_required` instead of a proposal id. The proposal is valid and held; the host has projected each held Object into the frames of the observations you are adding and found some that do not line up, or a new Object that overlaps an existing one, or a merge that exceeds five. Each flagged hold comes with an image: the cyan dots are the rest of that Object drawn into this frame, the yellow box is the new mask. Read the verify message and the images it names. If the evidence confirms the decisions, call `commit_update` immediately. If something looks wrong, call `propose_update` again with a corrected draft (change an object_id, add a discard, or name specific observations in `evict`). Two verify rounds are allowed; after that the host allows commit regardless.
 
 ## ORDER OF WORK
 
@@ -106,7 +106,7 @@ The window runs in one order. Read this once; the sections above say what each s
 
 3. Decide each observation, one at a time: `hold`, `create` with its `hold`, `discard`, or `exclude`. Decide identity first, label second - the label is a short English noun phrase for what you decided the thing is, and does not have to be unique. `merge` and `relabel` are for a mistake an inspection has already exposed, not for this window's decisions.
 
-4. Before sending, walk the window frame by frame and confirm every id of every frame appears exactly once. A proposal that stops at the fourth frame is rejected whole. Then send the whole window as one `proposal_json` through `propose_update`. Read what comes back: an error names a defect to fix; `verification_required` names Objects to inspect before you try again; `verify_required` gives rendered images to check before committing.
+4. Before sending, walk the window frame by frame and confirm every id of every frame appears exactly once. A draft that stops at the fourth frame is rejected whole. Then send the whole window as one `proposal_json` through `propose_update`. Read what comes back: an error names a defect to fix; `verification_required` names Objects to inspect before you try again; `verify_required` gives rendered images to check before committing.
 
 5. `commit_update` with the proposal id from step 4. That call ends the window.
 
