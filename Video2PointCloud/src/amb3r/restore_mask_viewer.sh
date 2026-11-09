@@ -25,7 +25,7 @@ test -f "$batch"
 mkdir -p "$logs" "$geometry" "$reference"
 
 if [[ ! -f "$data/manifest.json" ]]; then
-  "${runner[@]}" "$module_root/src/amb3r/extract_scannet_sens.py" \
+  "${runner[@]}" "$project_root/InstanceRecognition/src/geometry/extract_scannet_sens.py" \
     --sens "$scene_root/scene0000_00.sens" --output "$data" \
     --frame-indices-json "$batch" > "$logs/extraction.log" 2>&1
 fi
