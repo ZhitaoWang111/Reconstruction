@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 
+import numpy as np
+
 
 _LEGACY_OBSERVATION_KEYS = frozenset({'mask_id'})
 _LEGACY_OBSERVATION_TOKEN = 'mask_id'
@@ -78,12 +80,123 @@ def initial():
     return {'version': 0, 'cutoff': -1, 'objects': {}, 'assignments': {}, 'aliases': {}}
 
 
+def _camera_positions(data):
+    """Return a {seq: np.ndarray(3)} map from data, or {} if unavailable."""
+    try:
+        from .view_params import ViewParams
+        frames_dir = getattr(data, 'source', None)
+        if frames_dir is None:
+            return {}
+        vp = ViewParams(Path(frames_dir) / 'frames')
+        out = {}
+        seq = 0
+        while True:
+            pos = vp.position(seq)
+            if pos is None and seq > 0:
+                break
+            if pos is not None:
+                out[seq] = pos
+            seq += 1
+        return out
+    except Exception:
+        return {}
+
+
+def _score_holds(obs_ids, data, existing_positions):
+    """Score each observation id for retention quality.
+
+    Higher score = keep; lower = auto-evict.
+    Two components:
+      1. point_count  — more points means a denser, more useful view.
+      2. view diversity — minimum angle to any already-selected camera position.
+         Maximising diversity covers the object from multiple sides.
+
+    Camera positions are looked up from the source npz files via ViewParams.
+    When unavailable the score falls back to point_count alone.
+    Returns the same list sorted descending by score (best first).
+    """
+    scored = []
+    cam_positions = existing_positions  # positions already committed to this object
+    for oid in obs_ids:
+        item = data.items.get(oid, {}) if hasattr(data, 'items') else {}
+        seq = item.get('seq')
+        pc = item.get('point_count', 0)
+        if seq is not None and seq in _camera_positions._cache:
+            pos = _camera_positions._cache[seq]
+        else:
+            pos = None
+        scored.append((oid, pc, pos))
+
+    # Greedy diversity: iteratively pick the next candidate that is furthest
+    # from already-selected positions.
+    selected = []
+    selected_pos = list(cam_positions.values()) if cam_positions else []
+    remaining = list(scored)
+
+    while remaining:
+        best_oid, best_score = None, -1.0
+        for oid, pc, pos in remaining:
+            if pos is not None and selected_pos:
+                dirs = np.array([p / (np.linalg.norm(p) + 1e-9) for p in selected_pos])
+                d = pos / (np.linalg.norm(pos) + 1e-9)
+                min_cos = float(np.dot(dirs, d).max())
+                # angle in [0,1]: 1 = 180° apart (best), 0 = same direction
+                diversity = (1.0 - min_cos) / 2.0
+            else:
+                diversity = 0.5  # unknown position: treat as neutral
+            # Normalise pc to [0,1] against this window's max
+            max_pc = max(p for _, p, _ in scored) or 1
+            score = 0.5 * (pc / max_pc) + 0.5 * diversity
+            if score > best_score:
+                best_score, best_oid = score, oid
+        entry = next(e for e in remaining if e[0] == best_oid)
+        remaining.remove(entry)
+        selected.append((best_oid, best_score))
+        if entry[2] is not None:
+            selected_pos.append(entry[2])
+
+    return [oid for oid, _ in selected]
+
+
+_camera_positions._cache = {}  # populated per-call in _auto_evict
+
+
+def _auto_evict(obj_id, held_ids, new_ids, data, cutoff):
+    """Select which observations to keep and which to auto-evict.
+
+    Called only when held + new would exceed HOLD_LIMIT.  Returns
+    (keep_new, auto_discard_new, auto_discard_held):
+      - keep_new         new observation ids to keep
+      - auto_discard_new new ids that are dropped (capacity only)
+      - auto_discard_held held ids that are dropped to make room
+    """
+    # Load camera positions once for this call.
+    cam = _camera_positions(data)
+    _camera_positions._cache = cam
+
+    held_pos = {}
+    if hasattr(data, 'items'):
+        for oid in held_ids:
+            seq = data.items.get(oid, {}).get('seq')
+            if seq is not None and seq in cam:
+                held_pos[seq] = cam[seq]
+
+    all_candidates = list(held_ids) + list(new_ids)
+    ranked = _score_holds(all_candidates, data, held_pos)
+    # Best HOLD_LIMIT observations to keep.
+    keep = set(ranked[:HOLD_LIMIT])
+    keep_new     = [i for i in new_ids   if i in keep]
+    drop_new     = [i for i in new_ids   if i not in keep]
+    drop_held    = [i for i in held_ids  if i not in keep]
+    return keep_new, drop_new, drop_held
+
+
 def _describe(action, kind):
     """Short label for an action in an error message: its kind and target."""
     return f'{kind} {action["object_id"]}' if kind == 'hold' and action.get('object_id') else kind
 
 
-def propose(state, proposal, observations, cutoff, evidence):
+def propose(state, proposal, observations, cutoff, evidence, data=None):
     """Build a detached next state; caller publishes only after geometry succeeds."""
     if proposal.get('base_version') != state['version']:
         raise ValueError('Stale base_version')
@@ -212,16 +325,21 @@ def propose(state, proposal, observations, cutoff, evidence):
                 raise ValueError(f'Action {index} (hold) targets {oid!r}, which is not an active object'
                                  + (f'; it was merged into {new["aliases"][oid]}' if oid in new['aliases'] else ''))
             if kind == 'hold':
-                evict = a.get('evict')
-                if evict is not None:
-                    # Evict an existing held observation to make room. The model
-                    # names exactly one; the host validates it then discards it.
+                # evict accepts a single id (legacy) or a list.
+                evict_raw = a.get('evict')
+                if evict_raw is None:
+                    evict_list = []
+                elif isinstance(evict_raw, str):
+                    evict_list = [evict_raw]
+                elif isinstance(evict_raw, list):
+                    evict_list = evict_raw
+                else:
+                    raise ValueError(f'Action {index} (hold {oid}) evict must be a string or list of strings')
+                for evict in evict_list:
                     if not isinstance(evict, str):
-                        raise ValueError('evict must be a single observation id string')
+                        raise ValueError(f'Action {index} (hold {oid}) evict list contains a non-string: {evict!r}')
                     evict_rec = new['assignments'].get(evict, {})
                     if evict_rec.get('object_id') != oid or evict_rec.get('status') not in ('held', 'assigned'):
-                        # Name what the object does hold: the window lists counts,
-                        # not ids, so a guessed id is the usual cause.
                         holding = sorted(k for k, r in new['assignments'].items()
                                          if r.get('object_id') == oid and r.get('status') in ('held', 'assigned'))
                         owner = evict_rec.get('object_id')
@@ -241,8 +359,8 @@ def propose(state, proposal, observations, cutoff, evidence):
                         'decided_at': cutoff}
                     affected.add(oid)
             for obs in ids:
-                old = new['assignments'].get(obs, {}).get('object_id')
-                if old: affected.add(old)
+                old_owner = new['assignments'].get(obs, {}).get('object_id')
+                if old_owner: affected.add(old_owner)
                 new['assignments'][obs] = {'object_id': oid if kind == 'hold' else None,
                     'status': 'held' if kind == 'hold' else kind, 'reason': a['reason'], 'evidence': refs,
                     'decided_at': cutoff}
@@ -278,11 +396,26 @@ def propose(state, proposal, observations, cutoff, evidence):
             for oid in new['objects']}
     over = {oid: ids for oid, ids in held.items() if len(ids) > HOLD_LIMIT}
     if over:
-        raise ValueError(
-            f'Each object holds at most {HOLD_LIMIT} observations. Over the limit: ' + '; '.join(
-                f'{oid} would hold {len(ids)} ({", ".join(ids)}), {len(ids) - HOLD_LIMIT} too many'
-                for oid, ids in over.items())
-            + '. For each, evict held observations to make room or discard new ones.')
+        # Auto-evict: pick the best HOLD_LIMIT observations by point count and
+        # view diversity, discard the rest. The model can steer this by naming
+        # specific observations in the evict list; this runs on whatever is left.
+        for oid, ids in over.items():
+            # Split into already-held-before-this-proposal and new ones.
+            prior_held = sorted(k for k, r in state['assignments'].items()
+                                if r.get('object_id') == oid and r.get('status') in ('held', 'assigned'))
+            new_held = [k for k in ids if k not in set(prior_held)]
+            keep_new, drop_new, drop_old = _auto_evict(oid, prior_held, new_held, data, cutoff)
+            for drop in drop_new + drop_old:
+                rec = new['assignments'][drop]
+                new['assignments'][drop] = {**rec,
+                    'object_id': None, 'status': 'discard',
+                    'reason': 'auto-evicted: lower score (point count + view diversity)',
+                    'decided_at': cutoff}
+            affected.add(oid)
+    # Re-compute held after auto-eviction for the empty-object check.
+    held = {oid: sorted(k for k, a in new['assignments'].items()
+                        if a.get('object_id') == oid and a.get('status') in ('held', 'assigned'))
+            for oid in new['objects']}
     empty = [oid for oid, ids in held.items() if not ids]
     if empty:
         raise ValueError(f'These objects would hold nothing: {", ".join(empty)}. '

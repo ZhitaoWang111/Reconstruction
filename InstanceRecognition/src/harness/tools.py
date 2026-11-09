@@ -214,7 +214,7 @@ class Tools:
                         'geometry':geo,'visual_images':descriptors,'reused_images':reused},images
         if name=='propose_update':
             self.pending=None
-            checked=propose(self.state,json.loads(args['proposal_json']),self.data.items,self.cutoff,self.evidence)
+            checked=propose(self.state,json.loads(args['proposal_json']),self.data.items,self.cutoff,self.evidence,self.data)
             self.pending=checked
             reid_checks=self.reidentification_checks(checked)
             if reid_checks:

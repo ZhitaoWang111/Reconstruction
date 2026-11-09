@@ -236,15 +236,22 @@ def test_hold_at_limit_is_allowed():
     assert all(checked['state']['assignments'][i]['status'] == 'held' for i in ids)
 
 
-def test_hold_over_limit_is_rejected():
-    """Holding more than HOLD_LIMIT observations onto one object is an error."""
+def test_hold_over_limit_is_auto_evicted():
+    """Holding more than HOLD_LIMIT observations auto-evicts the lowest-scoring ones."""
     from src.harness.state import HOLD_LIMIT
     obs, evidence = _window(HOLD_LIMIT + 1)
     ids = sorted(obs)
     actions = [action('create', object_id='Object1', object_label='bin'),
                action('hold', object_id='Object1', observations=ids)]
-    with pytest.raises(ValueError, match=r'Object1 would hold 6 \(.*\), 1 too many'):
-        propose(initial(), {'base_version': 0, 'actions': actions}, obs, 0, evidence)
+    result = propose(initial(), {'base_version': 0, 'actions': actions}, obs, 0, evidence)
+    state = result['state']
+    held = [k for k, a in state['assignments'].items()
+            if a.get('object_id') == 'Object1' and a['status'] in ('held', 'assigned')]
+    discarded = [k for k, a in state['assignments'].items()
+                 if a['status'] == 'discard']
+    assert len(held) == HOLD_LIMIT
+    assert len(discarded) == 1
+    assert 'auto-evicted' in state['assignments'][discarded[0]]['reason']
 
 
 def test_evict_makes_room_for_new_hold():
@@ -311,15 +318,19 @@ def _two_full_objects():
     return state, obs, ev, ids
 
 
-def test_every_object_over_the_hold_limit_is_named_at_once():
+def test_every_object_over_the_hold_limit_is_auto_evicted():
     state, obs, ev, ids = _two_full_objects()
     actions = [action('hold', object_id='Object1', observations=[ids[10]]),
                action('hold', object_id='Object2', observations=[ids[11]])]
-    with pytest.raises(ValueError) as err:
-        propose(state, {'base_version': 1, 'actions': actions}, obs, 0, ev)
-    message = str(err.value)
-    assert 'Object1 would hold 6' in message and 'Object2 would hold 6' in message
-    assert ids[0] in message and ids[5] in message
+    result = propose(state, {'base_version': 1, 'actions': actions}, obs, 0, ev)
+    s = result['state']
+    for oid in ('Object1', 'Object2'):
+        held = [k for k, a in s['assignments'].items()
+                if a.get('object_id') == oid and a['status'] in ('held', 'assigned')]
+        assert len(held) == 5, f'{oid} holds {len(held)}'
+    auto = [k for k, a in s['assignments'].items()
+            if a['status'] == 'discard' and 'auto-evicted' in (a.get('reason') or '')]
+    assert len(auto) == 2
 
 
 def test_an_observation_in_two_actions_names_the_id_and_both_actions():

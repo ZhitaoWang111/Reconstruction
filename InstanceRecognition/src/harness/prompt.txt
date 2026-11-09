@@ -32,7 +32,7 @@ Three act on observations - `hold`, `discard`, `exclude`. These are the only act
 
 Holding is ownership. An observation a valid proposal holds belongs to that Object and stays with it; there is no separate "ownership without a kept observation".
 
-Each Object holds at most five observations. When it is full and a new observation should replace one, call `inspect_object` with `all_observations: true` first, then add an `evict` field naming the held observation to drop; the host discards that one and holds the new one in its place. A hold that would exceed five is rejected unless it evicts.
+Each Object holds at most five observations. When holding more would exceed five, the host automatically keeps the best five by point count and view diversity and discards the rest; the discarded observations are gone for good. You can override which held observations are dropped by adding an `evict` field: a single id string, or a list of ids. Name the ones you want gone — useful when you know from an inspection that a held observation is wrong. Omitting `evict` is fine; the host will choose.
 
 HOLD an observation on an archived Object when its archived evidence matches this observation on a cue you can point at - shape, proportions, surface, colour, position relative to a fixed neighbour, what occludes it - and that cue separates this observation from the other candidates in the window. A feature shared by adjacent surfaces does not separate them; name what distinguishes this one. Name that cue in `reason`.
   `{"action":"hold","object_id":"ObjectN","observations":[...],"evidence":[...],"reason":"..."}`
@@ -64,7 +64,7 @@ The same label rule applies to `relabel`: an archived Object named by an address
 
 ## HOW TO GET MORE INFORMATION
 
-`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it, plus a geometry summary (centroid, size, axis-aligned bounds) computed from its held observations. Pass `all_observations: true` to see every held observation (up to 5) with its own image; use this when the object already holds five and you need to decide which to evict. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
+`inspect_object(object_id)` returns one representative observation of an archived Object as a full-frame RGB with the mask box and the Object id drawn on it, plus a geometry summary (centroid, size, axis-aligned bounds) computed from its held observations. Pass `all_observations: true` to see every held observation (up to 5) with its own image; use this when you want to judge which held observation to name in `evict`. It is the check a hold deserves: a hold claims two things at once - that these masks are one thing, which the window's own images answer, and that the thing is that archived Object, which only the archive can answer.
 
 `inspect_observations(ids)` returns one to four observations, current or archived, as metadata plus a full-frame RGB and a per-mask overlay. Use it when a decision turns on what a mask actually covers.
 
@@ -94,7 +94,7 @@ The host checks structure and rejects with a specific message. Read it literally
 
 A validated proposal is not yet committed. `commit_update(proposal_id)` writes it, using the id `propose_update` returned; nothing else writes, and this call ends the window.
 
-`propose_update` may return `verify_required` instead of a proposal id. The proposal is valid and held; the host has projected each held Object into the frames of the observations you are adding and found some that do not line up, or a new Object that overlaps an existing one, or a merge that exceeds five. Each flagged hold comes with an image: the cyan dots are the rest of that Object drawn into this frame, the yellow box is the new mask. Read the verify message and the images it names. If the evidence confirms the decisions, call `commit_update` immediately. If something looks wrong, call `propose_update` again with a corrected proposal (change an object_id, add a discard, or add an evict). Two verify rounds are allowed; after that the host allows commit regardless.
+`propose_update` may return `verify_required` instead of a proposal id. The proposal is valid and held; the host has projected each held Object into the frames of the observations you are adding and found some that do not line up, or a new Object that overlaps an existing one, or a merge that exceeds five. Each flagged hold comes with an image: the cyan dots are the rest of that Object drawn into this frame, the yellow box is the new mask. Read the verify message and the images it names. If the evidence confirms the decisions, call `commit_update` immediately. If something looks wrong, call `propose_update` again with a corrected proposal (change an object_id, add a discard, or name specific observations in `evict`). Two verify rounds are allowed; after that the host allows commit regardless.
 
 ## ORDER OF WORK
 
