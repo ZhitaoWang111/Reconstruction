@@ -64,6 +64,7 @@ with tempfile.TemporaryDirectory() as tmp:
             'id': o, 'seq': it['seq'], 'frame': it['source_frame_id'], 'part': part(k),
             'held_before': o in HELD_BEFORE, 'mask_px': mask_px[o],
             'area': mask_px[o] / (W*H), 'points': len(P[k]),
+            'pts_per_px': round(len(P[k]) / mask_px[o], 4),
             'img': f'../../../artifacts/experiments/{RUN}/evidence/{o.replace(":", "_")}.jpg',
         })
 

@@ -25,10 +25,13 @@
   function select(data, cfg) {
     const cands = data.candidates;
     const hist = data.hist[String(cfg.radius)];
-    const sum = cfg.wa + cfg.wv + cfg.wc;
-    const w = sum > 0 ? { a: cfg.wa / sum, v: cfg.wv / sum, c: cfg.wc / sum } : { a: 1, v: 0, c: 0 };
+    const sum = cfg.wa + cfg.wp + cfg.wv + cfg.wc;
+    const w = sum > 0
+      ? { a: cfg.wa / sum, p: cfg.wp / sum, v: cfg.wv / sum, c: cfg.wc / sum }
+      : { a: 1, p: 0, v: 0, c: 0 };
     const angle = ANGLE_FNS[cfg.fn].f;
     const maxArea = Math.max(...cands.map((c) => c.area));
+    const maxPts = Math.max(...cands.map((c) => c.points));
     const pool = cands.map((_, i) => i);
     const sel = [];
     let selMask = 0;
@@ -36,16 +39,17 @@
     while (sel.length < data.limit && pool.length) {
       const rows = pool.map((i) => {
         const A = cands[i].area / maxArea;
+        const P = cands[i].points / maxPts;
         // Round 1 has nothing selected: every point is new surface (N = 1) and
         // there is no view to compare against (V is undefined, scored 0). Both
-        // are the same for every candidate, so area alone ranks round 1.
+        // are the same for every candidate, so area and points rank round 1.
         let theta = null, V = null, N = 1;
         if (sel.length) {
           theta = Math.min(...sel.map((j) => data.theta[i][j]));
           V = angle(theta, cfg.theta0);
           N = newSurface(hist[i], selMask);
         }
-        return { i, A, theta, V, N, total: w.a * A + w.v * (V || 0) + w.c * N };
+        return { i, A, P, theta, V, N, total: w.a * A + w.p * P + w.v * (V || 0) + w.c * N };
       });
       rows.sort((x, y) => y.total - x.total || y.A - x.A);
       const pick = rows[0];

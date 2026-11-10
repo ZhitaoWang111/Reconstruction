@@ -90,18 +90,26 @@ tr.pick td:first-child{box-shadow:inset 3px 0 var(--accent)}
 颜色在全页一致。<span class="held">已持有</span>为窗口 10 之前就挂在 Object064 上的两条，它们和新观测一起参与竞争。</p>
 
 <div class="formula">
-<b>score(i | S)</b> = w<sub>a</sub>·A<sub>i</sub> + w<sub>v</sub>·V(i|S) + w<sub>c</sub>·N(i|S)　　（三个权重归一化到和为 1）<br>
-A<sub>i</sub> = mask 像素 / 画面像素 ÷ 候选中的最大值　　<span class="small">（mask 占比，替换原点数项）</span><br>
+<b>score(i | S)</b> = w<sub>a</sub>·A<sub>i</sub> + w<sub>p</sub>·P<sub>i</sub> + w<sub>v</sub>·V(i|S) + w<sub>c</sub>·N(i|S)　　（四个权重归一化到和为 1）<br>
+A<sub>i</sub> = mask 像素 / 画面像素 ÷ 候选中的最大值　　<span class="small">（mask 占比：在画面里看得多大）</span><br>
+P<sub>i</sub> = 点数 ÷ 候选中的最大值　　<span class="small">（这块 mask 实际 lift 出多少个点）</span><br>
 V(i|S) = f( min<sub>j∈S</sub> θ<sub>ij</sub> )，θ<sub>ij</sub> = ∠(t<sub>i</sub> − m, t<sub>j</sub> − m)，m = (c<sub>i</sub> + c<sub>j</sub>)/2　　<span class="small">（t：相机位置，c：观测自己点云的质心）</span><br>
 N(i|S) = i 的点中，离已选点云超过 r 的比例<br>
 S 从空开始，每轮选总分最高的一条加入 S，选满 5 条为止。第 1 轮 S 为空：所有点都算新增表面（N = 1），
-视角无从比较（V 记 0），这两项对所有候选相同，排名只由 A 决定。
+视角无从比较（V 记 0），这两项对所有候选相同，排名只由 A 和 P 决定。
+</div>
+
+<div class="note info"><b>A 和 P 在这一窗几乎相同。</b>AMB3R 给每个像素一个点，mask 先缩到它的 518×392 网格上再投影，
+所以点数 ≈ mask 像素 × 0.164；只有置信度低的像素被去掉时 P 才会比 A 小。这 13 个候选的点数/像素都是 0.163–0.164，
+A 和 P 最大只差 0.007。全部 750 条观测里，点数/像素中位 0.162，但有 5.6% 低于 0.12，最低的几条不到 0.01
+（镜子、电视、窗户这类深度估计不出来的表面）——P 会把这些条压下去，A 不会。
 </div>
 
 <h2><span class="no">02</span>调权重</h2>
 <div class="panel">
 <div class="ctl">
 <label for="wa">w<sub>a</sub> mask 占比</label><input type="range" id="wa" min="0" max="10" step="1" value="1"><output id="owa"></output>
+<label for="wp">w<sub>p</sub> 点数</label><input type="range" id="wp" min="0" max="10" step="1" value="1"><output id="owp"></output>
 <label for="wv">w<sub>v</sub> 视角</label><input type="range" id="wv" min="0" max="10" step="1" value="1"><output id="owv"></output>
 <label for="wc">w<sub>c</sub> 新增表面</label><input type="range" id="wc" min="0" max="10" step="1" value="1"><output id="owc"></output>
 </div>
@@ -120,7 +128,7 @@ S 从空开始，每轮选总分最高的一条加入 S，选满 5 条为止。�
 <h2><span class="no">03</span>预设权重并排对比</h2>
 <p class="small">每行一组权重，左右两列是两种视角换算下的结果；半径和 θ₀ 取上方当前的选择。
 点任一格可以把这组权重和换算方式填进上面的控件。<span class="diffmark">橙底</span>标出与左列不同的选择。</p>
-<table class="presets"><thead><tr><th>权重 w<sub>a</sub> : w<sub>v</sub> : w<sub>c</sub></th>
+<table class="presets"><thead><tr><th>权重 w<sub>a</sub> : w<sub>p</sub> : w<sub>v</sub> : w<sub>c</sub></th>
 <th>(1 − cos θ) / 2（现在的换算）</th><th id="satHead">min(θ / θ₀, 1)</th></tr></thead>
 <tbody id="presets"></tbody></table>
 
@@ -146,12 +154,12 @@ S 从空开始，每轮选总分最高的一条加入 S，选满 5 条为止。�
 
   $('strip').innerHTML = C.map((c) => `<div class="cand"><img loading="lazy" src="${c.img}" alt="${c.id}">
     <div class="cap"><b>${c.id}</b>${chip(c)}${c.held_before ? '<span class="held">已持有</span>' : ''}
-    <span>占比 ${pct(c.area, 2)}</span><span>${c.points} 点</span><span>帧 ${c.frame}</span></div></div>`).join('');
+    <span>占比 ${pct(c.area, 2)}</span><span>${c.points} 点</span><span>点/像素 ${c.pts_per_px.toFixed(3)}</span><span>帧 ${c.frame}</span></div></div>`).join('');
 
   for (const [k, v] of Object.entries(A.ANGLE_FNS)) $('fn').insertAdjacentHTML('beforeend', `<option value="${k}">${v.label}</option>`);
   for (const r of D.radii_cm) $('radius').insertAdjacentHTML('beforeend', `<option value="${r}" ${r === 10 ? 'selected' : ''}>${r} cm</option>`);
 
-  const cfg = () => ({ wa: +$('wa').value, wv: +$('wv').value, wc: +$('wc').value, fn: $('fn').value, theta0: +$('t0').value, radius: +$('radius').value });
+  const cfg = () => ({ wa: +$('wa').value, wp: +$('wp').value, wv: +$('wv').value, wc: +$('wc').value, fn: $('fn').value, theta0: +$('t0').value, radius: +$('radius').value });
 
   const PART_ORDER = ['左下门', '右下门', '左上门', '右上门'];
   function distribution(r) {
@@ -161,30 +169,30 @@ S 从空开始，每轮选总分最高的一条加入 S，选满 5 条为止。�
 
   function render() {
     const c = cfg(), r = A.select(D, c);
-    $('owa').textContent = c.wa; $('owv').textContent = c.wv; $('owc').textContent = c.wc; $('ot0').textContent = c.theta0 + '°';
+    $('owa').textContent = c.wa; $('owp').textContent = c.wp; $('owv').textContent = c.wv; $('owc').textContent = c.wc; $('ot0').textContent = c.theta0 + '°';
     $('t0wrap').style.display = c.fn === 'sat' ? '' : 'none';
-    $('norm').textContent = `归一化后：w_a = ${r.weights.a.toFixed(3)}　w_v = ${r.weights.v.toFixed(3)}　w_c = ${r.weights.c.toFixed(3)}`;
+    $('norm').textContent = `归一化后：w_a = ${r.weights.a.toFixed(3)}　w_p = ${r.weights.p.toFixed(3)}　w_v = ${r.weights.v.toFixed(3)}　w_c = ${r.weights.c.toFixed(3)}`;
     $('summary').innerHTML = `保留：${distribution(r)}　覆盖率 <b>${pct(r.coverage)}</b>`;
     $('picked').innerHTML = r.rounds.map(({ pick }, k) => {
       const x = C[pick.i];
       return `<div class="pk" style="border-color:var(--p-${{左下门: 'll', 右下门: 'lr', 左上门: 'ul', 右上门: 'ur'}[x.part]})">
         <img src="${x.img}" alt="${x.id}"><div class="cap">第 ${k + 1} 轮 · <b>${x.id}</b> ${chip(x)}<br>
-        A ${pick.A.toFixed(3)} · V ${pick.V === null ? '—' : pick.V.toFixed(3)} · N ${pct(pick.N)} · 总 ${pick.total.toFixed(3)}</div></div>`;
+        A ${pick.A.toFixed(3)} · P ${pick.P.toFixed(3)} · V ${pick.V === null ? '—' : pick.V.toFixed(3)} · N ${pct(pick.N)} · 总 ${pick.total.toFixed(3)}</div></div>`;
     }).join('');
     $('rounds').innerHTML = r.rounds.map(({ pick, rows }, k) => `<div class="rnd">第 ${k + 1} 轮 · 选中 ${C[pick.i].id}</div>
-      <table><thead><tr><th>观测</th><th>门板</th><th>A 占比项</th><th>min θ</th><th>V 视角项</th><th>N 新增表面</th>
-      <th>w·A</th><th>w·V</th><th>w·N</th><th>总分</th></tr></thead><tbody>${rows.map((row) => {
+      <table><thead><tr><th>观测</th><th>门板</th><th>A 占比项</th><th>P 点数项</th><th>min θ</th><th>V 视角项</th><th>N 新增表面</th>
+      <th>w·A</th><th>w·P</th><th>w·V</th><th>w·N</th><th>总分</th></tr></thead><tbody>${rows.map((row) => {
         const x = C[row.i];
         return `<tr class="${row.i === pick.i ? 'pick' : ''}"><td><code>${x.id}</code>${x.held_before ? '<span class="held">已持有</span>' : ''}</td>
-          <td>${chip(x)}</td><td class="num">${row.A.toFixed(3)}</td><td class="num">${row.theta === null ? '—' : row.theta.toFixed(1) + '°'}</td>
+          <td>${chip(x)}</td><td class="num">${row.A.toFixed(3)}</td><td class="num">${row.P.toFixed(3)}</td><td class="num">${row.theta === null ? '—' : row.theta.toFixed(1) + '°'}</td>
           <td class="num">${fmtV(row.V)}</td><td class="num">${pct(row.N)}</td>
-          <td class="num">${(r.weights.a * row.A).toFixed(3)}</td><td class="num">${row.V === null ? '—' : (r.weights.v * row.V).toFixed(3)}</td>
+          <td class="num">${(r.weights.a * row.A).toFixed(3)}</td><td class="num">${(r.weights.p * row.P).toFixed(3)}</td><td class="num">${row.V === null ? '—' : (r.weights.v * row.V).toFixed(3)}</td>
           <td class="num">${(r.weights.c * row.N).toFixed(3)}</td><td class="num"><b>${row.total.toFixed(3)}</b></td></tr>`;
       }).join('')}</tbody></table>`).join('');
     renderPresets(c);
   }
 
-  const PRESETS = [[1, 0, 0], [1, 1, 1], [1, 0, 1], [1, 1, 2], [2, 1, 1], [1, 2, 1], [0, 1, 1]];
+  const PRESETS = [[1, 1, 0, 0], [1, 1, 1, 1], [1, 1, 0, 2], [1, 1, 1, 2], [1, 1, 2, 2], [1, 1, 2, 1], [0, 0, 1, 1]];
   function presetCell(r, fn, w, base) {
     const items = r.sel.map((i) => `<span class="item ${base && !base.includes(i) ? 'diff' : ''}">${chip(C[i])}<span class="id">${C[i].id}</span></span>`);
     return `<td class="res" data-w="${w}" data-fn="${fn}"><div class="sel">${items.join(' ')}</div>
@@ -192,22 +200,22 @@ S 从空开始，每轮选总分最高的一条加入 S，选满 5 条为止。�
   }
   function renderPresets(c) {
     $('satHead').textContent = `min(θ / ${c.theta0}°, 1)`;
-    $('presets').innerHTML = PRESETS.map(([wa, wv, wc]) => {
-      const w = `${wa},${wv},${wc}`;
-      const rc = A.select(D, { ...c, wa, wv, wc, fn: 'cos' });
-      const rs = A.select(D, { ...c, wa, wv, wc, fn: 'sat' });
-      return `<tr><td><code>${wa} : ${wv} : ${wc}</code></td>${presetCell(rc, 'cos', w, null)}${presetCell(rs, 'sat', w, rc.sel)}</tr>`;
+    $('presets').innerHTML = PRESETS.map(([wa, wp, wv, wc]) => {
+      const w = `${wa},${wp},${wv},${wc}`;
+      const rc = A.select(D, { ...c, wa, wp, wv, wc, fn: 'cos' });
+      const rs = A.select(D, { ...c, wa, wp, wv, wc, fn: 'sat' });
+      return `<tr><td><code>${wa} : ${wp} : ${wv} : ${wc}</code></td>${presetCell(rc, 'cos', w, null)}${presetCell(rs, 'sat', w, rc.sel)}</tr>`;
     }).join('');
     for (const td of $('presets').querySelectorAll('td.res')) {
       td.onclick = () => {
-        const [a, v, w] = td.dataset.w.split(',');
-        $('wa').value = a; $('wv').value = v; $('wc').value = w; $('fn').value = td.dataset.fn;
+        const [a, p, v, w] = td.dataset.w.split(',');
+        $('wa').value = a; $('wp').value = p; $('wv').value = v; $('wc').value = w; $('fn').value = td.dataset.fn;
         render(); window.scrollTo({ top: $('summary').offsetTop - 260, behavior: 'smooth' });
       };
     }
   }
 
-  for (const id of ['wa', 'wv', 'wc', 't0']) $(id).addEventListener('input', render);
+  for (const id of ['wa', 'wp', 'wv', 'wc', 't0']) $(id).addEventListener('input', render);
   for (const id of ['fn', 'radius']) $(id).addEventListener('change', render);
   render();
 })();
