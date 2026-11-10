@@ -404,6 +404,50 @@ v11 同帧同物体的 mask 对共 2369 对，凳子错配那几对的包围盒�
 <!-- 2026-11-10 -->
 <div class="entry">
 <div class="entry-head">
+<span class="id">1105-v2</span>
+<span class="title">改进自动淘汰评分：加入新增表面与 mask 占比，修正视角方向与参照组 bug</span>
+<span class="date">2026-11-10</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">要解决的问题</span>
+<ul>
+<li>现象：Object064（电视柜）只 hold 了下半部分的门板，上半部分两条被自动淘汰。v14 实际留下的 5 条全是下柜门，上柜门一条都没有。</li>
+<li>根因：当前评分只有点数和视角两项，各占 50%。同一连续拍摄段里，视角项几乎全是 0（最大 0.0075），排名完全由点数决定。上柜门点数比大多数下柜门少（5818 / 4642 vs 6268–7673），所以在纯点数排名下排不进前 5。</li>
+<li>视角项计算有两个 bug：
+  <ol>
+    <li>方向用相机位置除以到世界原点的距离，不是到物体的方向。两个从物体两侧拍的相机，相对原点的方向可能相近，实际视角差被严重低估。</li>
+    <li>已持有观测被放进参照集合，同时又作为候选，导致它们和自己的方向比，视角项必然为 0，在视角这一项上永远吃亏。</li>
+  </ol>
+</li>
+<li>视角项的换算 (1 − cos θ) / 2 在小角度时几乎是 0（14° 只得 0.015），哪怕 bug 修完，同一段连续拍摄里视角差只有十几度，这一项依然无法拉开差距。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动方向</span>
+<ul>
+<li><b>加入新增表面项</b>：候选的点里，离已选点云超过 10 cm 的比例。第 2 轮起才能算（第 1 轮参照集合为空，这项对所有候选都是 1），用于发现拍到了物体新部位的观测。</li>
+<li><b>加入 mask 占比项</b>：mask 像素数除以画面总像素，再除以候选中的最大值。在当前 source 上，占比和点数高度相关（r = 0.997），但对镜子、电视屏幕、窗户这类深度估计差的表面会有差别。保留点数项一并保留，两者配合——占比反映"在画面里看得多大"，点数反映"实际 lift 出多少个点"。</li>
+<li><b>修正视角方向</b>：方向改为相机位置减去两条观测各自点云质心的中点，不再依赖物体整体质心（早期 hold 时质心可能不准，实测影响不超过 1°）。已持有观测从参照集合中移除，改为和其他候选一起从空参照集合出发平等竞争（修 Bug 2）。</li>
+<li><b>评分公式</b>（四项等权归一化）：<code>score = w_a·A + w_p·P + w_v·V + w_c·N</code>，S 从空开始，每轮选总分最高的一条加入 S，满 5 条停止。</li>
+<li>在 4 个用例上验证（Object064 电视柜、Object063 电视、Object053 吧台椅、Object059 书柜），权重暂定 1:1:1:1；换算方式暂用 (1 − cos θ) / 2；新增表面半径 10 cm。Object059 w19 视角差 119° 时新增表面率虚高，这是已知局限，不改变参数选择。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动文件（待实现）</span>
+<div class="files">
+<div>src/harness/state.py（<code>_score_holds</code> / <code>_auto_evict</code>）</div>
+<div>src/harness/prompt.txt（说明四项评分）</div>
+<div>tests/test_harness.py</div>
+<div>docs/debug/evict-weights/（临时权重测试页，4 个用例）</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- 2026-11-10 -->
+<div class="entry">
+<div class="entry-head">
 <span class="id">v13 / v14</span>
 <span class="title">两次 100 帧试跑：前 20% 录制 vs 全程录制</span>
 <span class="date">2026-11-10</span>
