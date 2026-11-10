@@ -65,10 +65,10 @@ blockquote p{margin:0;font-size:14.5px;color:#123f39}
 <p class="lede">这里记录 <code>src/harness/prompt.txt</code> 主要版本的全文（英文原文 + 中文对照），以及每一版相对上一版改了什么、为什么改。
 每版一节，按「依据了什么事实 → 按什么原则组织 → 结构怎么变 → 各节多大 → 措辞差在哪 → 全文」六段写。</p>
 <div class="meta">
-<span class="tag">当前版本 <b>f1056561</b>（1105-v1）</span>
-<span class="tag">字符 <b>14,425</b></span>
+<span class="tag">当前版本 <b>28c9a4d5</b>（1105-v1）</span>
+<span class="tag">字符 <b>14,611</b></span>
 <span class="tag">展开版本 <b>5</b></span>
-<span class="tag">更新 <b>2026-11-06</b></span>
+<span class="tag">更新 <b>2026-11-10</b></span>
 </div>
 </header>
 
@@ -138,8 +138,8 @@ blockquote p{margin:0;font-size:14.5px;color:#123f39}
 </tr>
 <tr>
 <td><b>1105-v1</b><br><span class="small">当前</span></td>
-<td><code>f1056561…</code></td>
-<td>14,425</td>
+<td><code>28c9a4d5…</code></td>
+<td>14,611</td>
 <td>动作改名 <code>assign/defer</code> → <code>hold/discard</code>；每物体最多持有 5 条观测并可 <code>evict</code>；<code>discard</code> 单条上限 10；空间候选改为 gap + overlap、上限 15、2 米截止；删除 <code>compare_geometry</code> 与全局 OBB；新增 <code>verify_required</code> 反投影复核。见 <b>05</b>。</td>
 <td>尚未使用</td>
 </tr>
@@ -1284,7 +1284,7 @@ assign 被扣住了。如果 `propose_update` 返回的是 `verification_require
 
 <h3>全文</h3>
 
-<p class="small">上为英文原文，下为中文对照。文件是 <code>src/harness/prompt.txt</code>（<code>f1056561…</code>）。</p>
+<p class="small">上为英文原文，下为中文对照。文件是 <code>src/harness/prompt.txt</code>（<code>28c9a4d5…</code>）。</p>
 
 <pre class="en">You are given one window of observed mask surfaces from a static indoor scene and must decide, for each observation, which Object it belongs to. A window holds 20-45 observations across 5 frames.
 
@@ -1320,7 +1320,7 @@ Three act on observations - `hold`, `discard`, `exclude`. These are the only act
 
 Holding is ownership. An observation a valid proposal holds belongs to that Object and stays with it; there is no separate &quot;ownership without a kept observation&quot;.
 
-Each Object holds at most five observations. When holding more would exceed five, the host automatically keeps the best five by point count and view diversity and discards the rest; the discarded observations are gone for good. You can override which held observations are dropped by adding an `evict` field: a single id string, or a list of ids. Name the ones you want gone — useful when you know from an inspection that a held observation is wrong. Omitting `evict` is fine; the host will choose.
+Each Object holds at most five observations. When holding more would exceed five, the host automatically keeps the best five and discards the rest. It picks them one at a time, already-held and new observations competing equally, scoring each on mask size in the frame, point count, how different its viewing angle is from the ones already picked, and how much of its surface the picked ones do not yet cover; the discarded observations are gone for good. You can override which held observations are dropped by adding an `evict` field: a single id string, or a list of ids. Name the ones you want gone — useful when you know from an inspection that a held observation is wrong. Omitting `evict` is fine; the host will choose.
 
 HOLD an observation on an archived Object when its archived evidence matches this observation on a cue you can point at - shape, proportions, surface, colour, position relative to a fixed neighbour, what occludes it - and that cue separates this observation from the other candidates in the window. A feature shared by adjacent surfaces does not separate them; name what distinguishes this one. Name that cue in `reason`.
   `{&quot;action&quot;:&quot;hold&quot;,&quot;object_id&quot;:&quot;ObjectN&quot;,&quot;observations&quot;:[...],&quot;evidence&quot;:[...],&quot;reason&quot;:&quot;...&quot;}`
@@ -1435,7 +1435,7 @@ spatial_candidates 列出最近的归档表面，最多 15 条。每条带 gap�
 
 持有就是归属。一份合法提案 hold 的观测属于那个 Object，并留在它名下；不存在「有归属但没有保留观测」这回事。
 
-每个 Object 最多持有五条观测。当 hold 会导致超出上限时，宿主自动按点数和视角分散度保留最优的五条，其余写成 discard，一旦丢弃就是终局。你可以在 `evict` 字段里写一个 id 字符串或 id 列表，指定想淘汰的持有观测——适合你在检视中发现某条持有是错的时候。不写 `evict` 也没问题，宿主会自动选。
+每个 Object 最多持有五条观测。当 hold 会导致超出上限时，宿主自动保留最优的五条，其余写成 discard，一旦丢弃就是终局。宿主逐条挑选，已持有的和新来的观测平等竞争，每条按四项打分：mask 在画面里的占比、点数、视角和已选观测相差多大、有多少表面是已选观测还没覆盖的。你可以在 `evict` 字段里写一个 id 字符串或 id 列表，指定想淘汰的持有观测——适合你在检视中发现某条持有是错的时候。不写 `evict` 也没问题，宿主会自动选。
 
 HOLD 一条观测到某个归档 Object 上，条件是该 Object 的档案证据与你能够指认的某个线索吻合——形状、比例、表面、颜色、相对于某个固定邻物的位置、被什么遮挡——并且这个线索能把这条观测与窗口里的其他候选区分开。相邻表面共有的特征区分不开它们；要点名的是这一条独有什么。把这个线索写进 `reason`。
   `{"action":"hold","object_id":"ObjectN","observations":[...],"evidence":[...],"reason":"..."}`

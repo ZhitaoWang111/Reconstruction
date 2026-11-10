@@ -80,85 +80,106 @@ def initial():
     return {'version': 0, 'cutoff': -1, 'objects': {}, 'assignments': {}, 'aliases': {}}
 
 
-def _camera_positions(data):
-    """Return a {seq: np.ndarray(3)} map from data, or {} if unavailable."""
-    try:
+# Auto-evict weights for mask area, point count, view angle and new surface.
+# Set 1:1:1:1 on the evict-weights test page (docs/debug/evict-weights), where
+# the four v14 cases kept every part of the object under these values.
+EVICT_WEIGHTS = (0.25, 0.25, 0.25, 0.25)
+# A point farther than this from every selected cloud counts as new surface.
+NEW_SURFACE_RADIUS = 0.10
+
+_VIEW_PARAMS = {}
+
+
+def _camera(data, seq):
+    """Camera centre for ``seq`` from the source frames, or None if unavailable."""
+    source = getattr(data, 'source', None)
+    if source is None or seq is None:
+        return None
+    frames = Path(source) / 'frames'
+    if frames not in _VIEW_PARAMS:
         from .view_params import ViewParams
-        frames_dir = getattr(data, 'source', None)
-        if frames_dir is None:
-            return {}
-        vp = ViewParams(Path(frames_dir) / 'frames')
-        out = {}
-        seq = 0
-        while True:
-            pos = vp.position(seq)
-            if pos is None and seq > 0:
-                break
-            if pos is not None:
-                out[seq] = pos
-            seq += 1
-        return out
-    except Exception:
-        return {}
+        _VIEW_PARAMS[frames] = ViewParams(frames)
+    return _VIEW_PARAMS[frames].position(seq)
 
 
-def _score_holds(obs_ids, data, existing_positions):
-    """Score each observation id for retention quality.
+def _view_angle(a, b):
+    """Degrees between the two cameras as seen from the midpoint of the two clouds.
 
-    Higher score = keep; lower = auto-evict.
-    Two components:
-      1. point_count  — more points means a denser, more useful view.
-      2. view diversity — minimum angle to any already-selected camera position.
-         Maximising diversity covers the object from multiple sides.
-
-    Camera positions are looked up from the source npz files via ViewParams.
-    When unavailable the score falls back to point_count alone.
-    Returns the same list sorted descending by score (best first).
+    Measured at the object, not at the world origin: two cameras on either side
+    of an object can point the same way from the origin. Each observation uses
+    its own centroid because the Object's fused centroid is unreliable while it
+    holds one or two observations. None when a camera or centroid is missing.
     """
-    scored = []
-    cam_positions = existing_positions  # positions already committed to this object
+    if a['camera'] is None or b['camera'] is None or a['centroid'] is None or b['centroid'] is None:
+        return None
+    m = (a['centroid'] + b['centroid']) / 2
+    u, v = a['camera'] - m, b['camera'] - m
+    nu, nv = np.linalg.norm(u), np.linalg.norm(v)
+    if nu < 1e-9 or nv < 1e-9:
+        return None
+    return float(np.degrees(np.arccos(np.clip(u @ v / nu / nv, -1.0, 1.0))))
+
+
+def _select_holds(obs_ids, data, limit=HOLD_LIMIT):
+    """Greedily pick up to ``limit`` observations to keep, best first.
+
+    score(i | S) = w_a·A + w_p·P + w_v·V + w_c·N, where S is the set chosen so far:
+      A  mask pixels / frame pixels, divided by the largest among the candidates
+      P  point count, divided by the largest among the candidates
+      V  (1 − cos θ) / 2 for θ the smallest view angle to any member of S
+      N  share of this observation's points farther than NEW_SURFACE_RADIUS
+         from every cloud in S
+    S starts empty, so held and new observations compete on equal terms. In the
+    first round N is 1 and V is 0 for every candidate, so A and P pick the first.
+    Ties go to the larger mask, then to the earlier candidate in ``obs_ids``.
+    Missing data scores 0 on its term (no camera: V; no mask size: A).
+    """
+    from scipy.spatial import cKDTree
+    items = getattr(data, 'items', None) or {}
+    clouds = getattr(data, 'points', None) or {}
+    feats = []
     for oid in obs_ids:
-        item = data.items.get(oid, {}) if hasattr(data, 'items') else {}
-        seq = item.get('seq')
-        pc = item.get('point_count', 0)
-        if seq is not None and seq in _camera_positions._cache:
-            pos = _camera_positions._cache[seq]
-        else:
-            pos = None
-        scored.append((oid, pc, pos))
-
-    # Greedy diversity: iteratively pick the next candidate that is furthest
-    # from already-selected positions.
-    selected = []
-    selected_pos = list(cam_positions.values()) if cam_positions else []
-    remaining = list(scored)
-
-    while remaining:
-        best_oid, best_score = None, -1.0
-        for oid, pc, pos in remaining:
-            if pos is not None and selected_pos:
-                dirs = np.array([p / (np.linalg.norm(p) + 1e-9) for p in selected_pos])
-                d = pos / (np.linalg.norm(pos) + 1e-9)
-                min_cos = float(np.dot(dirs, d).max())
-                # angle in [0,1]: 1 = 180° apart (best), 0 = same direction
-                diversity = (1.0 - min_cos) / 2.0
-            else:
-                diversity = 0.5  # unknown position: treat as neutral
-            # Normalise pc to [0,1] against this window's max
-            max_pc = max(p for _, p, _ in scored) or 1
-            score = 0.5 * (pc / max_pc) + 0.5 * diversity
-            if score > best_score:
-                best_score, best_oid = score, oid
-        entry = next(e for e in remaining if e[0] == best_oid)
-        remaining.remove(entry)
-        selected.append((best_oid, best_score))
-        if entry[2] is not None:
-            selected_pos.append(entry[2])
-
-    return [oid for oid, _ in selected]
-
-
-_camera_positions._cache = {}  # populated per-call in _auto_evict
+        item = items.get(oid, {})
+        w, h = item.get('image_size_wh') or (0, 0)
+        px = item.get('mask_pixels')
+        cloud = np.asarray(clouds.get(oid, np.empty((0, 3))), dtype=np.float64).reshape(-1, 3)
+        centroid = item.get('centroid')
+        if centroid is None and len(cloud):
+            centroid = cloud.mean(0)
+        feats.append({'area': px / (w * h) if px and w and h else 0.0,
+                      'points': item.get('point_count', len(cloud)),
+                      'cloud': cloud,
+                      'centroid': None if centroid is None else np.asarray(centroid, dtype=np.float64),
+                      'camera': _camera(data, item.get('seq'))})
+    max_area = max((f['area'] for f in feats), default=0) or 1
+    max_points = max((f['points'] for f in feats), default=0) or 1
+    wa, wp, wv, wc = EVICT_WEIGHTS
+    # covered[i]: which of i's points lie within the radius of a selected cloud.
+    covered = [np.zeros(len(f['cloud']), dtype=bool) for f in feats]
+    selected, remaining = [], list(range(len(feats)))
+    while remaining and len(selected) < limit:
+        best = None
+        for i in remaining:
+            f = feats[i]
+            a, p = f['area'] / max_area, f['points'] / max_points
+            v, n = 0.0, 1.0
+            if selected:
+                angles = [t for t in (_view_angle(f, feats[j]) for j in selected) if t is not None]
+                v = (1 - np.cos(np.radians(min(angles)))) / 2 if angles else 0.0
+                n = float((~covered[i]).mean()) if len(covered[i]) else 0.0
+            key = (wa * a + wp * p + wv * v + wc * n, a)
+            if best is None or key > best[0]:
+                best = (key, i)
+        pick = best[1]
+        selected.append(pick)
+        remaining.remove(pick)
+        if len(feats[pick]['cloud']):
+            tree = cKDTree(feats[pick]['cloud'])
+            for i in remaining:
+                if len(feats[i]['cloud']):
+                    d = tree.query(feats[i]['cloud'], distance_upper_bound=NEW_SURFACE_RADIUS)[0]
+                    covered[i] |= d <= NEW_SURFACE_RADIUS
+    return [obs_ids[i] for i in selected]
 
 
 def _auto_evict(obj_id, held_ids, new_ids, data, cutoff):
@@ -170,21 +191,7 @@ def _auto_evict(obj_id, held_ids, new_ids, data, cutoff):
       - auto_discard_new new ids that are dropped (capacity only)
       - auto_discard_held held ids that are dropped to make room
     """
-    # Load camera positions once for this call.
-    cam = _camera_positions(data)
-    _camera_positions._cache = cam
-
-    held_pos = {}
-    if hasattr(data, 'items'):
-        for oid in held_ids:
-            seq = data.items.get(oid, {}).get('seq')
-            if seq is not None and seq in cam:
-                held_pos[seq] = cam[seq]
-
-    all_candidates = list(held_ids) + list(new_ids)
-    ranked = _score_holds(all_candidates, data, held_pos)
-    # Best HOLD_LIMIT observations to keep.
-    keep = set(ranked[:HOLD_LIMIT])
+    keep = set(_select_holds(list(held_ids) + list(new_ids), data))
     keep_new     = [i for i in new_ids   if i in keep]
     drop_new     = [i for i in new_ids   if i not in keep]
     drop_held    = [i for i in held_ids  if i not in keep]
@@ -396,8 +403,8 @@ def propose(state, proposal, observations, cutoff, evidence, data=None):
             for oid in new['objects']}
     over = {oid: ids for oid, ids in held.items() if len(ids) > HOLD_LIMIT}
     if over:
-        # Auto-evict: pick the best HOLD_LIMIT observations by point count and
-        # view diversity, discard the rest. The model can steer this by naming
+        # Auto-evict: pick the best HOLD_LIMIT observations by mask area, point
+        # count, view angle and new surface (_select_holds), discard the rest. The model can steer this by naming
         # specific observations in the evict list; this runs on whatever is left.
         for oid, ids in over.items():
             # Split into already-held-before-this-proposal and new ones.
@@ -409,7 +416,7 @@ def propose(state, proposal, observations, cutoff, evidence, data=None):
                 rec = new['assignments'][drop]
                 new['assignments'][drop] = {**rec,
                     'object_id': None, 'status': 'discard',
-                    'reason': 'auto-evicted: lower score (point count + view diversity)',
+                    'reason': 'auto-evicted: lower score (mask area + point count + view angle + new surface)',
                     'decided_at': cutoff}
             affected.add(oid)
     # Re-compute held after auto-eviction for the empty-object check.

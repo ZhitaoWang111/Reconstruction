@@ -383,3 +383,78 @@ def test_a_hold_on_a_merged_object_names_where_it_went():
                action('discard', observations=[ids[11]])]
     with pytest.raises(ValueError, match="'Object9', which is not an active object; it was merged into Object1"):
         propose(state, {'base_version': 1, 'actions': actions}, obs, 0, ev)
+
+
+# --- auto-evict selection (1105-v2: area + points + view angle + new surface) ---
+
+def _evict_data(tmp_path, cands, cameras=None):
+    """Fake Observations: ``cands`` maps id -> (seq, mask_pixels, cloud array)."""
+    import numpy as np
+    if cameras is not None:
+        (tmp_path / 'frames').mkdir()
+        for seq, pos in enumerate(cameras):
+            c2w = np.eye(4); c2w[:3, 3] = pos
+            np.savez(tmp_path / f'frames/{seq:04d}.npz', camera_to_world=c2w)
+    items, points = {}, {}
+    for oid, (seq, px, cloud) in cands.items():
+        cloud = np.asarray(cloud, dtype=np.float64)
+        points[oid] = cloud
+        items[oid] = {'seq': seq, 'mask_pixels': px, 'image_size_wh': [100, 100],
+                      'point_count': len(cloud), 'centroid': cloud.mean(0).tolist()}
+    return SimpleNamespace(source=tmp_path if cameras is not None else None, items=items, points=points)
+
+
+def _patch(centre, n=200, size=0.5, seed=0):
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    return np.asarray(centre) + rng.uniform(-size / 2, size / 2, (n, 3))
+
+
+def test_select_holds_first_pick_is_largest_mask_and_cloud(tmp_path):
+    from src.harness.state import _select_holds
+    data = _evict_data(tmp_path, {'a': (0, 500, _patch([0, 0, 0], 100)),
+                                  'b': (0, 2000, _patch([5, 0, 0], 400))})
+    assert _select_holds(['a', 'b'], data, limit=1) == ['b']
+
+
+def test_select_holds_prefers_new_surface_over_a_duplicate(tmp_path):
+    """The Object064 case: a near-duplicate of the first pick loses to a smaller view of a new part."""
+    from src.harness.state import _select_holds
+    data = _evict_data(tmp_path, {'lower': (0, 1000, _patch([0, 0, 0], 300, seed=1)),
+                                  'lower2': (0, 950, _patch([0, 0, 0], 290, seed=2)),
+                                  'upper': (0, 700, _patch([0, 0, 1.5], 200, seed=3))})
+    assert _select_holds(['lower', 'lower2', 'upper'], data, limit=2) == ['lower', 'upper']
+
+
+def test_select_holds_prefers_a_different_view_of_the_same_surface(tmp_path):
+    """Same cloud, so new surface is 0 for both; the camera 90° away wins over the repeat view."""
+    from src.harness.state import _select_holds
+    cloud = _patch([0, 0, 0], 300, seed=4)
+    data = _evict_data(tmp_path, {'front': (0, 1000, cloud), 'front2': (1, 990, cloud), 'side': (2, 980, cloud)},
+                       cameras=[[0, -3, 0], [0.1, -3, 0], [3, 0, 0]])
+    assert _select_holds(['front', 'front2', 'side'], data, limit=2) == ['front', 'side']
+
+
+def test_select_holds_measures_view_angle_at_the_object_not_the_origin(tmp_path):
+    """Two cameras on opposite sides of an object far from the origin point the same way from the origin."""
+    from src.harness.state import _view_angle
+    import numpy as np
+    c = np.array([10.0, 0, 0])
+    a = {'camera': np.array([9.0, 0, 0]), 'centroid': c}
+    b = {'camera': np.array([11.0, 0, 0]), 'centroid': c}
+    assert _view_angle(a, b) == pytest.approx(180.0)
+
+
+def test_auto_evict_lets_a_better_new_observation_replace_a_held_one(tmp_path):
+    from src.harness.state import _auto_evict
+    held = {f'h{i}': (0, 300, _patch([3 * i, 0, 0], 100, seed=i)) for i in range(5)}
+    data = _evict_data(tmp_path, {**held, 'new': (0, 3000, _patch([30, 0, 0], 900, seed=9))})
+    keep_new, drop_new, drop_held = _auto_evict('Object1', list(held), ['new'], data, 0)
+    assert keep_new == ['new'] and drop_new == [] and len(drop_held) == 1
+
+
+def test_select_holds_without_cameras_or_mask_sizes_still_picks_the_limit(tmp_path):
+    from src.harness.state import _select_holds, HOLD_LIMIT
+    data = _evict_data(tmp_path, {f'o{i}': (0, None, _patch([i, 0, 0], 50 + i, seed=i)) for i in range(7)})
+    picked = _select_holds(list(data.items), data)
+    assert len(picked) == HOLD_LIMIT and len(set(picked)) == HOLD_LIMIT

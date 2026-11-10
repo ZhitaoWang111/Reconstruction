@@ -434,11 +434,22 @@ v11 同帧同物体的 mask 对共 2369 对，凳子错配那几对的包围盒�
 </ul>
 </div>
 <div>
-<span class="h">改动文件（待实现）</span>
+<span class="h">实现与核对</span>
+<ul>
+<li><code>_score_holds</code> / <code>_camera_positions</code> 换成 <code>_select_holds</code>（贪心四项）与 <code>_view_angle</code>；权重与半径为 <code>EVICT_WEIGHTS</code>、<code>NEW_SURFACE_RADIUS</code>。</li>
+<li>观测条目原本没有 <code>mask_pixels</code>，占比项在实跑中会恒为 0；<code>Observations</code> 现从 manifest 带入该字段（不进 <code>MODEL_FIELDS</code>，模型看不到）。</li>
+<li>用 v14 源数据跑 Python 实现，与测试页 <code>algo.js</code>（1:1:1:1、cos、10 cm）在 4 个用例上选出的 5 条及顺序完全一致。Object064 w10 现保留左下、左上、右下、右上四块门板各至少一条（v14 实际为 4 条左下 + 1 条右下）。</li>
+<li>prompt 哈希 <code>f1056561</code> → <code>28c9a4d5</code>。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动文件</span>
 <div class="files">
-<div>src/harness/state.py（<code>_score_holds</code> / <code>_auto_evict</code>）</div>
+<div>src/harness/state.py（<code>_select_holds</code> / <code>_view_angle</code> / <code>_auto_evict</code>）</div>
+<div>src/harness/observations.py（条目带 <code>mask_pixels</code>）</div>
 <div>src/harness/prompt.txt（说明四项评分）</div>
-<div>tests/test_harness.py</div>
+<div>docs/prompts.html（05 节原文、中文对照与哈希）</div>
+<div>tests/test_harness.py（新增 6 条选择逻辑测试）</div>
 <div>docs/debug/evict-weights/（临时权重测试页，4 个用例）</div>
 </div>
 </div>

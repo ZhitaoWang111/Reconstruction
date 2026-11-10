@@ -94,6 +94,9 @@ class Observations:
                     'bbox_xyxy':list(bbox) if bbox else None,'image_size_wh':image_size,
                     'bbox_convention':'original RGB pixels; origin top-left; xmax/ymax exclusive',
                     'overlay_color_rgb':color,
+                    # Mask size feeds the auto-evict area term (state._select_holds);
+                    # host-only, not in MODEL_FIELDS. Older manifests may lack it.
+                    'mask_pixels':item.get('mask_pixels'),
                     'point_file':str(path),'mask_bit':i,'point_count':len(p),
                     'centroid':p.mean(0).tolist() if len(p) else None,
                     'bounds':[p.min(0).tolist(),p.max(0).tolist()] if len(p) else None,
