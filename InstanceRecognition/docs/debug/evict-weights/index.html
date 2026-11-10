@@ -71,23 +71,27 @@ tr.pick td:first-child{box-shadow:inset 3px 0 var(--accent)}
 .presets .item.diff,.diffmark{background:#fde7c7}
 .diffmark{padding:0 4px;border-radius:3px}
 .note{border-left:3px solid var(--warn);background:#fef6e7;padding:10px 14px;border-radius:0 7px 7px 0;margin:12px 0;font-size:13.5px}
-.note.info{border-left-color:var(--accent);background:var(--accent2)}
+/* case tab buttons */
+.tab{font:13px var(--mono);padding:5px 14px;border:1px solid var(--line);border-radius:6px;cursor:pointer;background:var(--card);color:var(--ink2)}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 </style>
 </head>
 <body><div class="wrap">
 
 <header>
 <div class="eyebrow">harness · auto-evict · 临时测试页</div>
-<h1>自动淘汰权重测试：cabinet · Object064 · 窗口 10</h1>
-<p class="lede">用 v14 运行中窗口 10 实际进入 Object064 的 13 个候选（之前持有的 2 条 + 本窗新 hold 的 11 条），
-在浏览器里重算"保留哪 5 条"。拖动权重即可看到结果变化；页面下方并排列出几组预设权重的结果。</p>
+<h1>自动淘汰权重测试</h1>
+<p class="lede">在浏览器里用 v14 的真实候选重算"保留哪 5 条"，实时显示不同权重的结果。</p>
 <div class="meta" id="meta"></div>
 </header>
 
+<h2><span class="no">00</span>选测试用例</h2>
+<div id="caseTabs" style="display:flex;gap:10px;margin:12px 0 4px;flex-wrap:wrap"></div>
+<div class="note info" id="caseSummary"></div>
+
 <h2><span class="no">01</span>候选与公式</h2>
 <div class="strip" id="strip"></div>
-<p class="small">图是 v14 的 target overlay（取自 <code>evidence/</code>）。门板按点云位置划分（高度 1.5 m 以上为上门，左右按帧 46 画面），
-颜色在全页一致。<span class="held">已持有</span>为窗口 10 之前就挂在 Object064 上的两条，它们和新观测一起参与竞争。</p>
+<p class="small" id="stripNote"></p>
 
 <div class="formula">
 <b>score(i | S)</b> = w<sub>a</sub>·A<sub>i</sub> + w<sub>p</sub>·P<sub>i</sub> + w<sub>v</sub>·V(i|S) + w<sub>c</sub>·N(i|S)　　（四个权重归一化到和为 1）<br>
@@ -96,13 +100,7 @@ P<sub>i</sub> = 点数 ÷ 候选中的最大值　　<span class="small">（这�
 V(i|S) = f( min<sub>j∈S</sub> θ<sub>ij</sub> )，θ<sub>ij</sub> = ∠(t<sub>i</sub> − m, t<sub>j</sub> − m)，m = (c<sub>i</sub> + c<sub>j</sub>)/2　　<span class="small">（t：相机位置，c：观测自己点云的质心）</span><br>
 N(i|S) = i 的点中，离已选点云超过 r 的比例<br>
 S 从空开始，每轮选总分最高的一条加入 S，选满 5 条为止。第 1 轮 S 为空：所有点都算新增表面（N = 1），
-视角无从比较（V 记 0），这两项对所有候选相同，排名只由 A 和 P 决定。
-</div>
-
-<div class="note info"><b>A 和 P 在这一窗几乎相同。</b>AMB3R 给每个像素一个点，mask 先缩到它的 518×392 网格上再投影，
-所以点数 ≈ mask 像素 × 0.164；只有置信度低的像素被去掉时 P 才会比 A 小。这 13 个候选的点数/像素都是 0.163–0.164，
-A 和 P 最大只差 0.007。全部 750 条观测里，点数/像素中位 0.162，但有 5.6% 低于 0.12，最低的几条不到 0.01
-（镜子、电视、窗户这类深度估计不出来的表面）——P 会把这些条压下去，A 不会。
+视角无从比较（V 记 0），排名只由 A 和 P 决定。
 </div>
 
 <h2><span class="no">02</span>调权重</h2>
@@ -123,72 +121,107 @@ A 和 P 最大只差 0.007。全部 750 条观测里，点数/像素中位 0.162
 
 <div class="summary" id="summary"></div>
 <div class="picked" id="picked"></div>
-<details id="detail"><summary>展开逐轮得分（每轮所有剩余候选的 A / θ / V / N / 总分）</summary><div id="rounds"></div></details>
+<details id="detail"><summary>展开逐轮得分（每轮所有剩余候选的 A / P / θ / V / N / 总分）</summary><div id="rounds"></div></details>
 
 <h2><span class="no">03</span>预设权重并排对比</h2>
 <p class="small">每行一组权重，左右两列是两种视角换算下的结果；半径和 θ₀ 取上方当前的选择。
 点任一格可以把这组权重和换算方式填进上面的控件。<span class="diffmark">橙底</span>标出与左列不同的选择。</p>
 <table class="presets"><thead><tr><th>权重 w<sub>a</sub> : w<sub>p</sub> : w<sub>v</sub> : w<sub>c</sub></th>
-<th>(1 − cos θ) / 2（现在的换算）</th><th id="satHead">min(θ / θ₀, 1)</th></tr></thead>
+<th>(1 − cos θ) / 2</th><th id="satHead">min(θ / θ₀, 1)</th></tr></thead>
 <tbody id="presets"></tbody></table>
 
-<div class="note info"><b>覆盖率</b>：13 个候选的全部点里，离保留的 5 条点云 r 以内的比例。只能说明"拍到的部位有没有丢"，
-不代表这 5 条的质量。v14 实际保留的是 <span id="v14"></span>。</div>
-<div class="note">这一页只用 Object064 一个物体、一个窗口。四块门板都在同一面柜子上，视角差最大约 21°；
-从房间另一侧拍的 3 条（窗口 19）不在这批候选里。权重最终要在更多物体上验证。</div>
+<div class="note info" id="coverNote"></div>
 
 </div>
 <script src="data.js"></script>
 <script src="algo.js"></script>
 <script>
 (function () {
-  const D = EVICT_DATA, A = EvictAlgo, C = D.candidates;
+  const G = EVICT_DATA, A = EvictAlgo;
   const $ = (id) => document.getElementById(id);
   const pct = (x, d = 1) => (x * 100).toFixed(d) + '%';
-  const chip = (c) => `<span class="chip ${c.part}">${c.part}</span>`;
 
-  $('meta').innerHTML = [
-    ['实验', D.run], ['source', D.source], ['物体', `${D.object} · ${D.label}`], ['窗口', D.window], ['候选', C.length], ['上限', D.limit],
-  ].map(([k, v]) => `<span class="tag">${k} <b>${v}</b></span>`).join('');
-  $('v14').innerHTML = D.v14_kept.map((id) => { const c = C.find((x) => x.id === id); return `<code>${id}</code>${chip(c)}`; }).join(' ');
+  // --- dynamic chip colours: assign one accent per unique part value per case ---
+  const PALETTE = ['#2563eb','#0891b2','#d97706','#c026d3','#059669','#dc2626','#7c3aed','#b45309'];
+  let caseData, C, partColors;
 
-  $('strip').innerHTML = C.map((c) => `<div class="cand"><img loading="lazy" src="${c.img}" alt="${c.id}">
-    <div class="cap"><b>${c.id}</b>${chip(c)}${c.held_before ? '<span class="held">已持有</span>' : ''}
-    <span>占比 ${pct(c.area, 2)}</span><span>${c.points} 点</span><span>点/像素 ${c.pts_per_px.toFixed(3)}</span><span>帧 ${c.frame}</span></div></div>`).join('');
+  function setCase(cas) {
+    caseData = cas; C = cas.candidates;
+    const parts = cas.parts;
+    partColors = {};
+    parts.forEach((p, i) => { partColors[p] = PALETTE[i % PALETTE.length]; });
+    // Build dynamic <style> for chip colours so CSS class lookup still works.
+    let s = document.getElementById('dynStyle');
+    if (!s) { s = document.createElement('style'); s.id = 'dynStyle'; document.head.appendChild(s); }
+    s.textContent = parts.map((p, i) => `.chip.${CSS.escape(p)}{background:${PALETTE[i % PALETTE.length]}}`).join('\n');
+
+    $('meta').innerHTML = [
+      ['实验', G.run], ['source', G.source],
+      ['物体', `${cas.object} · ${cas.label}`], ['窗口', cas.window],
+      ['候选', C.length], ['上限', cas.limit],
+    ].map(([k, v]) => `<span class="tag">${k} <b>${v}</b></span>`).join('');
+    $('caseSummary').innerHTML = cas.summary;
+    $('strip').innerHTML = C.map((c) => `<div class="cand"><img loading="lazy" src="${c.img}" alt="${c.id}">
+      <div class="cap"><b>${c.id}</b>${chip(c)}${c.held_before ? '<span class="held">已持有</span>' : ''}
+      <span>占比 ${pct(c.area, 2)}</span><span>${c.points} 点</span>
+      <span>点/像素 ${c.pts_per_px.toFixed(3)}</span><span>帧 ${c.frame}</span></div></div>`).join('');
+    $('stripNote').innerHTML = `<span class="held">已持有</span>为窗口 ${cas.window} 之前就挂在 ${cas.object} 上的，它们和新观测一起参与竞争。
+      v14 实际保留的是 ${cas.v14_kept.map(id => `<code>${id}</code>${chip(C.find(x=>x.id===id)||{part:'?'})}`).join(' ')}`;
+    render();
+  }
+
+  function chip(c) { return `<span class="chip ${c.part}">${c.part}</span>`; }
+
+  // Build case tabs
+  G.cases.forEach((cas, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab' + (i === 0 ? ' active' : '');
+    btn.textContent = `${cas.object} · 窗口 ${cas.window} · ${cas.label}`;
+    btn.onclick = () => {
+      document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      setCase(cas);
+    };
+    $('caseTabs').appendChild(btn);
+  });
 
   for (const [k, v] of Object.entries(A.ANGLE_FNS)) $('fn').insertAdjacentHTML('beforeend', `<option value="${k}">${v.label}</option>`);
-  for (const r of D.radii_cm) $('radius').insertAdjacentHTML('beforeend', `<option value="${r}" ${r === 10 ? 'selected' : ''}>${r} cm</option>`);
+  for (const r of G.radii_cm) $('radius').insertAdjacentHTML('beforeend', `<option value="${r}" ${r === 10 ? 'selected' : ''}>${r} cm</option>`);
 
   const cfg = () => ({ wa: +$('wa').value, wp: +$('wp').value, wv: +$('wv').value, wc: +$('wc').value, fn: $('fn').value, theta0: +$('t0').value, radius: +$('radius').value });
 
-  const PART_ORDER = ['左下门', '右下门', '左上门', '右上门'];
   function distribution(r) {
-    return PART_ORDER.filter((p) => r.parts[p]).map((p) => `<span class="chip ${p}">${p} ×${r.parts[p]}</span>`).join(' ');
+    return caseData.parts.filter(p => r.parts[p]).map(p => `<span class="chip ${p}">${p} ×${r.parts[p]}</span>`).join(' ');
   }
   const fmtV = (v) => (v === null ? '—' : v.toFixed(4));
+  const borderCol = (part) => partColors[part] || '#888';
 
   function render() {
-    const c = cfg(), r = A.select(D, c);
+    const c = cfg(), r = A.select(caseData, c);
     $('owa').textContent = c.wa; $('owp').textContent = c.wp; $('owv').textContent = c.wv; $('owc').textContent = c.wc; $('ot0').textContent = c.theta0 + '°';
     $('t0wrap').style.display = c.fn === 'sat' ? '' : 'none';
     $('norm').textContent = `归一化后：w_a = ${r.weights.a.toFixed(3)}　w_p = ${r.weights.p.toFixed(3)}　w_v = ${r.weights.v.toFixed(3)}　w_c = ${r.weights.c.toFixed(3)}`;
     $('summary').innerHTML = `保留：${distribution(r)}　覆盖率 <b>${pct(r.coverage)}</b>`;
     $('picked').innerHTML = r.rounds.map(({ pick }, k) => {
       const x = C[pick.i];
-      return `<div class="pk" style="border-color:var(--p-${{左下门: 'll', 右下门: 'lr', 左上门: 'ul', 右上门: 'ur'}[x.part]})">
+      return `<div class="pk" style="border-color:${borderCol(x.part)}">
         <img src="${x.img}" alt="${x.id}"><div class="cap">第 ${k + 1} 轮 · <b>${x.id}</b> ${chip(x)}<br>
         A ${pick.A.toFixed(3)} · P ${pick.P.toFixed(3)} · V ${pick.V === null ? '—' : pick.V.toFixed(3)} · N ${pct(pick.N)} · 总 ${pick.total.toFixed(3)}</div></div>`;
     }).join('');
     $('rounds').innerHTML = r.rounds.map(({ pick, rows }, k) => `<div class="rnd">第 ${k + 1} 轮 · 选中 ${C[pick.i].id}</div>
-      <table><thead><tr><th>观测</th><th>门板</th><th>A 占比项</th><th>P 点数项</th><th>min θ</th><th>V 视角项</th><th>N 新增表面</th>
+      <table><thead><tr><th>观测</th><th>分组</th><th>A</th><th>P</th><th>min θ</th><th>V</th><th>N</th>
       <th>w·A</th><th>w·P</th><th>w·V</th><th>w·N</th><th>总分</th></tr></thead><tbody>${rows.map((row) => {
         const x = C[row.i];
         return `<tr class="${row.i === pick.i ? 'pick' : ''}"><td><code>${x.id}</code>${x.held_before ? '<span class="held">已持有</span>' : ''}</td>
-          <td>${chip(x)}</td><td class="num">${row.A.toFixed(3)}</td><td class="num">${row.P.toFixed(3)}</td><td class="num">${row.theta === null ? '—' : row.theta.toFixed(1) + '°'}</td>
+          <td>${chip(x)}</td><td class="num">${row.A.toFixed(3)}</td><td class="num">${row.P.toFixed(3)}</td>
+          <td class="num">${row.theta === null ? '—' : row.theta.toFixed(1) + '°'}</td>
           <td class="num">${fmtV(row.V)}</td><td class="num">${pct(row.N)}</td>
-          <td class="num">${(r.weights.a * row.A).toFixed(3)}</td><td class="num">${(r.weights.p * row.P).toFixed(3)}</td><td class="num">${row.V === null ? '—' : (r.weights.v * row.V).toFixed(3)}</td>
+          <td class="num">${(r.weights.a * row.A).toFixed(3)}</td><td class="num">${(r.weights.p * row.P).toFixed(3)}</td>
+          <td class="num">${row.V === null ? '—' : (r.weights.v * row.V).toFixed(3)}</td>
           <td class="num">${(r.weights.c * row.N).toFixed(3)}</td><td class="num"><b>${row.total.toFixed(3)}</b></td></tr>`;
       }).join('')}</tbody></table>`).join('');
+    $('coverNote').innerHTML = `<b>覆盖率</b>：${C.length} 个候选的全部点里，离保留的 5 条点云 ${c.radius} cm 以内的比例。
+      只能说明"拍到的部位有没有丢"，不代表这 5 条的质量。`;
     renderPresets(c);
   }
 
@@ -202,8 +235,8 @@ A 和 P 最大只差 0.007。全部 750 条观测里，点数/像素中位 0.162
     $('satHead').textContent = `min(θ / ${c.theta0}°, 1)`;
     $('presets').innerHTML = PRESETS.map(([wa, wp, wv, wc]) => {
       const w = `${wa},${wp},${wv},${wc}`;
-      const rc = A.select(D, { ...c, wa, wp, wv, wc, fn: 'cos' });
-      const rs = A.select(D, { ...c, wa, wp, wv, wc, fn: 'sat' });
+      const rc = A.select(caseData, { ...c, wa, wp, wv, wc, fn: 'cos' });
+      const rs = A.select(caseData, { ...c, wa, wp, wv, wc, fn: 'sat' });
       return `<tr><td><code>${wa} : ${wp} : ${wv} : ${wc}</code></td>${presetCell(rc, 'cos', w, null)}${presetCell(rs, 'sat', w, rc.sel)}</tr>`;
     }).join('');
     for (const td of $('presets').querySelectorAll('td.res')) {
@@ -217,7 +250,7 @@ A 和 P 最大只差 0.007。全部 750 条观测里，点数/像素中位 0.162
 
   for (const id of ['wa', 'wp', 'wv', 'wc', 't0']) $(id).addEventListener('input', render);
   for (const id of ['fn', 'radius']) $(id).addEventListener('change', render);
-  render();
+  setCase(G.cases[0]);
 })();
 </script>
 </body>
