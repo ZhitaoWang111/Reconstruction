@@ -24,6 +24,15 @@ Three source quirks are handled here and must not be rediscovered downstream:
    5578 2D instance masks are the whole of it, and visibility has to be derived
    from them.
 
+4. Two sets of colour intrinsics exist and they disagree by 6 px in cy. The
+   scene `.txt` gives fx=fy=1170.188, cx=647.75, cy=483.75; the `.sens` header
+   (what `extract_scannet_sens.py` copies into its manifest) gives 1169.62 /
+   1167.11 / 646.30 / 489.93. The `.txt` values are the ones the 2D annotation
+   was rendered with: projecting every object's GT vertices into its key frames
+   with the GT pose, the best-fitting 2D shift is (0, 0) px with the `.txt`
+   values and (+2, -6) px with the `.sens` values, and 89.9% against 87.4% of
+   projected vertices land inside the mask. The handoff therefore uses `.txt`.
+
 Usage::
 
     python -m src.handoff.from_gt --scene /path/to/scene0000_00 \\
@@ -163,6 +172,51 @@ def load_objects(scene: Path, points: np.ndarray):
                         dtype=np.int32, count=len(segments))
     labels = {int(g["objectId"]): g["label"] for g in aggregation["segGroups"]}
     return owner, labels
+
+
+def read_scene_meta(scene: Path) -> dict:
+    """`key = value` lines of `<scene>/<scene>.txt`, numbers parsed."""
+    meta = {}
+    for line in (scene / f"{scene.name}.txt").read_text().splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            values = value.split()
+            try:
+                numbers = [float(v) for v in values]
+            except ValueError:
+                meta[key.strip()] = value.strip()
+                continue
+            meta[key.strip()] = numbers[0] if len(numbers) == 1 else numbers
+    return meta
+
+
+def floor_height(points: np.ndarray, owner: np.ndarray, labels: dict) -> dict:
+    """Height of the floor in the scan frame: the median z of the `floor` vertices.
+
+    Median rather than minimum because the floor instance carries rugs, skirting
+    and a few stray vertices up to 0.36 m; the 1st percentile already sits 3 cm
+    below the median. The same definition as ObjectGeneration's
+    `estimate_sizes.py`, so the two modules agree on one number.
+    """
+    ids = [object_id for object_id, label in labels.items() if label.strip().lower() == "floor"]
+    take = np.isin(owner, ids)
+    if not take.any():
+        raise ValueError("No `floor` instance in the annotation; cannot set floor_z")
+    z = points[take, 2].astype(np.float64)
+    floor = points[take].astype(np.float64)
+    centred = floor - floor.mean(axis=0)
+    normal = np.linalg.svd(centred, full_matrices=False)[2][-1]
+    tilt = float(np.degrees(np.arccos(min(1.0, abs(normal[2])))))
+    return {
+        "value": round(float(np.median(z)), 4),
+        "definition": "median z of the vertices of the `floor` instance(s), scan frame, meters",
+        "floor_object_ids": [f"obj_{i:04d}" for i in sorted(ids)],
+        "vertex_count": int(take.sum()),
+        "z_percentiles": {"p05": round(float(np.percentile(z, 5)), 4),
+                          "p50": round(float(np.percentile(z, 50)), 4),
+                          "p95": round(float(np.percentile(z, 95)), 4)},
+        "plane_tilt_deg": round(tilt, 3),
+    }
 
 
 def camera_centres(sequence_count: int) -> np.ndarray | None:
@@ -309,6 +363,13 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
 
     points, rgb = read_vertex_ply(scene / f"{scene.name}_vh_clean_2.ply")
     owner, labels = load_objects(scene, points)
+    meta = read_scene_meta(scene)
+    camera = schema.camera(meta["colorWidth"], meta["colorHeight"],
+                           meta["fx_color"], meta["fy_color"], meta["mx_color"], meta["my_color"],
+                           source=f"{scene / (scene.name + '.txt')} (fx_color, fy_color, "
+                                  "mx_color, my_color, colorWidth, colorHeight)")
+    alignment = np.asarray(meta["axisAlignment"], dtype=np.float64).reshape(4, 4)
+    floor = floor_height(points, owner, labels)
     centres = camera_centres(len(sequence))
     # Per-frame GT camera-to-world poses (4x4, scan frame). Used directly because
     # this handoff is GT-derived; no AMB3R or Sim(3) is involved.
@@ -421,6 +482,10 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
             draw_boxed(Image.open(frame_dir / f"{stem}_rgb.jpg").convert("RGB"),
                        entry["bbox"], f"{name} {row['label']}").save(
                 frame_dir / f"{stem}_boxed.jpg", quality=95, subsampling=0)
+            if entry["seq"] not in gt_poses:
+                raise ValueError(f"{name}: no GT camera pose for seq {entry['seq']} in {gt_input_dir}; "
+                                 "camera_to_world is required")
+            pose = gt_poses[entry["seq"]].tolist()
             angle = None
             if primary is not None and entry["bearing"] is not None:
                 angle = round(float(np.degrees(np.arccos(
@@ -439,8 +504,10 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
                 "visibility": round(entry.get("visibility", 1.0), 4),
                 "touches_border": entry["touches_border"],
                 "camera_center": entry.get("camera_center"),
-                "camera_to_world_gt": gt_poses.get(entry["seq"]).tolist()
-                                     if entry["seq"] in gt_poses else None,
+                "camera_to_world": pose,
+                # Same matrix under its pre-contract name; read by
+                # ObjectGeneration's build_assembly_handoff and SceneAssembly.
+                "camera_to_world_gt": pose,
                 "view_angle_deg": angle,
                 "role": schema.KEYFRAME_ROLES[min(index, 2)],
             })
@@ -470,6 +537,11 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
     for record in records:
         views[len(record["key_frames"])] = views.get(len(record["key_frames"]), 0) + 1
 
+    with Image.open(frame_root / f"frame_{sequence[0]:06d}.jpg") as first_frame:
+        frame_size = list(first_frame.size)
+    if frame_size != [camera["width"], camera["height"]]:
+        raise ValueError(f"RGB frames are {frame_size}, intrinsics are for "
+                         f"{camera['width']}x{camera['height']}")
     manifest = schema.manifest(
         scene.name,
         producer={
@@ -484,6 +556,8 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
                 "instance_2d": str(instance_zip),
                 "rgb": str(frame_root),
                 "camera_source": str(source_root),
+                "camera_to_world": str(gt_input_dir),
+                "scene_meta": str(scene / f"{scene.name}.txt"),
             },
             "instance_id_encoding": "2D PNG value = objectId + 1; 0 is unannotated",
         },
@@ -492,8 +566,23 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
         label_quality_counts=counts,
         keyframe_view_counts=views,
         source_frame_ids=sequence,
-        axis_alignment_note="clouds use the raw scan frame; apply axisAlignment "
-                            "from the .txt only if the NYU frame is required",
+        camera=camera,
+        floor_z=floor["value"],
+        floor=floor,
+        axis_alignment={
+            "matrix": alignment.tolist(),
+            "maps": "scannet_scan -> scannet_axis_aligned (p_aligned = M @ [x, y, z, 1])",
+            "applied_to_this_handoff": False,
+            "source": str(scene / f"{scene.name}.txt") + " (axisAlignment)",
+        },
+        keyframe_policy=schema.keyframe_policy(
+            pool=f"{len(sequence)}-frame harness sample",
+            occlusion_floor=VISIBILITY_FLOOR,
+            occlusion_floor_structural=VISIBILITY_FLOOR_STRUCTURAL,
+            edge_penalty=EDGE_PENALTY, separation_deg=SEPARATIONS_DEG,
+            max_views=MAX_VIEWS, min_frame_gap=MIN_FRAME_GAP),
+        axis_alignment_note="clouds use the raw scan frame; apply axis_alignment.matrix "
+                            "only if the NYU (axis-aligned) frame is required",
     )
     (output / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")

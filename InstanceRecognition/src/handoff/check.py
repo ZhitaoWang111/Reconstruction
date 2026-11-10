@@ -51,6 +51,27 @@ def check(directory: Path, strict_missing: bool = True) -> list[str]:
         problems.append(f"unexpected coordinate_frame {manifest.get('coordinate_frame')!r}")
     if manifest.get("units") != "meters":
         problems.append(f"unexpected units {manifest.get('units')!r}")
+    missing = [key for key in schema.MANIFEST_REQUIRED if key not in manifest]
+    if missing:
+        problems.append(f"manifest missing required fields {missing}")
+    camera = manifest.get("camera") or {}
+    camera_missing = [key for key in schema.CAMERA_REQUIRED if key not in camera]
+    if camera_missing:
+        problems.append(f"manifest camera missing {camera_missing}")
+    else:
+        K = np.asarray(camera["K"], dtype=np.float64)
+        expected = np.array([[camera["fx"], 0, camera["cx"]], [0, camera["fy"], camera["cy"]], [0, 0, 1]])
+        if K.shape != (3, 3) or not np.allclose(K, expected):
+            problems.append("manifest camera K disagrees with fx/fy/cx/cy")
+        if camera["extrinsics"] != schema.EXTRINSICS_CONVENTION:
+            problems.append(f"manifest camera extrinsics convention {camera['extrinsics']} "
+                            f"!= {schema.EXTRINSICS_CONVENTION}")
+    if "floor_z" in manifest and not isinstance(manifest["floor_z"], (int, float)):
+        problems.append(f"floor_z {manifest['floor_z']!r} is not a number")
+    alignment = (manifest.get("axis_alignment") or {}).get("matrix")
+    if "axis_alignment" in manifest and (
+            alignment is None or np.asarray(alignment, dtype=np.float64).shape != (4, 4)):
+        problems.append("axis_alignment.matrix is not a 4x4 matrix")
 
     records = json.loads(objects_path.read_text())
     if not isinstance(records, list) or not records:
@@ -105,6 +126,14 @@ def check(directory: Path, strict_missing: bool = True) -> list[str]:
             if frame_missing:
                 problems.append(f"{name} seq {frame.get('seq')}: missing {frame_missing}")
                 continue
+            pose = np.asarray(frame["camera_to_world"] if frame["camera_to_world"] is not None
+                              else np.full((4, 4), np.nan), dtype=np.float64)
+            if pose.shape != (4, 4) or not np.isfinite(pose).all():
+                problems.append(f"{name} seq {frame['seq']}: camera_to_world is not a finite 4x4")
+            elif (not np.allclose(pose[3], [0, 0, 0, 1], atol=1e-6)
+                  or not np.allclose(pose[:3, :3] @ pose[:3, :3].T, np.eye(3), atol=1e-3)
+                  or np.linalg.det(pose[:3, :3]) < 0):
+                problems.append(f"{name} seq {frame['seq']}: camera_to_world is not a rigid transform")
             if frame["bbox_convention"] != schema.BBOX_CONVENTION:
                 problems.append(f"{name} seq {frame['seq']}: bbox_convention differs")
             for key in ("rgb", "mask", "boxed"):
