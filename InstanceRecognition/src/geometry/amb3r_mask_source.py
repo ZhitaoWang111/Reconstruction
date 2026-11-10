@@ -35,7 +35,7 @@ import numpy as np
 from PIL import Image
 
 from src import config
-from src.inference.sam31_segment import DEFAULT_MIN_MASK_AREA_FRACTION
+from src.perception.sam31_segment import DEFAULT_MIN_MASK_AREA_FRACTION
 from src.geometry.backproject_masks import (
     align_mask,
     crop_box,

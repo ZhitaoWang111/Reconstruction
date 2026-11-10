@@ -8,8 +8,8 @@ import pytest
 from PIL import Image
 
 from src import config
-from src.inference import gpt_sam31, label_frames
-from src.inference.io import perception_dir, read_json, write_json
+from src.perception import gpt_sam31, label_frames
+from src.perception.io import perception_dir, read_json, write_json
 
 
 class Predictor:
@@ -177,7 +177,7 @@ def test_outputs_reject_external_symlink_and_path_names(tmp_path, monkeypatch):
 
 
 def test_atomic_json_keeps_original_on_failed_publish(tmp_path, monkeypatch):
-    from src.inference import io as module
+    from src.perception import io as module
     path = tmp_path / 'data.json'
     write_json(path, {'value': 'old'})
 

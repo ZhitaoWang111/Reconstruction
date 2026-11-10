@@ -47,7 +47,7 @@ from src.geometry.backproject_masks import (
     write_cloud_asset,
     write_json,
 )
-from src.inference.io import perception_dir
+from src.perception.io import perception_dir
 from src.visualization.publish_gpt_viewer import write_manifest
 
 POLICY = "gpt_sam31_perception_v1"

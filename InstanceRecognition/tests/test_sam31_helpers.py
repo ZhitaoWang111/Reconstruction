@@ -8,7 +8,7 @@ array handling and can be tested directly.
 import numpy as np
 import pytest
 
-from src.inference.sam31_segment import (
+from src.perception.sam31_segment import (
     PALETTE,
     normalized_xywh_to_xyxy,
     safe_name,
@@ -76,7 +76,7 @@ def test_budget_wider_than_candidates_keeps_all():
 
 def test_palette_covers_the_display_budget():
     """Colours cycle by index, so a short palette would repeat within one frame."""
-    from src.inference.sam31_segment import DEFAULT_MAX_MASKS
+    from src.perception.sam31_segment import DEFAULT_MAX_MASKS
 
     assert len(PALETTE) >= DEFAULT_MAX_MASKS
 

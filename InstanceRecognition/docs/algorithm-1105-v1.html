@@ -212,12 +212,12 @@
 <!-- ============ 01 ============ -->
 <section id="perception">
   <h2><span class="no">01</span>SAM / GPT 出 mask</h2>
-  <p class="sub">src/inference/label_frames.py · gpt_sam31.py · sam31_segment.py</p>
+  <p class="sub">src/perception/label_frames.py · gpt_sam31.py · sam31_segment.py</p>
 
   <div class="io">
     <div class="row"><div class="lbl">输入</div><div class="val">一批原始 RGB 帧（JPEG）。<b>不含</b>任何 mask、深度或时间上下文。</div></div>
     <div class="row"><div class="lbl">输出</div><div class="val">每帧一组二值 mask PNG，外加一份把 mask 与类别、置信度绑在一起的 <code>predictions.json</code>。mask 是帧内局部的，没有跨帧身份。</div></div>
-    <div class="row"><div class="lbl">命令</div><div class="val"><code>python -m src.inference.label_frames</code> → <code>python -m src.inference.gpt_sam31</code>（顺序执行）</div></div>
+    <div class="row"><div class="lbl">命令</div><div class="val"><code>python -m src.perception.label_frames</code> → <code>python -m src.perception.gpt_sam31</code>（顺序执行）</div></div>
   </div>
 
   <h3>两步分工<span class="h">先 GPT，后 SAM</span></h3>
@@ -802,14 +802,14 @@
       <div class="dot m">1</div>
       <div class="body">
         <div class="name">感知：GPT 标注</div>
-        <div class="io2"><em>python -m src.inference.label_frames</em><br>--frames artifacts/frames/scene0000_00 --output artifacts/sources/scene0000_00/gpt_labels</div>
+        <div class="io2"><em>python -m src.perception.label_frames</em><br>--frames artifacts/frames/scene0000_00 --output artifacts/sources/scene0000_00/gpt_labels</div>
       </div>
     </div>
     <div class="step">
       <div class="dot m">2</div>
       <div class="body">
         <div class="name">感知：GPT + SAM 出 mask</div>
-        <div class="io2"><em>python -m src.inference.gpt_sam31</em><br>--labels artifacts/sources/scene0000_00/gpt_labels --output artifacts/sources/scene0000_00/gpt_sam31_uniform500_v1 --min-mask-area 0.005</div>
+        <div class="io2"><em>python -m src.perception.gpt_sam31</em><br>--labels artifacts/sources/scene0000_00/gpt_labels --output artifacts/sources/scene0000_00/gpt_sam31_uniform500_v1 --min-mask-area 0.005</div>
       </div>
     </div>
     <div class="step">

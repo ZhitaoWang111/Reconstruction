@@ -32,7 +32,7 @@ src/harness/                 run, publish, client, observations, state, tools,
 src/geometry/                amb3r_mask_source（唯一的 lifting）,
                              assemble_perception_source（感知产物 → liftable source）,
                              backproject_masks（共享 helper）, incremental_objects
-src/inference/               gpt_sam31, label_frames, gpt_labels（感知链路）
+src/perception/               gpt_sam31, label_frames, gpt_labels（感知链路）
 src/visualization/           共享 helper：page_naming, object_bboxes, publish_gpt_viewer
 
 pagegen/build_site.py        页面装配（manifest、states/、objects/、审计页）
@@ -84,8 +84,8 @@ python3 -m venv .venv
 **① 感知**（GPT 出 label，SAM3.1 出 mask；需重依赖环境，见 `requirements-runtime.txt`）：
 
 ```bash
-taskset -c 0 $SAM31_PYTHON -u -m src.inference.label_frames --run gpt_sam31_uniform500
-taskset -c 0 $SAM31_PYTHON -u -m src.inference.gpt_sam31   --run gpt_sam31_uniform500
+taskset -c 0 $SAM31_PYTHON -u -m src.perception.label_frames --run gpt_sam31_uniform500
+taskset -c 0 $SAM31_PYTHON -u -m src.perception.gpt_sam31   --run gpt_sam31_uniform500
 ```
 
 产物落在 `artifacts/experiments/<run>/perception/{labels,masks}/`。`label_frames` 只调网关、不碰 torch，用本树 .venv 也可；`gpt_sam31` 需要 SAM3.1。
@@ -187,4 +187,4 @@ taskset -c 0 .venv/bin/python -u -m src.harness.run \
 .venv/bin/python -m pytest tests/ -q     # 199 passed
 ```
 
-覆盖 Harness 决策循环与页面构建两条链路。`src/web/frontend/` 那棵旧网页源码树、`src/data/` 的 ScanNet reader、`src/inference/` 的推理侧（model_service / pipeline / SAM3）、以及旧树的 22 个兼容 shim 都不在本树的移植范围内。
+覆盖 Harness 决策循环与页面构建两条链路。`src/web/frontend/` 那棵旧网页源码树、`src/data/` 的 ScanNet reader、`src/perception/` 的推理侧（model_service / pipeline / SAM3）、以及旧树的 22 个兼容 shim 都不在本树的移植范围内。

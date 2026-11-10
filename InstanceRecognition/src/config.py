@@ -77,4 +77,4 @@ GPT_MODEL = os.environ.get("INSTANCE_GPT_MODEL", "openai/gpt-6-sol")
 GATEWAY_ENV_FILE = Path(os.environ.get("IR_GATEWAY_ENV_FILE", WORKSPACE.parent / "API/.env")).expanduser()
 # The prompt is versioned with the code that sends it, so a prompt edit and the
 # code that depends on its output schema move together.
-PROMPT_ROOT = ROOT / "src/inference/prompts"
+PROMPT_ROOT = ROOT / "src/perception/prompts"

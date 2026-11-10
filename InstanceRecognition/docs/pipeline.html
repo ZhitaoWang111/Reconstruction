@@ -282,7 +282,7 @@
 <!-- ============ 01 ============ -->
 <section id="perception">
   <h2><span class="no">01</span>SAM / GPT 出 mask</h2>
-  <p class="sub">src/inference/label_frames.py · gpt_sam31.py · sam31_segment.py</p>
+  <p class="sub">src/perception/label_frames.py · gpt_sam31.py · sam31_segment.py</p>
 
   <div class="io">
     <div class="row"><div class="lbl">输入</div><div class="val">
@@ -294,8 +294,8 @@
       <code>predictions.json</code>。mask 是帧内局部的，没有跨帧身份。
     </div></div>
     <div class="row"><div class="lbl">命令</div><div class="val">
-      <code>python -m src.inference.label_frames</code> →
-      <code>python -m src.inference.gpt_sam31</code>（两步，顺序执行）
+      <code>python -m src.perception.label_frames</code> →
+      <code>python -m src.perception.gpt_sam31</code>（两步，顺序执行）
     </div></div>
   </div>
 
@@ -334,7 +334,7 @@
 
   <h4 style="margin:24px 0 8px;font-size:14.5px;font-weight:650;color:var(--ink-2)">1.1.1 · 标签 prompt 实际约束了什么</h4>
   <p>
-    prompt（<code>src/inference/prompts/prompt_en.txt</code>，13 行）不是泛泛的"描述这张图"，而是给
+    prompt（<code>src/perception/prompts/prompt_en.txt</code>，13 行）不是泛泛的"描述这张图"，而是给
     SAM 写提示词的规则，几条硬约束值得记住：
   </p>
   <ul>
@@ -1375,13 +1375,13 @@ site/experiments/<b>&lt;run&gt;</b>/               <i>生成的页面</i>
 conda activate scene-understanding
 
 <span class="c"># 01 · GPT 出类别（每帧一次调用）</span>
-<span class="k">$SAM31_PYTHON</span> -u -m src.inference.label_frames \
+<span class="k">$SAM31_PYTHON</span> -u -m src.perception.label_frames \
   --run gpt_sam31_uniform500 \
   --batch artifacts/batches/scene0000_00/target_500.json \
   --frames-dir artifacts/frames --workers 3
 
 <span class="c"># 01 · SAM3.1 出 mask（权重只加载一次）</span>
-<span class="k">$SAM31_PYTHON</span> -u -m src.inference.gpt_sam31 --run gpt_sam31_uniform500
+<span class="k">$SAM31_PYTHON</span> -u -m src.perception.gpt_sam31 --run gpt_sam31_uniform500
 
 <span class="c"># 02 · 装配成 source（纯本地）</span>
 .venv/bin/python -u -m src.geometry.assemble_perception_source \

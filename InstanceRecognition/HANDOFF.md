@@ -40,7 +40,7 @@ InstanceRecognition/
 │   ├── amb3r_mask_source.py           投影到 3D（唯一合法的 lift policy）
 │   ├── backproject_masks.py           纯几何 helper
 │   └── incremental_objects.py         voxelize / 增量点云
-├── src/inference/        547 行，更上游（GPT + SAM3.1）
+├── src/perception/        547 行，更上游（GPT + SAM3.1）
 ├── pagegen/              886 行，页面生成
 └── src/visualization/    733 行
 ```

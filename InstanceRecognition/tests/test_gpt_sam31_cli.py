@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from src.inference import gpt_sam31
+from src.perception import gpt_sam31
 
 # Every key a downstream consumer reads, with the consumer that needs it.
 CONSUMED_FIELDS = {

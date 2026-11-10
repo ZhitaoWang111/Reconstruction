@@ -98,11 +98,11 @@ npz 里有 `metric_scale` 标量，是 AMB3R 度量头**自己**的尺度估计�
 | 文件 | 职责 |
 |---|---|
 | `src/gateway.py` | 只读共享凭据，环境变量覆盖 `config.GATEWAY_ENV_FILE` 指定的文件；Harness 直接使用它 |
-| `src/inference/label_frames.py` | 批次 RGB → GPT 类别 JSON；校验、有限重试、逐帧续跑 |
-| `src/inference/sam31_segment.py` | SAM3.1 公共会话 API 与文本提示；生成独立二值 mask |
-| `src/inference/gpt_sam31.py` | 标签与 RGB 配对，复用一个模型，逐帧发布 mask、预测 JSON 和预览 |
-| `src/inference/io.py` | JSON 原子写、文件哈希、实验目录定位 |
-| `src/inference/prompts/prompt_en.txt` | GPT 标签规则；保留整物体、成对物体和不确定性语义 |
+| `src/perception/label_frames.py` | 批次 RGB → GPT 类别 JSON；校验、有限重试、逐帧续跑 |
+| `src/perception/sam31_segment.py` | SAM3.1 公共会话 API 与文本提示；生成独立二值 mask |
+| `src/perception/gpt_sam31.py` | 标签与 RGB 配对，复用一个模型，逐帧发布 mask、预测 JSON 和预览 |
+| `src/perception/io.py` | JSON 原子写、文件哈希、实验目录定位 |
+| `src/perception/prompts/prompt_en.txt` | GPT 标签规则；保留整物体、成对物体和不确定性语义 |
 
 删除了 `gpt_labels.py`、`runtime_env.py`、`artifacts.py`，旧单帧入口和闲置模型分支配置不再保留。没有检测器分支、box/point prompt、模型服务或自动分支选择。两个入口都通过 `--run` 归入同一个实验；不保留旧的 `--reuse-run`、`--wait-for-labels` 和分散输出参数。
 
@@ -111,7 +111,7 @@ npz 里有 `metric_scale` 标量，是 AMB3R 度量头**自己**的尺度估计�
 先生成标签：
 
 ```bash
-.venv/bin/python -m src.inference.label_frames \
+.venv/bin/python -m src.perception.label_frames \
   --run perception-demo \
   --batch ../InstanceRecognition/runtime/batches/scene0000_00/target_500.json \
   --frames-dir artifacts/frames \
@@ -124,7 +124,7 @@ npz 里有 `metric_scale` 标量，是 AMB3R 度量头**自己**的尺度估计�
 
 ```bash
 conda activate scene-understanding
-taskset -c 0 python -m src.inference.gpt_sam31 \
+taskset -c 0 python -m src.perception.gpt_sam31 \
   --run perception-demo --threshold 0.5 --max-masks 16
 ```
 
@@ -212,9 +212,9 @@ overwrite guard 容忍模板文件与 `background_amb3r.js`（可重建）。`me
 ```bash
 source /home/seer/miniconda3/etc/profile.d/conda.sh
 conda activate scene-understanding
-python -m src.inference.label_frames --help
+python -m src.perception.label_frames --help
 python -m src.harness.run --help
-taskset -c 0 python -m src.inference.gpt_sam31 --run perception-demo
+taskset -c 0 python -m src.perception.gpt_sam31 --run perception-demo
 ```
 
 `perception-demo` 必须已有第 3 节生成的 GPT 标签；输出为本树 `artifacts/experiments/perception-demo/perception/masks/`。`taskset -c 0` 延续本机 CPU 亲和性约束；代码不会自动切换到旧环境。已给 conda 环境设置 `PYTHONNOUSERSITE=1` 和新解释器的 `SAM31_PYTHON`；未设置后者时配置使用当前 Python，不再回退旧树。

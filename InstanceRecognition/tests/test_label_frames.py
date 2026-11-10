@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from src.inference import label_frames
+from src.perception import label_frames
 
 LABELS = {"categories": [
     {"category": "table", "sam_prompt": "table", "certainty": "clear",

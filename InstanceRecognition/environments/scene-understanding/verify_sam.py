@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from src import config
-from src.inference.io import sha256, write_json
+from src.perception.io import sha256, write_json
 
 
 def main():
@@ -29,8 +29,8 @@ def main():
         raise RuntimeError(f'Unexpected packages: {unexpected}')
     import torch
     import sam3
-    from src.inference.sam31_segment import load_predictor, segment
-    from src.inference.gpt_sam31 import write_display_artifacts
+    from src.perception.sam31_segment import load_predictor, segment
+    from src.perception.gpt_sam31 import write_display_artifacts
     assert torch.cuda.is_available(), 'CUDA unavailable'
     assert Path(sam3.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()), sam3.__file__
     report = {
