@@ -81,7 +81,7 @@ figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:7px;di
 <p class="lede">两个用途：<b>变更记录</b>（每次代码改动解决什么、往哪个方向改、动了哪些文件）和
 <b>结果 debug</b>（某次运行里观察到的具体问题、实测数据、待查环节）。倒序排列，最新的在最上面。</p>
 <div class="meta">
-<span class="tag">更新 <b>2026-11-09</b></span>
+<span class="tag">更新 <b>2026-11-10</b></span>
 <span class="tag">条目 <b id="entryCount">—</b></span>
 </div>
 </header>
@@ -400,6 +400,144 @@ v11 同帧同物体的 mask 对共 2369 对，凳子错配那几对的包围盒�
 </div>
 
 <h2><span class="no">02</span>变更记录</h2>
+
+<!-- 2026-11-10 -->
+<div class="entry">
+<div class="entry-head">
+<span class="id">v13 / v14</span>
+<span class="title">两次 100 帧试跑：前 20% 录制 vs 全程录制</span>
+<span class="date">2026-11-10</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">两次运行</span>
+<table>
+<thead><tr><th></th><th>v13</th><th>v14</th></tr></thead>
+<tbody>
+<tr><td>实验</td><td><code>harness-v13-amb3r-100frames-20261109-1130</code></td><td><code>harness-v14-amb3r-full100frames-20261109-1744</code></td></tr>
+<tr><td>source</td><td><code>scene_amb3r_v3_100f</code>（源帧 0–1106）</td><td><code>scene_amb3r_full100_v1</code>（源帧 0–5532）</td></tr>
+<tr><td>prompt</td><td><code>68189933</code></td><td><code>f1056561</code></td></tr>
+<tr><td>窗口</td><td>20 / 20 提交，无废弃</td><td>20 / 20 提交，无废弃</td></tr>
+<tr><td>观测</td><td>780</td><td>750</td></tr>
+<tr><td>物体</td><td>39</td><td>92</td></tr>
+<tr><td>held / discard / exclude</td><td>163 / 599 / 18</td><td>314 / 419 / 17</td></tr>
+<tr><td>discard 中宿主自动淘汰</td><td>525（模型自己 discard 74）</td><td>385（模型自己 discard 34）</td></tr>
+<tr><td>模型写的 evict</td><td>0</td><td>0</td></tr>
+<tr><td>propose 被拒 / verify 轮</td><td>7 / 11</td><td>4 / 19</td></tr>
+<tr><td>API 调用 / prompt token</td><td>216 / 2155 万</td><td>223 / 2067 万</td></tr>
+</tbody>
+</table>
+</div>
+<div>
+<span class="h">读这组数字时要注意</span>
+<ul>
+<li>两次之间 source 和 prompt <b>同时变了</b>：v13 跑的时候还没有 <code>held_observation_ids</code>（8fdf69b）和 draft/proposal 区分（2f628bb）。物体数的差异主要来自覆盖范围（v13 只到开头的房间），但不能全归于此。</li>
+<li>超员淘汰全部由宿主完成，两次运行模型都没写过 <code>evict</code>。</li>
+<li>v14 的 92 个物体里是否有重访同一区域时重复建档，还没有核对。</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div class="entry">
+<div class="entry-head">
+<span class="id">7587c3e + 82b23c1</span>
+<span class="title">抽帧脚本迁入 InstanceRecognition；新增全程覆盖的 100 帧 source</span>
+<span class="date">2026-11-09</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">要解决的问题</span>
+<ul>
+<li>抽帧（从 <code>.sens</code> 选帧、写 JPEG/深度/位姿）只在 <code>Video2PointCloud/src/amb3r/extract_scannet_sens.py</code> 里，InstanceRecognition 只消费它写好的 <code>frame_indices</code>，自己没有这段代码。</li>
+<li>原来的 100 帧 source <code>scene_amb3r_v3_100f</code> 是 500 帧里的前 100 帧，只覆盖录制前约 20%（源帧 0–1106），测不到跨房间、隔很久重访的情况。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动方向</span>
+<ul>
+<li>脚本整体迁到 <code>src/geometry/extract_scannet_sens.py</code>，拆出可单独调用的 <code>extract()</code>；采样仍是按帧号均匀、包含两端（<code>round(i·(N−1)/(k−1))</code>）。scene0000_00 的 <code>.sens</code> 时间戳全是 0，所以无法按时间戳采样；传感器帧率恒定，按帧号均匀等价于按时间均匀。</li>
+<li>Video2PointCloud 侧原文件删除，<code>restore_mask_viewer.sh</code> 改指新路径。</li>
+<li>新 source 不重跑感知：用临时脚本从 <code>gpt_sam31_uniform500_v1</code> 每 5 帧取 1 帧，<b>保留原 sequence_index</b> 跑 <code>amb3r_mask_source</code>（它按 sequence_index 索引 500 帧的 AMB3R 点图），再把输出重编号为 0–99 并改 npz 文件名（Harness 要求从 0 起连续）。结果 <code>scene_amb3r_full100_v1</code>：929 个 mask，面积过滤去掉 179 个，剩 750 条观测，帧间隔约 56 个源帧。<code>amb3r_mask_source</code> 本身没加 stride 参数。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动文件</span>
+<div class="files">
+<div>src/geometry/extract_scannet_sens.py（新增）</div>
+<div>tests/test_extract_scannet_sens.py（新增，17 条）</div>
+<div>Video2PointCloud/src/amb3r/extract_scannet_sens.py（删除）</div>
+<div>Video2PointCloud/src/amb3r/restore_mask_viewer.sh</div>
+<div>artifacts/sources/scene0000_00/scene_amb3r_full100_v1（新产物，不入库）</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="entry">
+<div class="entry-head">
+<span class="id">2f628bb</span>
+<span class="title">prompt 区分 draft 与 proposal</span>
+<span class="date">2026-11-09</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">要解决的问题</span>
+<ul>
+<li>prompt 里 <code>proposal</code> 一词同时指两样东西：模型写进 <code>proposal_json</code> 交给 <code>propose_update</code> 的那份，和校验通过后在内存里待提交、由 <code>commit_update</code> 写盘的那份。"宿主拒绝任何漏掉观测的 proposal""一个 proposal 可含多个动作"说的是前者，"validated proposal 尚未提交"说的是后者。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动方向</span>
+<ul>
+<li>前者统一叫 <b>draft</b>（小节标题改为 <code>SUBMITTING A DRAFT</code>），后者保留 <b>proposal</b>；<code>proposal_json</code>、<code>proposal_id</code> 是接口名，不改。</li>
+<li>prompts.html 中文对照同步：draft 译"草案"，并改写两句说明——"每条观测必须落到 hold/discard/exclude 之一，漏掉任何一条宿主会拒绝整个草案"；"所有查看都要发生在第一次 propose_update 之前"改为"在你认为可以提交草案审核时，该看的应该已经看完了"。</li>
+<li>prompt 哈希 <code>b91d6a89</code> → <code>f1056561</code>。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动文件</span>
+<div class="files">
+<div>src/harness/prompt.txt</div>
+<div>docs/prompts.html（05 节英文全文与哈希；P5/P7/1105-v1 三处中文）</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="entry">
+<div class="entry-head">
+<span class="id">8fdf69b</span>
+<span class="title">物体登记表列出持有观测 id</span>
+<span class="date">2026-11-09</span>
+</div>
+<div class="entry-body">
+<div>
+<span class="h">要解决的问题</span>
+<ul>
+<li>窗口输入里的登记表只有每个物体的观测数，没有持有的是哪几条。模型要写 <code>evict</code> 或判断满员物体时，只能先 <code>inspect_object</code> 一次才知道 id。</li>
+<li>早先刻意不列 id，是因为模型会把列出来的 id 直接写进 <code>evidence</code>，而没有真正看过图。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动方向</span>
+<ul>
+<li><code>listing()</code> 每个物体加 <code>held_observation_ids</code>（至多 5 条）和 <code>centroid</code>。</li>
+<li>列出不等于可引用：这些 id <b>不会</b>自动进入 evidence，仍要 inspect 过才能写进 <code>evidence</code>，原有 evidence 检查照常拦截。</li>
+<li>prompt 首段同步说明登记表的内容；哈希 <code>68189933</code> → <code>b91d6a89</code>。</li>
+</ul>
+</div>
+<div>
+<span class="h">改动文件</span>
+<div class="files">
+<div>src/harness/tools.py</div>
+<div>src/harness/prompt.txt</div>
+<div>docs/algorithm-1105-v1.html（04 节历史访问说明）</div>
+<div>docs/prompts.html</div>
+</div>
+</div>
+</div>
+</div>
 
 <!-- 2026-11-09 -->
 <div class="entry">
