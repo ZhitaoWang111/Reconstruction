@@ -446,14 +446,14 @@ v11 同帧同物体的 mask 对共 2369 对，凳子错配那几对的包围盒�
 </div>
 
 <!-- 2026-11-10 -->
-<div class="entry">
+<div class="entry wide">
 <div class="entry-head">
 <span class="id">v13 / v14</span>
 <span class="title">两次 100 帧试跑：前 20% 录制 vs 全程录制</span>
 <span class="date">2026-11-10</span>
 </div>
-<div class="entry-body">
-<div>
+<div class="entry-body stacked">
+<div class="blk">
 <span class="h">两次运行</span>
 <table>
 <thead><tr><th></th><th>v13</th><th>v14</th></tr></thead>
@@ -465,14 +465,14 @@ v11 同帧同物体的 mask 对共 2369 对，凳子错配那几对的包围盒�
 <tr><td>观测</td><td>780</td><td>750</td></tr>
 <tr><td>物体</td><td>39</td><td>92</td></tr>
 <tr><td>held / discard / exclude</td><td>163 / 599 / 18</td><td>314 / 419 / 17</td></tr>
-<tr><td>discard 中宿主自动淘汰</td><td>525（模型自己 discard 74）</td><td>385（模型自己 discard 34）</td></tr>
+<tr><td>其中宿主自动淘汰</td><td>525（模型自己 discard 74）</td><td>385（模型自己 discard 34）</td></tr>
 <tr><td>模型写的 evict</td><td>0</td><td>0</td></tr>
 <tr><td>propose 被拒 / verify 轮</td><td>7 / 11</td><td>4 / 19</td></tr>
 <tr><td>API 调用 / prompt token</td><td>216 / 2155 万</td><td>223 / 2067 万</td></tr>
 </tbody>
 </table>
 </div>
-<div>
+<div class="blk">
 <span class="h">读这组数字时要注意</span>
 <ul>
 <li>两次之间 source 和 prompt <b>同时变了</b>：v13 跑的时候还没有 <code>held_observation_ids</code>（8fdf69b）和 draft/proposal 区分（2f628bb）。物体数的差异主要来自覆盖范围（v13 只到开头的房间），但不能全归于此。</li>
