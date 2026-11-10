@@ -30,6 +30,23 @@ def tv_part(p, seq):
     return '正前方近拍' if 40 <= seq <= 50 else '斜侧远拍'
 
 
+def bookshelf_part(p):
+    """Group by wall section: x coordinate separates the left vs right cabinet unit."""
+    x = np.median(p[:, 0])
+    return '左段（帧 35–36）' if x < 1.0 else '中右段（帧 46–49）'
+
+
+def barchair_part(p, seq):
+    """Bar stool: group by distance from the object centroid (single chair viewed from different angles/distances)."""
+    pts_count = len(p)
+    return '近拍（>8000 点）' if pts_count >= 8000 else '远拍（<8000 点）'
+
+
+def tv2_part(p, seq):
+    """Object59 w19: near frontal vs far oblique."""
+    return '正面近拍（帧 50–57）' if seq < 70 else '斜侧远拍（帧 93–94）'
+
+
 CASES = [
     {'key': 'Object64-w10', 'object': 'Object64', 'label': 'cabinet', 'window': 10, 'part_fn': cabinet_part,
      'parts': ['左下门', '右下门', '左上门', '右上门'],
@@ -39,6 +56,17 @@ CASES = [
      'summary': '同一块电视屏幕从房间两侧拍：帧 45–49 在柜子正前方约 3 m，帧 36 与 93–94 从沙发/吧台一侧约 5 m 斜拍，'
                 '两组视角差约 40–60°。屏幕反光，点数/像素 0.039–0.154，占比和点数不再一致。'
                 '远拍组投影回近拍画面 79–85% 落在同一块屏幕上，但深度差约 0.27 m，新增表面会把它算成新表面。'},
+    {'key': 'Object53-w19', 'object': 'Object53', 'label': 'bar stool', 'window': 19, 'part_fn': barchair_part,
+     'parts': ['近拍（>8000 点）', '远拍（<8000 点）'],
+     'summary': '同一把吧台椅的 6 个候选：早期 2 条 held（帧 34 和 88，点数只有 2800–4000），'
+                '新来 4 条（帧 90–93，视角差约 47°，点数/像素有一条低到 0.121）。'
+                '这个用例测试 A 和 P 适度分歧、以及点数项对低质量 mask 的压制效果。'},
+    {'key': 'Object59-w19', 'object': 'Object59', 'label': 'bookcase/cabinet', 'window': 19, 'part_fn': tv2_part,
+     'parts': ['正面近拍（帧 50–57）', '斜侧远拍（帧 93–94）'],
+     'summary': '大型书柜/储物柜墙，视角差约 119°（本批最大）。持有的 5 条从正面 2–3 m 拍，每条 14000–19000 点；'
+                '新来 8 条从吧台侧面 119° 斜拍，每条 1600–10100 点。'
+                '新增表面率全部 100%——视角太大导致 AMB3R 点云对不上，不是因为真的拍到了新部位。'
+                '这一窗暴露了新增表面项在极端视角差下的虚高问题。'},
 ]
 
 
