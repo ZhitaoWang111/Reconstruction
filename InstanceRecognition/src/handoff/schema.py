@@ -35,7 +35,11 @@ every frame it lifts, so the field does not break the both-producers rule.
 """
 from __future__ import annotations
 
-SCHEMA_VERSION = "handoff/v1"
+# v2 (2026-11-10): manifest gains `camera` (intrinsics + extrinsics convention),
+# `floor_z` and `axis_alignment`, and every key frame must carry
+# `camera_to_world`. A v1 directory fails these checks, so the version moved;
+# every v1 field is still written unchanged, so a v1 reader keeps working.
+SCHEMA_VERSION = "handoff/v2"
 
 # Labels that describe the building rather than a thing in it. The object
 # generator should skip these by default: nine wall segments are not nine assets.
