@@ -123,10 +123,48 @@ def test_join_to_unknown_wall_is_caught(tmp_path):
     assert any("unknown wall" in p for p in _rewrite(tmp_path, doc))
 
 
-def test_openings_are_not_carried_in_v1(tmp_path):
+def _opening(w, a0, a1, z0, z1):
+    """A measured opening on a wall, in the shape the producer writes."""
+    a = np.asarray(w["start_floor"], float); b = np.asarray(w["end_floor"], float)
+    d = (b - a) / np.linalg.norm(b - a)
+    quad = [[*(a + s * d), z] for s, z in ((a0, z0), (a1, z0), (a1, z1), (a0, z1))]
+    return {"from_m": a0, "to_m": a1, "z_floor": [z0, z1], "width_m": round(a1 - a0, 3),
+            "height_m": round(z1 - z0, 3), "kind": "opening", "source": "ray_test", "rays_through": 500,
+            "closed_above": True, "corners_floor": [[round(v, 5) for v in q] for q in quad],
+            "corners_scan": [[round(v, 5) for v in q] for q in quad], "note": "rays see through"}
+
+
+def test_a_measured_opening_passes(tmp_path):
+    """The fixture's floor frame is the scan frame, so the two corner sets coincide."""
     doc = _square(tmp_path)
-    doc["walls"][0]["openings"] = [{"from_m": 1, "to_m": 2}]
-    assert any("no openings" in p for p in _rewrite(tmp_path, doc))
+    doc["walls"][0]["openings"] = [_opening(doc["walls"][0], 1.0, 1.9, 0.0, 2.0)]
+    assert _rewrite(tmp_path, doc) == []
+
+
+@pytest.mark.parametrize("change,message", [
+    ({"from_m": 3.5, "to_m": 4.5}, "outside the wall"),
+    ({"z_floor": [0.5, 3.5], "height_m": 3.0}, "not inside"),
+    ({"width_m": 0.5}, "width_m disagrees"),
+    ({"kind": "door"}, "kind must be opening"),
+    ({"source": "guess"}, "kind must be opening"),
+    ({"corners_floor": [[0, 1, 0]] * 4}, "not on the wall's face"),        # 1 m off the south wall's line
+    ({"corners_scan": [[0, 0, 0]] * 4}, "corners_scan is not corners_floor"),
+])
+def test_a_bad_opening_is_caught(tmp_path, change, message):
+    doc = _square(tmp_path)
+    op = _opening(doc["walls"][0], 1.0, 1.9, 0.0, 2.0)
+    op.update(change)
+    if "from_m" in change:
+        op["width_m"] = round(op["to_m"] - op["from_m"], 3)   # keep only the extent wrong
+    doc["walls"][0]["openings"] = [op]
+    assert any(message in p for p in _rewrite(tmp_path, doc))
+
+
+def test_overlapping_openings_are_caught(tmp_path):
+    doc = _square(tmp_path)
+    doc["walls"][0]["openings"] = [_opening(doc["walls"][0], 1.0, 2.0, 0.0, 2.0),
+                                   _opening(doc["walls"][0], 1.5, 2.5, 0.0, 2.0)]
+    assert any("overlap" in p for p in _rewrite(tmp_path, doc))
 
 
 @pytest.mark.parametrize("field,value,message", [
@@ -224,3 +262,15 @@ def test_page_builder_publishes_every_key_frame(tmp_path):
     assert frames and all((tmp_path / "page" / k[f]).is_file() for k in frames for f in ("rgb", "mask", "boxed"))
     assert {"index.html", "page.js", "page.css"} <= {p.name for p in (tmp_path / "page").iterdir()}
     assert json.loads((REAL / "walls.json").read_text())["walls"][0]["key_frames"][0]["rgb"].startswith("keyframes/")
+
+
+@real
+def test_real_handoff_carries_the_measured_opening():
+    doc = json.loads((REAL / "walls.json").read_text())
+    holes = [(w["id"], o) for w in doc["walls"] for o in w["openings"]]
+    assert len(holes) == 1
+    wid, o = holes[0]
+    assert (wid, o["kind"], o["source"]) == ("int_3", "opening", "ray_test")
+    assert o["width_m"] == pytest.approx(0.6, abs=0.05) and o["height_m"] == pytest.approx(1.7, abs=0.05)
+    assert o["closed_above"] is True
+    assert "openings" not in doc["not_included"]

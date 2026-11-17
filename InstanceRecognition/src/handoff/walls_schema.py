@@ -1,8 +1,13 @@
 """The wall handoff contract: what the wall generator reads to build the room's walls.
 
-Walls only. Doors, windows, openings, the ceiling and the floor mesh are not in it
-(`not_included` says so in every file), and a wall record has `openings: []` until a
-later version fills it.
+Walls, and the openings in them. Doors and windows are not separate items in it (their
+leaves and panes are elsewhere in the pipeline), but a hole a wall has to leave for them
+is: `openings` lists what was *measured* to be a hole, not what is expected to be one.
+
+An opening is found by the ray test - rays see through the wall from floor to top, with
+solid wall above (`closed_above`). That finds doorways and passages that stand open; a
+closed door leaf or a window pane stops the rays, so those openings are *not* in this
+version and a consumer must not read `openings: []` as "a solid wall here".
 
 A sibling of the object handoff (`schema.py`, handoff/v2), and deliberately shaped
 like it so one reader can open both:
@@ -46,8 +51,10 @@ SEGMENT_KINDS = ("observed", "inferred")
 JOIN_TYPES = ("mitre", "butt", "none")
 VALUE_KINDS = ("measured", "assumed")
 
-NOT_INCLUDED = ("doors", "windows", "openings", "ceiling", "floor_mesh", "mirrors",
-                "furniture")
+NOT_INCLUDED = ("doors", "windows", "door_frames", "window_frames", "ceiling", "floor_mesh",
+                "mirrors", "furniture")
+
+OPENING_SOURCES = ("ray_test",)
 
 TOP_REQUIRED = (
     "schema_version", "scene_id", "producer", "coordinate_frame", "units", "up_axis",
@@ -62,6 +69,12 @@ WALL_REQUIRED = (
 )
 
 SEGMENT_REQUIRED = ("from_m", "to_m", "kind", "source_planes")
+
+# An opening, as measured: along the wall from `start`, between floor and its head, and
+# the same hole in the scan frame. `kind` is opening, not door or window, because the ray
+# test shows a hole and nothing about what fills it.
+OPENING_REQUIRED = ("from_m", "to_m", "z_floor", "width_m", "height_m", "kind", "source",
+                    "rays_through", "closed_above", "corners_floor", "corners_scan")
 
 KEYFRAME_REQUIRED = (
     "role", "seq", "source_frame_id", "rgb", "mask", "boxed", "bbox_xyxy",

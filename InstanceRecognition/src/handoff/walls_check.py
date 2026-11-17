@@ -107,8 +107,39 @@ def check(directory: Path) -> list[str]:
             problems.append(f"{name}: thickness_m must be positive with kind measured|assumed")
         if not w["height_m"] > 0:
             problems.append(f"{name}: height_m must be positive")
-        if w["openings"]:
-            problems.append(f"{name}: walls/v1 carries no openings")
+        # openings: measured holes, each inside the wall, on the wall's line and height
+        spans = []
+        for o in w["openings"]:
+            miss = [k for k in ws.OPENING_REQUIRED if k not in o]
+            if miss:
+                problems.append(f"{name}: opening missing {miss}"); continue
+            tag = f"{name} opening {o['from_m']}-{o['to_m']} m"
+            if not 0 <= o["from_m"] < o["to_m"] <= L + TOL:
+                problems.append(f"{tag}: outside the wall's 0..{L:.3f} m")
+            if o["z_floor"][0] < -TOL or o["z_floor"][0] >= o["z_floor"][1] or o["z_floor"][1] > w["height_m"] + TOL:
+                problems.append(f"{tag}: z_floor {o['z_floor']} not inside 0..{w['height_m']}")
+            if abs(o["width_m"] - (o["to_m"] - o["from_m"])) > TOL:
+                problems.append(f"{tag}: width_m disagrees with from_m/to_m")
+            if abs(o["height_m"] - (o["z_floor"][1] - o["z_floor"][0])) > TOL:
+                problems.append(f"{tag}: height_m disagrees with z_floor")
+            if o["kind"] != "opening" or o["source"] not in ws.OPENING_SOURCES:
+                problems.append(f"{tag}: kind must be opening, source one of {ws.OPENING_SOURCES}")
+            quad = np.asarray(o["corners_floor"], float)
+            scan = np.asarray(o["corners_scan"], float)
+            if quad.shape != (4, 3) or scan.shape != (4, 3):
+                problems.append(f"{tag}: corners_floor and corners_scan must be four [x, y, z] points")
+            else:
+                for q in quad:
+                    if _dist_to_line(q[:2], a, b) > JOIN_TOL or q[2] < -TOL or q[2] > w["height_m"] + TOL:
+                        problems.append(f"{tag}: corner {q.tolist()} is not on the wall's face"); break
+                expect = np.c_[quad, np.ones(4)] @ np.asarray(doc["floor_frame_to_scan"], float).T
+                if np.abs(expect[:, :3] - scan).max() > 0.002:
+                    problems.append(f"{tag}: corners_scan is not corners_floor through floor_frame_to_scan")
+            spans.append((o["from_m"], o["to_m"]))
+        spans.sort()
+        for (a0, a1), (b0, _) in zip(spans, spans[1:]):
+            if b0 < a1 - TOL:
+                problems.append(f"{name}: openings {a0}-{a1} and {b0}- overlap")
 
         segs = w["segments"]
         if not segs:

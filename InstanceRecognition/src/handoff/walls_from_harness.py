@@ -122,7 +122,7 @@ def line_intersection(p, d, q, e):
 
 
 # ---------------------------------------------------------------- the walls
-def build_walls(closed: dict, planes: dict):
+def build_walls(closed: dict, planes: dict, frames: Frames):
     """walls/v1 wall records (geometry, segments, joins, evidence) from the closed walls."""
     names = {0: "ext_W", 1: "ext_S", 2: "ext_E", 3: "ext_N"}
     side_of = {f"side{k}": v for k, v in names.items()}
@@ -209,17 +209,27 @@ def build_walls(closed: dict, planes: dict):
                  "source_planes": r["planes"] if kinds[i] == "observed" else []} for i in range(len(kinds))]
         segs[-1]["to_m"] = round(L, 4)
         ev_planes = [src[p] for p in r["planes"]]
-        detected = []
+        holes = []
         for pl in ev_planes:
             for o in pl.get("openings", []) or []:
                 ends = [np.asarray(c[:2]) for c in o["corners"][:2]]
                 along = sorted(float((e - r["P0"]) @ d) for e in ends)
-                detected.append({"from_m": round(along[0], 3), "to_m": round(along[1], 3),
-                                 "z_floor": [round(o["z"][0], 3), round(o["z"][1], 3)],
-                                 "width_m": round(o["width_m"], 3), "height_m": round(o["height_m"], 3),
-                                 "rays_through": int(o["rays"]), "closed_above": bool(o["closed_above"]),
-                                 "note": "found by the ray test (rays pass through, solid above); "
-                                         "not built in walls/v1"})
+                a0, a1 = round(max(0.0, along[0]), 4), round(min(L, along[1]), 4)
+                if a1 - a0 < 0.05:
+                    continue
+                z0, z1 = round(o["z"][0], 4), round(o["z"][1], 4)
+                # floor frame first, so the hole composes with the wall line the consumer builds from;
+                # the scan-frame copy saves it a transform
+                corners = [[*(np.asarray(r["P0"]) + s_ * d), z] for s_, z in ((a0, z0), (a1, z0), (a1, z1), (a0, z1))]
+                scan = [[round(float(v), 5) for v in frames.to_scan(np.asarray(q_))] for q_ in corners]
+                holes.append({"from_m": a0, "to_m": a1, "z_floor": [z0, z1],
+                              "width_m": round(a1 - a0, 3), "height_m": round(z1 - z0, 3),
+                              "kind": "opening", "source": "ray_test", "rays_through": int(o["rays"]),
+                              "closed_above": bool(o["closed_above"]),
+                              "corners_floor": [[round(float(v), 5) for v in q_] for q_ in corners],
+                              "corners_scan": scan,
+                              "note": "rays see through the wall here from floor to top, with solid wall above; "
+                                      "what fills it (or nothing) was not determined"})
         out.append({
             "id": r["id"], "role": r["role"],
             "start_floor": [round(float(x), 5) for x in r["P0"]], "end_floor": [round(float(x), 5) for x in r["P1"]],
@@ -227,7 +237,7 @@ def build_walls(closed: dict, planes: dict):
             "thickness_m": r["t"], "thickness_kind": "assumed",
             "height_m": float(closed["storey"]["height_m"]),
             "footprint_floor": [[round(float(x), 5) for x in q] for q in (r["P0"], r["P1"], r["Q1"], r["Q0"])],
-            "segments": segs, "joins": r["joins"], "openings": [], "key_frames": [],
+            "segments": segs, "joins": r["joins"], "openings": holes, "key_frames": [],
             "evidence": {
                 "planes": r["planes"],
                 "frames": sorted({int(x) for pl in ev_planes for x in pl["frames"]}),
@@ -239,7 +249,6 @@ def build_walls(closed: dict, planes: dict):
                 "behind_seen": [round(pl["behind_seen"], 3) for pl in ev_planes],
                 "observed_top_m": [round(pl["z"][1], 3) for pl in ev_planes],
                 "thickness_hint": r["hint"],
-                "detected_openings": detected,
             },
             "_planes": ev_planes, "_dir": d,
         })
@@ -462,7 +471,7 @@ def preview(doc: dict, frames_xy: dict, path: Path):
 
 README = """# 墙体交接文件（walls/v1）
 
-场景 `{scene}`，来源 run `{run}`。只交付**墙体**：门、窗、开口、天花板、地面网格都不在里面（见 `not_included`）。
+场景 `{scene}`，来源 run `{run}`。交付**墙体**和墙上测到的**开口**。门、窗本身（门扇、窗、门框、窗框）和天花板、地面网格不在里面（见 `not_included`）。
 校验：`python -m src.handoff.walls_check {out}`。字段定义写在 `src/handoff/walls_schema.py` 里。
 
 ## 文件
@@ -490,7 +499,9 @@ README = """# 墙体交接文件（walls/v1）
    - `mitre`：两面墙在转角斜接（外墙四角，以及内墙之间）；
    - `butt`：内墙停在外墙的房间一侧墙面上，外墙不受影响。
    如果改了厚度，请用墙线和 `joins` 重算，不要直接改 `footprint_floor`。
-5. `openings` 这一版都是空的，墙都是实心的。`evidence.detected_openings` 里记录了射线检验发现的门洞，没有用来生成。
+5. `openings` 是射线检验**测到的洞**：从这个洞看过去，墙从下到上都被射线穿过，上方还有实墙封住（`closed_above`）。`from_m` / `to_m` 是沿墙位置（从 start 起算），`z_floor` 是离地高度范围（地面坐标系），`corners_floor` 是这个洞的四角（地面坐标系，顺序同墙段：起点下、终点下、终点上、起点上），`corners_scan` 是同一组点换算到扫描坐标系。生成墙体时要在这些位置留出洞。
+   - 这里只有**开着的**门洞和通道。关着的门扇、玻璃窗会把射线挡在门面或玻璃面上，测不到，所以某个墙的 `openings` 为空，只说明“没测到洞”，不等于“这面墙没有门或窗”。
+   - `kind` 只写 `opening`，不写门或窗：射线只能说明那里是个洞，不能说明洞里是门、是窗还是什么都没有。
 
 ## 外观：关键帧
 
@@ -554,7 +565,7 @@ def build(run: str, output: Path, scene: Path = SCENE, rectified: bool = False) 
     slot = frame_slots()
     H = float(closed["storey"]["height_m"])
 
-    walls = build_walls(closed, planes)
+    walls = build_walls(closed, planes, frames)
     print(f"{len(walls)} walls; scoring key frames over {len(list(segmentation.glob('frame_*')))} segmented frames", flush=True)
     cands = frame_candidates(walls, frames, segmentation, slot, width, height, H)
 
