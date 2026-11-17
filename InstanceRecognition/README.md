@@ -46,6 +46,7 @@ pagegen/build_viewer.py      渲染器 bundle 装配
 pagegen/build_mask_project.py mask 投影检查页
 pagegen/build_walls_handoff.py 墙体交接文件预览页
 pagegen/build_structure_geom.py 墙体几何工作台页面的数据
+pagegen/build_structure_gt.py 结构件 GT 页面的数据（ScanNet 标注，只用于评估）
 pagegen/templates/           result/  records/  mask_project/  shared/
 ```
 
@@ -176,8 +177,11 @@ $SAM31_PYTHON -m src.structure.segment.window --run struct_v4_win5 --frames-ever
 墙体几何的工作台页面 `docs/structure-geom-3d.html`（抬升的点、射线切口、封闭、厚度、GT 对照）的数据也从 `artifacts/structure/` 打包：
 
 ```bash
+.venv/bin/python -m pagegen.build_structure_gt                          # → docs/assets/structure-gt/data.js（GT 对照，先跑）
 .venv/bin/python -m pagegen.build_structure_geom --run struct_v4_win5   # → docs/assets/structure-geom/data.js
 ```
+
+GT 页面 `docs/structure-gt-3d.html` 只读 ScanNet 标注网格：把墙实例拆成平面、合成 9 个墙面，门窗等表示在所在墙面上，再量出能量的墙厚。它只用来对照，`src/` 里没有任何代码读它。
 
 几个容易忘的约定：
 
