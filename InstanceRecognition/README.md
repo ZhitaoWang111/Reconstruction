@@ -43,6 +43,7 @@ pagegen/build_result.py      结果页
 pagegen/build_records.py     交互记录页
 pagegen/build_viewer.py      渲染器 bundle 装配
 pagegen/build_mask_project.py mask 投影检查页
+pagegen/build_walls_handoff.py 墙体交接文件预览页
 pagegen/templates/           result/  records/  mask_project/  shared/
 ```
 
@@ -157,6 +158,14 @@ taskset -c 0 .venv/bin/python -u -m src.harness.run \
 
 中间文件在 `artifacts/structure/<run>/`，交接文件在 `artifacts/handoff/scene0000_00/walls_harness/`（`walls.json`、每面墙最多 3 张关键帧及按墙切开的 mask、`preview.png`、给下游的 `README.md`）。字段定义在 `src/handoff/walls_schema.py`。
 
+预览页（平面图、每面墙的观测/推断分段与关键帧、用文件里的位姿把墙面投到关键帧上、3D）：
+
+```bash
+.venv/bin/python -m pagegen.build_walls_handoff        # → site/handoff/scene0000_00/walls_harness/index.html
+```
+
+模板在 `pagegen/templates/walls_handoff/`，和其他模板一样不进版本库。
+
 几个容易忘的约定：
 
 - 墙的线是**房间一侧的墙面**，沿 start→end 走时房间在左手边；厚度朝 `normal_to_back` 加，所以改厚度不会改变房间大小。
@@ -212,7 +221,7 @@ taskset -c 0 .venv/bin/python -u -m src.harness.run \
 ## 测试
 
 ```bash
-.venv/bin/python -m pytest tests/ -q     # 325 passed
+.venv/bin/python -m pytest tests/ -q     # 326 passed
 ```
 
 覆盖 Harness 决策循环与页面构建两条链路。`src/web/frontend/` 那棵旧网页源码树、`src/data/` 的 ScanNet reader、`src/perception/` 的推理侧（model_service / pipeline / SAM3）、以及旧树的 22 个兼容 shim 都不在本树的移植范围内。

@@ -209,3 +209,18 @@ def test_real_handoff_marks_what_is_assumed():
     assert all(w["thickness_kind"] == "assumed" for w in doc["walls"])
     inferred = {w["id"]: w["evidence"]["inferred_m"] / w["length_m"] for w in doc["walls"]}
     assert inferred["ext_W"] > 0.7 and inferred["ext_S"] < 0.1
+
+
+@real
+@pytest.mark.skipif(not (Path(__file__).resolve().parents[1] / "pagegen/templates/walls_handoff/page.js").is_file(),
+                    reason="page templates are not under version control")
+def test_page_builder_publishes_every_key_frame(tmp_path):
+    from pagegen import build_walls_handoff as page
+    page.build(REAL, tmp_path / "page", rays=tmp_path / "no_rays.npz")          # no rays: no background
+    text = (tmp_path / "page/walls.js").read_text()
+    payload = json.loads(text[len("window.WALLS="):-2])
+    assert payload["background"] is None
+    frames = [k for w in payload["doc"]["walls"] for k in w["key_frames"]]
+    assert frames and all((tmp_path / "page" / k[f]).is_file() for k in frames for f in ("rgb", "mask", "boxed"))
+    assert {"index.html", "page.js", "page.css"} <= {p.name for p in (tmp_path / "page").iterdir()}
+    assert json.loads((REAL / "walls.json").read_text())["walls"][0]["key_frames"][0]["rgb"].startswith("keyframes/")
