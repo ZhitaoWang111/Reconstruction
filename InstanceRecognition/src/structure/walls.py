@@ -120,6 +120,34 @@ def robust_vertical(P, N, idx, rounds=3):
     return c, n, keep
 
 
+def opening_bounds(solid, free, i0, i1, j0, j1):
+    """What closes a see-through block of cells [i0, i1) x [j0, j1) on each side.
+
+    left / right / top: "solid" when most cells just outside that side are wall the rays stop on,
+    "extent_end" when that side is the end of the observed wall (the grid stops there: the wall
+    may simply end), "unseen" otherwise.
+    bottom: "solid" when wall closes it from below (a window sill), "floor" when nothing solid lies
+    between the block and the floor - rays aimed that low hit the floor in front of the wall first,
+    so the cells under a doorway are unseen rather than open; the doorway reaches the floor.
+    """
+    hard = solid >= MIN_RAYS
+    seen = hard | free
+
+    def side(cells_hard, cells_seen, at_edge):
+        if at_edge:
+            return "extent_end"
+        n = cells_hard.size
+        return "solid" if n and cells_hard.sum() >= 0.5 * n else "unseen"
+
+    na = solid.shape[0]
+    left = side(hard[i0 - 1, j0:j1], seen[i0 - 1, j0:j1], i0 == 0) if i0 > 0 else "extent_end"
+    right = side(hard[i1, j0:j1], seen[i1, j0:j1], False) if i1 < na else "extent_end"
+    top = side(hard[i0:i1, j1:].any(1), None, j1 >= solid.shape[1]) if j1 < solid.shape[1] else "extent_end"
+    under = hard[i0:i1, :j0]
+    bottom = "floor" if (j0 == 0 or not under.any(1).mean() >= 0.5) else "solid"
+    return {"left": left, "right": right, "top": top, "bottom": bottom}
+
+
 def ray_grid(rays, c, n, lo, hi):
     return rays.grid(c, n, lo, hi, CELL, DRIFT, Z_LO, Z_HI)
 
@@ -281,7 +309,12 @@ def walls(run: str, dump: bool = False) -> dict:
             a0, a1 = rec["a"][0] + ia.min() * CELL, rec["a"][0] + (ia.max() + 1) * CELL
             z0, z1 = Z_LO + iz.min() * CELL, Z_LO + (iz.max() + 1) * CELL
             above = solid[ia.min():ia.max() + 1, iz.max() + 1:]
+            bounds = opening_bounds(solid, free, ia.min(), ia.max() + 1, iz.min(), iz.max() + 1)
+            seen_bottom = z0
+            if bounds["bottom"] == "floor":
+                z0 = 0.0                                   # nothing solid under it: the hole reaches the floor
             rec["openings"].append({"a": [float(a0), float(a1)], "z": [float(z0), float(z1)],
+                                    "seen_bottom_m": float(seen_bottom), "bounds": bounds,
                                     "width_m": float(a1 - a0), "height_m": float(z1 - z0),
                                     "cells_m2": float(len(ia) * CELL ** 2),
                                     "fill": float(len(ia) * CELL ** 2 / ((a1 - a0) * (z1 - z0))),

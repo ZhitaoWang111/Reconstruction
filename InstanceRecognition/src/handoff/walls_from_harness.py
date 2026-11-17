@@ -217,6 +217,10 @@ def build_walls(closed: dict, planes: dict, frames: Frames):
                 a0, a1 = round(max(0.0, along[0]), 4), round(min(L, along[1]), 4)
                 if a1 - a0 < 0.05:
                     continue
+                bd = o.get("bounds") or {}
+                if any(bd.get(k) not in ws.OPENING_SIDE_BOUNDS for k in ("left", "right", "top")) \
+                        or bd.get("bottom") not in ws.OPENING_BOTTOM_BOUNDS:
+                    continue                                 # not closed by wall on every side: not a hole we can vouch for
                 z0, z1 = round(o["z"][0], 4), round(o["z"][1], 4)
                 # floor frame first, so the hole composes with the wall line the consumer builds from;
                 # the scan-frame copy saves it a transform
@@ -226,10 +230,12 @@ def build_walls(closed: dict, planes: dict, frames: Frames):
                               "width_m": round(a1 - a0, 3), "height_m": round(z1 - z0, 3),
                               "kind": "opening", "source": "ray_test", "rays_through": int(o["rays"]),
                               "closed_above": bool(o["closed_above"]),
+                              "bounds": o["bounds"], "seen_bottom_m": round(o["seen_bottom_m"], 4),
                               "corners_floor": [[round(float(v), 5) for v in q_] for q_ in corners],
                               "corners_scan": scan,
-                              "note": "rays see through the wall here from floor to top, with solid wall above; "
-                                      "what fills it (or nothing) was not determined"})
+                              "note": "rays see through the wall here, with wall on both sides and above; when bounds.bottom "
+                                      "is floor, the low strip the rays could not reach (they hit the floor "
+                                      "first) is taken to be open too, so the hole starts at z = 0"})
         out.append({
             "id": r["id"], "role": r["role"],
             "start_floor": [round(float(x), 5) for x in r["P0"]], "end_floor": [round(float(x), 5) for x in r["P1"]],
@@ -502,6 +508,7 @@ README = """# 墙体交接文件（walls/v1）
 5. `openings` 是射线检验**测到的洞**：从这个洞看过去，墙从下到上都被射线穿过，上方还有实墙封住（`closed_above`）。`from_m` / `to_m` 是沿墙位置（从 start 起算），`z_floor` 是离地高度范围（地面坐标系），`corners_floor` 是这个洞的四角（地面坐标系，顺序同墙段：起点下、终点下、终点上、起点上），`corners_scan` 是同一组点换算到扫描坐标系。生成墙体时要在这些位置留出洞。
    - 这里只有**开着的**门洞和通道。关着的门扇、玻璃窗会把射线挡在门面或玻璃面上，测不到，所以某个墙的 `openings` 为空，只说明“没测到洞”，不等于“这面墙没有门或窗”。
    - `kind` 只写 `opening`，不写门或窗：射线只能说明那里是个洞，不能说明洞里是门、是窗还是什么都没有。
+   - `bounds` 说明洞的四条边各由什么界定：左、右、上为 `solid`（射线停在实墙上）；下边为 `floor`（洞和地面之间没有实墙，贴地那一条射线打不到，按到地面处理，`z_floor` 从 0 起，`seen_bottom_m` 是实际看到的最低处）或 `solid`（下方有墙，例如窗台）。只有四边都这样界定的洞才会写进来。
 
 ## 外观：关键帧
 

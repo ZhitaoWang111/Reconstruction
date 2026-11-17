@@ -122,6 +122,12 @@ def check(directory: Path) -> list[str]:
                 problems.append(f"{tag}: width_m disagrees with from_m/to_m")
             if abs(o["height_m"] - (o["z_floor"][1] - o["z_floor"][0])) > TOL:
                 problems.append(f"{tag}: height_m disagrees with z_floor")
+            edges = o["bounds"] or {}
+            if any(edges.get(k) not in ws.OPENING_SIDE_BOUNDS for k in ("left", "right", "top")) \
+                    or edges.get("bottom") not in ws.OPENING_BOTTOM_BOUNDS:
+                problems.append(f"{tag}: bounds {edges} - sides and top must be solid, bottom solid or floor")
+            elif (edges["bottom"] == "floor") != (abs(o["z_floor"][0]) <= TOL):
+                problems.append(f"{tag}: bottom bound {edges['bottom']} disagrees with z_floor {o['z_floor']}")
             if o["kind"] != "opening" or o["source"] not in ws.OPENING_SOURCES:
                 problems.append(f"{tag}: kind must be opening, source one of {ws.OPENING_SOURCES}")
             quad = np.asarray(o["corners_floor"], float)

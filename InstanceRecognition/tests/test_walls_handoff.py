@@ -130,7 +130,9 @@ def _opening(w, a0, a1, z0, z1):
     quad = [[*(a + s * d), z] for s, z in ((a0, z0), (a1, z0), (a1, z1), (a0, z1))]
     return {"from_m": a0, "to_m": a1, "z_floor": [z0, z1], "width_m": round(a1 - a0, 3),
             "height_m": round(z1 - z0, 3), "kind": "opening", "source": "ray_test", "rays_through": 500,
-            "closed_above": True, "corners_floor": [[round(v, 5) for v in q] for q in quad],
+            "closed_above": True, "bounds": {"left": "solid", "right": "solid", "top": "solid",
+                                             "bottom": "floor" if z0 == 0 else "solid"},
+            "seen_bottom_m": max(z0, 0.2), "corners_floor": [[round(v, 5) for v in q] for q in quad],
             "corners_scan": [[round(v, 5) for v in q] for q in quad], "note": "rays see through"}
 
 
@@ -149,6 +151,8 @@ def test_a_measured_opening_passes(tmp_path):
     ({"source": "guess"}, "kind must be opening"),
     ({"corners_floor": [[0, 1, 0]] * 4}, "not on the wall's face"),        # 1 m off the south wall's line
     ({"corners_scan": [[0, 0, 0]] * 4}, "corners_scan is not corners_floor"),
+    ({"bounds": {"left": "unseen", "right": "solid", "top": "solid", "bottom": "floor"}}, "sides and top must be solid"),
+    ({"bounds": {"left": "solid", "right": "solid", "top": "solid", "bottom": "solid"}}, "disagrees with z_floor"),
 ])
 def test_a_bad_opening_is_caught(tmp_path, change, message):
     doc = _square(tmp_path)
@@ -271,6 +275,7 @@ def test_real_handoff_carries_the_measured_opening():
     assert len(holes) == 1
     wid, o = holes[0]
     assert (wid, o["kind"], o["source"]) == ("int_3", "opening", "ray_test")
-    assert o["width_m"] == pytest.approx(0.6, abs=0.05) and o["height_m"] == pytest.approx(1.7, abs=0.05)
+    assert o["width_m"] == pytest.approx(0.6, abs=0.05) and o["height_m"] == pytest.approx(1.9, abs=0.05)
+    assert o["z_floor"][0] == 0.0 and o["bounds"]["bottom"] == "floor" and o["seen_bottom_m"] == pytest.approx(0.2)
     assert o["closed_above"] is True
     assert "openings" not in doc["not_included"]

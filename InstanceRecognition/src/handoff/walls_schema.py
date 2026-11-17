@@ -74,7 +74,11 @@ SEGMENT_REQUIRED = ("from_m", "to_m", "kind", "source_planes")
 # the same hole in the scan frame. `kind` is opening, not door or window, because the ray
 # test shows a hole and nothing about what fills it.
 OPENING_REQUIRED = ("from_m", "to_m", "z_floor", "width_m", "height_m", "kind", "source",
-                    "rays_through", "closed_above", "corners_floor", "corners_scan")
+                    "rays_through", "closed_above", "bounds", "seen_bottom_m", "corners_floor", "corners_scan")
+
+# How each edge of an opening is closed. Sides and top must be wall; the bottom is wall or the floor.
+OPENING_SIDE_BOUNDS = ("solid",)
+OPENING_BOTTOM_BOUNDS = ("solid", "floor")
 
 KEYFRAME_REQUIRED = (
     "role", "seq", "source_frame_id", "rgb", "mask", "boxed", "bbox_xyxy",
