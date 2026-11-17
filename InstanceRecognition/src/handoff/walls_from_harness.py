@@ -52,6 +52,7 @@ MIN_AREA = 0.25            # m2 of visible wall for a candidate key frame (a str
 MAX_VIEW_DEG = 75.0        # steeper views are not key frames
 COVER_BIN = 0.10           # m; wall-surface cells (along x height) for the coverage-greedy choice
 STOP_NEW_M2 = 0.15         # after the first frame: stop when the best frame adds less new wall surface than this
+OUTLINE_PX = 3             # the wall outline in boxed.jpg: a ring this wide just outside the mask
 RECT_MAX_DEG = 60.0        # rectified views only below this view angle
 RECT_PX_PER_M = 150
 FONT_CJK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
@@ -335,24 +336,28 @@ def choose(cands):
 
 
 def draw_boxed(rgb: Image.Image, mask: np.ndarray, label: str) -> Image.Image:
-    """The frame with everything but this wall dimmed, the wall outlined in the house yellow."""
-    a = np.asarray(rgb).astype(np.float32)
-    a[~mask] *= 0.45
-    edge = mask & ~ndimage.binary_erosion(mask, iterations=3)
-    a[edge] = BOX_COLOUR
-    image = Image.fromarray(a.astype(np.uint8))
+    """The frame as it is, with the wall's outline drawn just outside the mask and a label.
+
+    Not one pixel of the wall is changed: the downstream module judges the wall's colour and
+    texture from this picture, so nothing is dimmed, tinted or drawn over the wall. The
+    outline is a ring outside the mask, and the label goes in the image corner that covers
+    the least wall.
+    """
+    a = np.asarray(rgb).copy()
+    ring = ndimage.binary_dilation(mask, iterations=OUTLINE_PX) & ~mask
+    a[ring] = BOX_COLOUR
+    image = Image.fromarray(a)
     draw = ImageDraw.Draw(image)
     try:
         font = ImageFont.truetype(FONT_LATIN, max(17, image.width // 45))
     except OSError:
         font = ImageFont.load_default()
-    ys, xs = np.nonzero(mask)
-    x, y = (int(xs.min()), int(ys.min())) if len(xs) else (0, 0)
     tb = draw.textbbox((0, 0), label, font=font)
-    x = min(x, max(0, image.width - (tb[2] - tb[0]))); y = min(y, max(0, image.height - (tb[3] - tb[1])))
-    pos = (x - tb[0], y - tb[1])
-    draw.rectangle(draw.textbbox(pos, label, font=font), fill=(0, 0, 0))
-    draw.text(pos, label, font=font, fill=(255, 255, 255))
+    w, h = tb[2] - tb[0] + 8, tb[3] - tb[1] + 8
+    corners = [(0, 0), (image.width - w, 0), (0, image.height - h), (image.width - w, image.height - h)]
+    x, y = min(corners, key=lambda c: mask[c[1]:c[1] + h, c[0]:c[0] + w].sum())
+    draw.rectangle((x, y, x + w - 1, y + h - 1), fill=(0, 0, 0))
+    draw.text((x + 4 - tb[0], y + 4 - tb[1]), label, font=font, fill=(255, 255, 255))
     return image
 
 
@@ -467,7 +472,7 @@ README = """# 墙体交接文件（walls/v1）
 | `walls.json` | 全部数据：层高、厚度、外墙轮廓、每面墙的几何、观测/推断分段、连接方式、关键帧 |
 | `keyframes/<墙 id>/<seq>_rgb.jpg` | 关键帧原图（{w}×{h}） |
 | `keyframes/<墙 id>/<seq>_mask.png` | 这面墙在这一帧里露出来的部分（0/255），已经按墙切开，不含家具、门窗和别的墙 |
-| `keyframes/<墙 id>/<seq>_boxed.jpg` | 预览：墙以外变暗，墙的轮廓画黄线 |
+| `keyframes/<墙 id>/<seq>_boxed.jpg` | 预览：原图不做任何调色，只在墙 mask **外侧**画一圈黄线标出这面墙，标签放在遮挡墙面最少的角上。墙面像素只差 JPEG 重新压缩带来的几个灰度级 |
 | `preview.png` | 俯视图：占地、观测段（实线）、推断段（灰虚线）、关键帧相机位置 |
 
 ## 坐标
@@ -489,6 +494,7 @@ README = """# 墙体交接文件（walls/v1）
 
 ## 外观：关键帧
 
+- **判断墙的外观请用 `rgb.jpg` + `mask.png`**：`rgb.jpg` 是原始帧的逐字节拷贝，`mask.png` 标出这面墙露出来的像素。`boxed.jpg` 只是帮人认出是哪面墙的预览，经过一次 JPEG 重新压缩。
 - 每面墙最多 3 帧，`role` 依次为 primary / secondary / third。选法是贪心：每次挑新拍到的墙段最多、拍得最正的一帧，所以三帧通常拍的是墙的不同段。
 - `covers_m` 是这一帧拍到的沿墙范围（从 start 起算的米数）。推断补上的墙段没有任何一帧拍到；生成外观时请参考同一面墙已观测部分的外观。
 - `view_angle_deg` 是视线和墙面法向的夹角，0° 表示正对。斜视超过 60° 的帧，墙面会被拉伸得厉害。
@@ -578,7 +584,8 @@ def build(run: str, output: Path, scene: Path = SCENE, runs: Path = MASK_RUNS, r
             shutil.copyfile(FRAMES / f"frame_{c['fid']:06d}.jpg", output / f"{stem}_rgb.jpg")
             Image.fromarray((c["mask"] * 255).astype(np.uint8), "L").save(output / f"{stem}_mask.png")
             rgb = Image.open(FRAMES / f"frame_{c['fid']:06d}.jpg").convert("RGB")
-            draw_boxed(rgb, c["mask"], f"{w['id']} {role}").save(output / f"{stem}_boxed.jpg", quality=92)
+            # 4:4:4 chroma: with the default 4:2:0 the yellow ring bled into the wall pixels beside it
+            draw_boxed(rgb, c["mask"], f"{w['id']} {role}").save(output / f"{stem}_boxed.jpg", quality=95, subsampling=0)
             ys, xs = np.nonzero(c["mask"])
             rec = {"role": role, "seq": c["seq"], "source_frame_id": c["fid"],
                    "rgb": f"{stem}_rgb.jpg", "mask": f"{stem}_mask.png", "boxed": f"{stem}_boxed.jpg",
