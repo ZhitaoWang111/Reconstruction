@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from src.structure.segment import window as wn
-from src.structure.segment.frame import MIN_AREA_FRACTION
+from src.perception.point_prompt.clicks import MIN_AREA_FRACTION
 
 W, H = 160, 120
 

@@ -1,17 +1,26 @@
-"""One frame of a segmentation conversation: SAM, the clicking tools and the images they return.
+"""Point-prompt segmentation, the shared part: SAM3 driven by clicks, and one frame's tools.
 
-`Frame` holds one frame's plan, candidates and kept masks. Its tools (plan, segment,
-combine, zoom, keep, finish) are what window.py exposes to the model, with a frame id
-added to each call. Ids (P1, C1, ...) are counted across the whole window, so a plan id
-or candidate id names exactly one frame.
+A vision model plans what to segment in a frame, clicks positive and negative points for
+each item, SAM3 turns each point set into a mask, and the model keeps the mask, segments
+again or skips the item. Two pipelines drive this with their own conversations and prompts:
 
-Rules that came out of the scene0000_00 runs and are enforced here rather than in the
-prompt, so the model gets a clear error instead of a silent bad mask:
+* src.perception.point_prompt.objects - one frame per conversation, free object labels;
+* src.structure.segment.window       - a window of frames, labels wall / floor / door / window.
 
-* labels must be in the run's vocabulary (wall / floor / door / window);
+`Frame` holds one frame's plan, candidates and kept masks and implements the tools (plan,
+segment, combine, zoom, keep, finish) on it. Ids (P1, C1, ...) come from a counter the caller
+passes in, so in a multi-frame conversation an id names exactly one frame.
+
+Rules enforced here rather than in a prompt, so the model gets a clear error instead of a
+silent bad mask:
+
+* labels must be in the run's vocabulary, when it has one;
 * a mask below MIN_AREA_FRACTION of the frame is not kept: the lifting drops it anyway;
-* `segment` reports positive points outside the mask, negative points inside it, masks
-  in several pieces, and overlap with masks already kept in that frame.
+* `segment` reports positive points outside the mask, negative points inside it, masks in
+  several pieces, and overlap with masks already kept in that frame.
+
+Frames are `frame_<id>.jpg` under the frames directory; results go to `result.json` and
+`masks/` in the frame's output folder, the layout lifting and source packing read.
 """
 from __future__ import annotations
 
@@ -170,9 +179,11 @@ class Sam:
 
 # ---------------------------------------------------------------- one frame
 class Frame:
-    def __init__(self, fid: int, sam, out: Path, frames_dir: Path, vocab, ids: dict, model: str):
-        self.fid, self.sam, self.out, self.vocab, self.ids, self.model = fid, sam, out, list(vocab), ids, model
-        self.tag = f"frame {fid}  "
+    def __init__(self, fid: int, sam, out: Path, frames_dir: Path, vocab, ids: dict, model: str, tag: str | None = None):
+        """vocab: allowed labels, or None for free labels. ids: shared {'P': n, 'C': n} counter."""
+        self.fid, self.sam, self.out, self.ids, self.model = fid, sam, out, ids, model
+        self.vocab = list(vocab) if vocab else None
+        self.tag = f"frame {fid}  " if tag is None else tag
         self.img = Image.open(frames_dir / f"frame_{fid:06d}.jpg").convert("RGB")
         self.rgb = np.asarray(self.img)
         self.H, self.W = self.rgb.shape[:2]
@@ -204,7 +215,7 @@ class Frame:
     # tools -------------------------------------------------------------
     def plan_item(self, label: str, where: str) -> str:
         label = label.strip()
-        if label not in self.vocab:
+        if self.vocab and label not in self.vocab:
             raise ValueError(f"label {label!r} is not allowed; the label must be exactly one of {self.vocab}")
         pid = self._new_id("P")
         self.plan[pid] = {"label": label, "where": where.strip()}

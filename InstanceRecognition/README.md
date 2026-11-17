@@ -32,7 +32,8 @@ src/harness/                 run, publish, client, observations, state, tools,
 src/geometry/                amb3r_mask_source（唯一的 lifting）,
                              assemble_perception_source（感知产物 → liftable source）,
                              backproject_masks（共享 helper）, incremental_objects
-src/perception/               gpt_sam31, label_frames, gpt_labels（感知链路）
+src/perception/               gpt_sam31, label_frames, gpt_labels（文本提示感知链路）
+                             point_prompt/（点选感知：clicks 共用的 SAM3 点选、objects 物体、source 打包）
 src/structure/               结构件：segment/（2D 点选分割）, lift, rays, walls, close（→ 封闭墙体）,
                              prompts/（分割 prompt，按版本存）
 src/handoff/                 交接文件：物体（schema, from_gt, check）、墙体（walls_schema,
@@ -45,6 +46,7 @@ pagegen/build_records.py     交互记录页
 pagegen/build_viewer.py      渲染器 bundle 装配
 pagegen/build_mask_project.py mask 投影检查页
 pagegen/build_walls_handoff.py 墙体交接文件预览页
+pagegen/build_point_prompt.py 点选物体感知的逐帧结果页（docs/point-prompt-full100*.html）
 pagegen/build_structure_geom.py 墙体几何工作台页面的数据
 pagegen/build_structure_gt.py 结构件 GT 页面的数据（ScanNet 标注，只用于评估）
 pagegen/templates/           result/  records/  mask_project/  shared/
@@ -146,6 +148,26 @@ taskset -c 0 .venv/bin/python -u -m src.harness.run \
 
 理由以模型输出的英文原文呈现，本树不做翻译（此前的中译后处理已移除）。
 
+## 点选物体感知（GPT 点选 + SAM3）
+
+文本提示感知的替代方案：模型先列出一帧里要分的物体，逐个点正负点，SAM3 出 mask，模型看结果后保留、重点、合并同一件的几块，或跳过。物体边界只认结构断口（缝、立柱、侧板、进深台阶、转角、材料变化），所以“电视柜 + 书柜墙”不会被合成一件。
+
+```bash
+$SAM31_PYTHON -m src.perception.point_prompt.objects --run point-full100_v2           # 默认就是 full100_v2 的设置
+.venv/bin/python -m src.perception.point_prompt.source pack --run point-full100_v2 \
+    --output artifacts/sources/scene0000_00/gpt_point_full100_v2
+.venv/bin/python -m src.geometry.amb3r_mask_source --source artifacts/sources/scene0000_00/gpt_point_full100_v2 \
+    --output artifacts/sources/scene0000_00/scene_amb3r_point_full100_v2 --conf 0.3
+.venv/bin/python -m src.perception.point_prompt.source renumber artifacts/sources/scene0000_00/scene_amb3r_point_full100_v2
+.venv/bin/python -m tools.point_prompt.gt_eval --run point-full100_v2                   # 对照 ScanNet 2D GT（只用于评估）
+.venv/bin/python -m pagegen.build_point_prompt --run point-full100_v2 --left point-full100_v1 --out point-prompt-full100-v2.html
+```
+
+- 默认值是喂给 `harness-v15-amb3r-point-full100frames-20261112-0935` 的那一轮：100 帧、`openai/gpt-6-sol`、prompt `src/perception/prompts/point_objects_sep_v5.txt`（sha256 `4cde57c3`）、每帧最多 24 轮。
+- 运行记录在 `artifacts/experiments/point-<run>/perception/point_prompt/`（full100_v1/v2、sep_v2–v5、trial1–3、smoke）；历次 GT 评估结果和当时的实验笔记在 `artifacts/experiments/analysis/point_prompt/`。
+- 2026-11 从 `tmp/point_prompt/` 迁入。用新代码重新打包 full100_v2，source 的 manifest 和 801 个 mask 与现有的逐字节相同；renumber 后的 npz 数组也相同；GT 评估、两个结果页也都逐字节复现。
+- `src/perception/point_prompt/clicks.py` 同时被结构件分割（`src/structure/segment/window.py`）使用。
+
 ## 墙体几何与墙体交接
 
 从 RGB 帧到给墙体生成模块的交接文件 `walls/v1`。全程不读 ScanNet 标注。
@@ -238,7 +260,7 @@ GT 页面 `docs/structure-gt-3d.html` 只读 ScanNet 标注网格：把墙实例
 ## 测试
 
 ```bash
-.venv/bin/python -m pytest tests/ -q     # 335 passed
+.venv/bin/python -m pytest tests/ -q     # 340 passed
 ```
 
 覆盖 Harness 决策循环与页面构建两条链路。`src/web/frontend/` 那棵旧网页源码树、`src/data/` 的 ScanNet reader、`src/perception/` 的推理侧（model_service / pipeline / SAM3）、以及旧树的 22 个兼容 shim 都不在本树的移植范围内。

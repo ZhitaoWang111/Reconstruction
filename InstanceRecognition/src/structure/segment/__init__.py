@@ -14,4 +14,6 @@ Output, one directory per run under artifacts/structure/<run>/segmentation/:
     config.json, prompt.txt, summary.json
 
 The prompt is versioned in src/structure/prompts/; the run records its hash.
+The clicking itself (SAM3, the per-frame tools) is shared with the object perception and
+lives in src.perception.point_prompt.clicks.
 """

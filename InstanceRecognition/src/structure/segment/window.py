@@ -28,7 +28,8 @@ from pathlib import Path
 from src.harness.client import Client, image as image_part
 
 from ..frames import FRAMES, OUT_ROOT, frame_slots
-from .frame import POINT, SAM_CHECKPOINT, Frame, Sam, draw_grid, kept_overview, tiles_sheet, titled
+from src.perception.point_prompt.clicks import (POINT, SAM_CHECKPOINT, Frame, Sam, draw_grid, kept_overview,
+                                                tiles_sheet, titled)
 
 PROMPTS = Path(__file__).resolve().parents[1] / "prompts"
 PROMPT = PROMPTS / "structure_v4.txt"
