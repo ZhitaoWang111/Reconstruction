@@ -1,4 +1,4 @@
-"""Step 1: lift the kept masks of a structure segmentation run into 3D.
+"""Step 1: lift the kept masks of a structure segmentation run (src.structure.segment) into 3D.
 
     python -m src.structure.lift --run struct_v4_win5
 
@@ -21,7 +21,7 @@ from PIL import Image
 from src.geometry.amb3r_mask_source import AMBR3R_INTERMEDIATE, AMBR3R_SIZE, _sample_rgb
 from src.geometry.backproject_masks import align_mask
 
-from .frames import FRAMES, MASK_RUNS, PointMaps, frame_slots, run_dir
+from .frames import FRAMES, PointMaps, frame_slots, masks_dir, run_dir
 
 LABELS = ("wall", "floor", "door", "window")
 NORMAL_STEP = 3            # grid cells each side for the normal's finite difference
@@ -44,7 +44,7 @@ def lift(run: str, maps: PointMaps | None = None) -> dict:
     slot = frame_slots()
     cols = {k: [] for k in ("xyz", "normal", "rgb", "frame", "mask", "label")}
     cams, masks, dropped = {}, [], 0
-    for folder in sorted((MASK_RUNS / run).glob("frame_*")):
+    for folder in sorted(masks_dir(run).glob("frame_*")):
         result = json.loads((folder / "result.json").read_text())
         fid = int(result["frame_id"]); seq = slot[fid]
         pts = maps.lift(seq)

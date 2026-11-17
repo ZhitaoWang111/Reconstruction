@@ -37,7 +37,7 @@ from scipy import ndimage
 from src import config
 from src.geometry.amb3r_mask_source import AMBR3R_INTERMEDIATE, AMBR3R_SIZE, DEFAULT_NPZ, DEFAULT_SIM3
 from src.geometry.backproject_masks import align_mask, crop_box
-from src.structure.frames import FRAMES, MASK_RUNS, OUT_ROOT, SCENE, FloorFrame, PointMaps, frame_slots
+from src.structure.frames import FRAMES, OUT_ROOT, SCENE, FloorFrame, PointMaps, frame_slots, masks_dir
 from src.structure.lift import grid_normals
 
 from . import schema, walls_schema as ws
@@ -538,7 +538,8 @@ def known_issues_zh(doc: dict) -> list[str]:
 
 
 # ---------------------------------------------------------------- main
-def build(run: str, output: Path, scene: Path = SCENE, runs: Path = MASK_RUNS, rectified: bool = False) -> dict:
+def build(run: str, output: Path, scene: Path = SCENE, rectified: bool = False) -> dict:
+    segmentation = masks_dir(run)
     geom = OUT_ROOT / run
     closed = json.loads((geom / "closed.json").read_text())
     planes = json.loads((geom / "walls.json").read_text())
@@ -554,14 +555,14 @@ def build(run: str, output: Path, scene: Path = SCENE, runs: Path = MASK_RUNS, r
     H = float(closed["storey"]["height_m"])
 
     walls = build_walls(closed, planes)
-    print(f"{len(walls)} walls; scoring key frames over {len(list((runs / run).glob('frame_*')))} segmented frames", flush=True)
-    cands = frame_candidates(walls, frames, runs / run, slot, width, height, H)
+    print(f"{len(walls)} walls; scoring key frames over {len(list(segmentation.glob('frame_*')))} segmented frames", flush=True)
+    cands = frame_candidates(walls, frames, segmentation, slot, width, height, H)
 
     if output.exists():
         shutil.rmtree(output)
     (output / "keyframes").mkdir(parents=True)
     clarity = {int(p.name.split("_")[1]): frame_clarity(FRAMES / f"frame_{int(p.name.split('_')[1]):06d}.jpg")
-               for p in (runs / run).glob("frame_*")}
+               for p in segmentation.glob("frame_*")}
     clarity_median = float(np.median(list(clarity.values())))
     cam_xy = {}
     for w in walls:
@@ -623,7 +624,7 @@ def build(run: str, output: Path, scene: Path = SCENE, runs: Path = MASK_RUNS, r
                              "with a rectangle; GT was not read",
                      "sources": {"closed_walls": str(geom / "closed.json"),
                                  "wall_planes": str(geom / "walls.json"),
-                                 "masks": str(runs / run), "rgb": str(FRAMES), "point_maps": str(DEFAULT_NPZ),
+                                 "masks": str(segmentation), "rgb": str(FRAMES), "point_maps": str(DEFAULT_NPZ),
                                  "sim3": str(DEFAULT_SIM3)}},
         "coordinate_frame": "scannet_scan", "units": "meters", "up_axis": "Z",
         "floor_frame_to_scan": [[round(float(x), 9) for x in row] for row in frames.floor_to_scan],

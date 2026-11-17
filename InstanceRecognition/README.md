@@ -33,7 +33,8 @@ src/geometry/                amb3r_mask_source（唯一的 lifting）,
                              assemble_perception_source（感知产物 → liftable source）,
                              backproject_masks（共享 helper）, incremental_objects
 src/perception/               gpt_sam31, label_frames, gpt_labels（感知链路）
-src/structure/               墙体几何：lift, rays, walls, close（结构件 mask → 封闭墙体）
+src/structure/               结构件：segment/（2D 点选分割）, lift, rays, walls, close（→ 封闭墙体）,
+                             prompts/（分割 prompt，按版本存）
 src/handoff/                 交接文件：物体（schema, from_gt, check）、墙体（walls_schema,
                              walls_from_harness, walls_check）
 src/visualization/           共享 helper：page_naming, object_bboxes, publish_gpt_viewer
@@ -146,9 +147,12 @@ taskset -c 0 .venv/bin/python -u -m src.harness.run \
 
 ## 墙体几何与墙体交接
 
-输入是一轮结构件分割（标签只有 wall / floor / door / window，每帧一个 `result.json`），输出是给墙体生成模块的交接文件 `walls/v1`。全程不读 ScanNet 标注。
+从 RGB 帧到给墙体生成模块的交接文件 `walls/v1`。全程不读 ScanNet 标注。
 
 ```bash
+# ① 2D 结构件分割（GPT 点选 + SAM3；需 SAM 环境与网关）：每 2 帧取 1 帧，5 帧一个对话
+$SAM31_PYTHON -m src.structure.segment.window --run struct_v4_win5 --frames-every 2
+# ② 墙体几何与交接
 .venv/bin/python -m src.structure.lift  --run struct_v4_win5    # mask 像素 → 带法向的三维点
 .venv/bin/python -m src.structure.rays                          # 全部帧的全部像素 → 射线（与 run 无关，只需跑一次）
 .venv/bin/python -m src.structure.walls --run struct_v4_win5    # 地面定竖直方向；逐 mask 拟合平面，射线检验切开墙线
@@ -156,6 +160,8 @@ taskset -c 0 .venv/bin/python -u -m src.harness.run \
 .venv/bin/python -m src.handoff.walls_from_harness --run struct_v4_win5
 .venv/bin/python -m src.handoff.walls_check artifacts/handoff/scene0000_00/walls_harness
 ```
+
+分割只标 wall / floor / door / window 四类（不标门框、镜子、天花板、窗帘；只有门扇才算门；不怕漏、怕污染），规则写在 `src/structure/prompts/structure_v4.txt`，词表、最小面积和“每个计划项都要保留或说明跳过”由代码强制。模型 `coding-openai/gpt-6-astra`，每个对话最多 30 轮。分割结果在 `artifacts/structure/<run>/segmentation/`（每帧 `result.json` 与 mask，每个对话的完整调用记录）。
 
 中间文件在 `artifacts/structure/<run>/`，交接文件在 `artifacts/handoff/scene0000_00/walls_harness/`（`walls.json`、每面墙最多 3 张关键帧及按墙切开的 mask、`preview.png`、给下游的 `README.md`）。字段定义在 `src/handoff/walls_schema.py`。
 
@@ -181,7 +187,7 @@ taskset -c 0 .venv/bin/python -u -m src.harness.run \
 - 层高 2.8 m 和墙厚 30 / 15 cm 是**假定值**（没有一帧拍到天花板，外墙背后从没被看到），在交接文件里标为 `assumed`。
 - 关键帧的相机位姿用 **AMB3R 自己的位姿**（经 Sim(3) 转到扫描坐标系），不用 ScanNet GT 位姿：墙是用 AMB3R 抬上去的，投回图像时 AMB3R 位姿差 5–16 px，GT 位姿差 24–79 px。
 
-结构件 2D 分割本身（GPT 点选 + SAM）还在 `tmp/point_prompt/` 里做实验，没有进 `src/`。
+`struct_v4_win5` 是在 `tmp/point_prompt/run_window.py` 时期跑的，迁移后 prompt 与工具完全一致（prompt sha256 相同），结果拷进了 `artifacts/structure/struct_v4_win5/segmentation/`；从这里重跑后面的步骤，产物与之前逐位相同。
 
 ## 三个页面的定位
 
@@ -228,7 +234,7 @@ taskset -c 0 .venv/bin/python -u -m src.harness.run \
 ## 测试
 
 ```bash
-.venv/bin/python -m pytest tests/ -q     # 326 passed
+.venv/bin/python -m pytest tests/ -q     # 335 passed
 ```
 
 覆盖 Harness 决策循环与页面构建两条链路。`src/web/frontend/` 那棵旧网页源码树、`src/data/` 的 ScanNet reader、`src/perception/` 的推理侧（model_service / pipeline / SAM3）、以及旧树的 22 个兼容 shim 都不在本树的移植范围内。

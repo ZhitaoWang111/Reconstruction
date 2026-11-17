@@ -21,16 +21,21 @@ from src.geometry.amb3r_mask_source import (AMBR3R_SIZE, DEFAULT_NPZ, DEFAULT_SI
                                            _apply_sim3_to_pose, _load_sim3)
 
 # Inputs
-MASK_RUNS = config.ROOT / "tmp/point_prompt/runs"          # the structure segmentation runs
 SLOTS = config.ARTIFACTS_ROOT / "sources/scene0000_00/gpt_sam31_uniform500_full_v1/manifest.json"
 FRAMES = config.ARTIFACTS_ROOT / "frames/scene0000_00"
 SCENE = config.SCANNET_ROOT / "scene0000_00"
 
-# Outputs
+# Outputs: everything per run under artifacts/structure/<run>/ (segmentation/ first, then
+# points, planes, closure); the scene rays do not depend on the run.
 OUT_ROOT = config.ARTIFACTS_ROOT / "structure"
 RAYS = OUT_ROOT / "scene_rays.npz"
 
 CONF = 0.3                 # AMB3R confidence floor (the lifting default)
+
+
+def masks_dir(run: str) -> Path:
+    """The 2D segmentation of a run (src.structure.segment): one frame_<id>/result.json per frame."""
+    return OUT_ROOT / run / "segmentation"
 
 
 def run_dir(run: str) -> Path:
