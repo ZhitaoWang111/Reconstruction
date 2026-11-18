@@ -124,6 +124,7 @@ class Amb3r:
         )
 
     def build(self, output, **kwargs):
+        kwargs.setdefault("frame_name", "scannet_scan")       # these tests cover the Sim(3) lift
         return lift.build(self.root / "pointmaps.npz", self.sim3,
                           self.source, output, 0.3, 0, None,
                           self.frames_dir, **kwargs)
@@ -305,3 +306,25 @@ def test_a_mask_below_the_area_floor_is_dropped_before_lifting(tmp_path):
     manifest = json.loads((kept / "manifest.json").read_text())
     assert manifest["masks_dropped_by_area"] == 0
     assert len(manifest["frames"][0]["instances"]) == 2
+
+
+def test_the_amb3r_floor_lift_uses_the_frame_and_not_the_sim3(tmp_path):
+    """Points and poses go through the frame file only; the backdrop is AMB3R's own cloud."""
+    perception = Amb3r(tmp_path)
+    s = 0.9
+    R = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])       # a turn about z
+    M = np.eye(4); M[:3, :3] = s * R; M[:3, 3] = [1.0, 2.0, 0.5]
+    frame_file = tmp_path / "amb3r_floor.json"
+    frame_file.write_text(json.dumps({"native_to_frame": M.tolist(), "scale": {"value": s, "source": "native"},
+                                      "definition": "d", "file": "f", "first_frame": {"amb3r_index": 0}}))
+    write_ply_file(tmp_path / lift.NATIVE_BACKDROP_NAME)
+    output = perception.build(tmp_path / "source", frame_name="amb3r_floor", frame_file=frame_file)
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["lifting_policy"] == lift.POLICY_FLOOR and manifest["coordinate_frame"] == "amb3r_floor"
+    assert manifest["frame"]["native_to_frame"] == M.tolist()
+    native = np.load(tmp_path / "pointmaps.npz")["pts"][0].reshape(-1, 3).astype(np.float64)
+    with np.load(output / "frames/0000.npz") as z:
+        expect = native[z["pixel_indices"]] @ M[:3, :3].T + M[:3, 3]
+        assert np.allclose(z["points_world"], expect, atol=1e-5)
+        assert np.allclose(z["camera_to_world"][:3, :3], R, atol=1e-6)          # rotation not scaled
+        assert np.allclose(z["camera_to_world"][:3, 3], M[:3, 3], atol=1e-6)   # native pose at the origin

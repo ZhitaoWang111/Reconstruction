@@ -15,13 +15,13 @@ from .publish import materialize
 from .inputs import build_window_content
 from .paths import resolve_recorded_path
 from src import config as app_config
-from src.geometry.amb3r_mask_source import POLICY as AMB3R_FRAME_POLICY
+from src.geometry.amb3r_mask_source import POLICY as AMB3R_FRAME_POLICY, POLICY_FLOOR as AMB3R_FLOOR_POLICY
 from pagegen.build_site import publish
 
 # The one source policy this tree builds. Exact matching is deliberate: it is
 # what stops an accidentally mis-pointed --source from silently running the
 # wrong geometry.
-ACCEPTED_LIFTING_POLICIES = (AMB3R_FRAME_POLICY,)
+ACCEPTED_LIFTING_POLICIES = (AMB3R_FRAME_POLICY, AMB3R_FLOOR_POLICY)
 
 
 def resolve_output(name, run_dir=None, site_dir=None):
@@ -258,6 +258,12 @@ def main():
             'mask pixels unprojected onto the network-predicted surface their own '
             'pixel sees (one point per retained mask pixel); incremental identity '
             'association only; no GT instance labels supplied',
+        AMB3R_FLOOR_POLICY:
+            'AMB3R per-frame point maps in the amb3r_floor delivery frame (AMB3R scaled and '
+            'stood on its own segmented floor, z up, z = 0 on the floor; no GT rotation or '
+            'translation, scale source recorded in the source manifest); mask pixels unprojected '
+            'onto the network-predicted surface their own pixel sees (one point per retained mask '
+            'pixel); incremental identity association only; no GT instance labels supplied',
     }.get(lifting_policy)
     if geometry_policy is None:
         parser.error(f'No geometry description for lifting_policy {lifting_policy!r}; '

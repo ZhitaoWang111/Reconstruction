@@ -19,8 +19,10 @@ from src.harness import run
 
 
 def test_accepted_set_is_the_amb3r_lift_and_nothing_else():
+    """The AMB3R lift in its two frames: the scan frame (old sources) and amb3r_floor (2026-11-18,
+    the delivery frame, user decision)."""
     assert AMB3R_FRAME_POLICY == 'amb3r_per_frame_v1'
-    assert run.ACCEPTED_LIFTING_POLICIES == (AMB3R_FRAME_POLICY,), (
+    assert run.ACCEPTED_LIFTING_POLICIES == (AMB3R_FRAME_POLICY, 'amb3r_floor_v1'), (
         'Widening the accepted set must be a deliberate act; a second entry here '
         'means some source policy was added without a decision.')
 

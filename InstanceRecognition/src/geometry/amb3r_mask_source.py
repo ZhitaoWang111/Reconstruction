@@ -15,6 +15,17 @@ One pixel yields at most one point, so there is no multi-ray ambiguity and no
 occlusion leakage. The cost is that the depth estimate is noisier than a GT
 mesh, especially in low-texture or symmetric regions.
 
+Coordinate frame (``--frame``):
+
+* ``amb3r_floor`` (default, ``amb3r_floor_v1``): the delivery frame of
+  docs/amb3r-floor-frame.md - AMB3R's own points and poses through
+  ``src.geometry.floor_frame.Frame`` only. No GT rotation or translation; the
+  frame file records where its scale came from. The backdrop is AMB3R's own
+  metric-head cloud, moved the same way.
+* ``scannet_scan`` (``amb3r_per_frame_v1``): the earlier sources - the oracle
+  Sim(3) fitted to ScanNet's GT camera poses puts everything in the scan frame.
+  Kept so those sources can be rebuilt; new sources should not use it.
+
 Usage::
 
     python -m src.geometry.amb3r_mask_source \\
@@ -48,7 +59,11 @@ from src.geometry.backproject_masks import (
     write_json,
 )
 
-POLICY = "amb3r_per_frame_v1"
+POLICY = "amb3r_per_frame_v1"                # scannet_scan, through the GT-fitted Sim(3)
+POLICY_FLOOR = "amb3r_floor_v1"              # amb3r_floor, no GT rotation/translation
+POLICIES = {"scannet_scan": POLICY, "amb3r_floor": POLICY_FLOOR}
+# AMB3R's own cloud (metric head, native coordinates): the backdrop of an amb3r_floor source.
+NATIVE_BACKDROP_NAME = "metric_head_preview_rgb.ply"
 
 # AMB3R's internal resolution after its own center-crop pipeline.
 AMBR3R_SIZE = (518, 392)          # width, height
@@ -179,6 +194,8 @@ def build(
     count: int | None = None,
     frames_dir: Path = DEFAULT_FRAMES,
     min_area_fraction: float = DEFAULT_MIN_MASK_AREA_FRACTION,
+    frame_name: str = "amb3r_floor",
+    frame_file: Path | None = None,
 ) -> Path:
     npz_path, sim3_path, source, output = (
         Path(p).resolve() for p in (npz_path, sim3_path, source, output)
@@ -190,7 +207,23 @@ def build(
     (output / "frames").mkdir()
     (output / "assets").mkdir()
 
-    transform, backdrop = _load_sim3(sim3_path)
+    if frame_name not in POLICIES:
+        raise ValueError(f"frame must be one of {sorted(POLICIES)}")
+    policy = POLICIES[frame_name]
+    if frame_name == "amb3r_floor":
+        from src.geometry.floor_frame import Frame
+        delivery = Frame.load(frame_file)
+        to_points = lambda p: delivery.points(p).astype(np.float32)
+        to_pose = lambda T: delivery.pose(T).astype(np.float32)
+        backdrop = npz_path.parent / NATIVE_BACKDROP_NAME
+        if not backdrop.is_file():
+            raise SystemExit(f"Missing AMB3R's own cloud for the backdrop: {backdrop}")
+        backdrop_to_frame = lambda p: delivery.points(p).astype(np.float32)
+    else:
+        transform, backdrop = _load_sim3(sim3_path)
+        to_points = lambda p: _apply_sim3(p, transform)
+        to_pose = lambda T: _apply_sim3_to_pose(T, transform)
+        backdrop_to_frame = lambda p: p
     source_manifest = json.loads((source / "manifest.json").read_text())
     frames = source_manifest["frames"]
     if count is not None:
@@ -243,10 +276,10 @@ def build(
         valid = claimed_flat & (conf_flat >= conf_threshold)
         pixel_indices = np.flatnonzero(valid).astype(np.int64)
 
-        # Pull the 3D positions and apply GT Sim(3).
+        # Pull the 3D positions and move them into the source's frame.
         pts_flat = pts_frame.reshape(-1, 3)
         local_pts = pts_flat[pixel_indices]          # (K, 3), AMB3R coords
-        world_pts = _apply_sim3(local_pts, transform) # (K, 3), GT world coords
+        world_pts = to_points(local_pts)             # (K, 3), the source's frame
 
         bits_flat = bits.reshape(-1)[pixel_indices].astype(np.uint32)
 
@@ -272,11 +305,10 @@ def build(
             })
             total_masks += 1
 
-        # The AMB3R pose for this frame, transformed into the scan coordinate
-        # frame the points live in. Downstream uses it for back-projection and
-        # viewpoint comparison without re-running the Sim(3) fit.
+        # The AMB3R pose for this frame, in the frame the points live in.
+        # Downstream uses it for back-projection and viewpoint comparison.
         pose_frame = np.array(pose_all[seq]).reshape(4, 4)
-        camera_to_world = _apply_sim3_to_pose(pose_frame, transform)
+        camera_to_world = to_pose(pose_frame)
 
         # Write NPZ (the schema the Harness and the page builders read).
         np.savez_compressed(
@@ -360,6 +392,7 @@ def build(
     # the backdrop is encoded from the same cloud the Sim(3) came from: the two are
     # then guaranteed to be in one frame, and the asset travels with the source.
     backdrop_points, backdrop_colors = read_point_ply(backdrop)
+    backdrop_points = backdrop_to_frame(backdrop_points.astype(np.float64)).astype(np.float32)
     write_cloud_asset(output / "assets/background.js", "background", {
         "count": int(len(backdrop_points)),
         "positions_f32_base64": encode(backdrop_points, "<f4"),
@@ -368,7 +401,9 @@ def build(
 
     manifest = {
         **{k: v for k, v in source_manifest.items() if k != "frames"},
-        "lifting_policy": POLICY,
+        "lifting_policy": policy,
+        "coordinate_frame": frame_name,
+        **({"frame": delivery.block()} if frame_name == "amb3r_floor" else {}),
         "frame_count": len(out_frames),
         "frames": out_frames,
         "background_asset": "assets/background.js",
@@ -381,6 +416,8 @@ def build(
         "conf_threshold": conf_threshold,
         "min_mask_area_fraction": min_area_fraction,
         "masks_dropped_by_area": total_dropped,
+        # scannet_scan: the Sim(3) the points went through. amb3r_floor: not applied; kept only
+        # because readers locate the intrinsics and the evaluation record through it.
         "sim3_source": str(sim3_path),
         # RGB camera intrinsics (1296×968).  Stored here so downstream never has
         # to locate a separate manifest.  Read from the ScanNet extraction manifest
@@ -391,7 +428,7 @@ def build(
     write_json(output / "manifest.json", manifest)
 
     report = {
-        "policy": POLICY,
+        "policy": policy,
         "conf_threshold": conf_threshold,
         "backdrop": str(backdrop),
         "backdrop_sha256": sha256_file(backdrop),
@@ -412,7 +449,7 @@ def build(
     }
     write_json(output / "projection_report.json", report)
     print(
-        json.dumps({"output": str(output), "policy": POLICY}, indent=2),
+        json.dumps({"output": str(output), "policy": policy, "coordinate_frame": frame_name}, indent=2),
         flush=True,
     )
     return output
@@ -430,13 +467,17 @@ def main() -> None:
                         help="AMB3R confidence threshold (default 0.3)")
     parser.add_argument("--first", type=int, default=0)
     parser.add_argument("--count", type=int, default=None)
+    parser.add_argument("--frame", default="amb3r_floor", choices=sorted(POLICIES),
+                        help="coordinate frame of the output (default amb3r_floor; scannet_scan rebuilds old sources)")
+    parser.add_argument("--frame-file", type=Path, default=None,
+                        help="amb3r_floor definition (default artifacts/scenes/scene0000_00/amb3r_floor.json)")
     parser.add_argument("--min-area-fraction", type=float,
                         default=DEFAULT_MIN_MASK_AREA_FRACTION,
                         help="Drop masks below this fraction of the frame (0 keeps all)")
     args = parser.parse_args()
     build(args.npz, args.sim3, args.source, args.output,
           args.conf, args.first, args.count, args.frames_dir,
-          args.min_area_fraction)
+          args.min_area_fraction, args.frame, args.frame_file)
 
 
 if __name__ == "__main__":

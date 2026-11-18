@@ -37,7 +37,7 @@ src/perception/               gpt_sam31, label_frames, gpt_labels（文本提示
                              point_prompt/（点选感知：clicks 共用的 SAM3 点选、objects 物体、source 打包）
 src/structure/               结构件：segment/（2D 点选分割）, lift, rays, walls, close（→ 封闭墙体）,
                              prompts/（分割 prompt，按版本存）
-src/handoff/                 交接文件：物体（schema, from_gt, check）、墙体（walls_schema,
+src/handoff/                 交接文件：物体（schema, from_gt, from_harness, check）、墙体（walls_schema,
                              walls_from_harness, walls_check）
 src/visualization/           共享 helper：page_naming, object_bboxes, publish_gpt_viewer
 
@@ -65,12 +65,15 @@ pagegen/templates/           result/  records/  mask_project/  shared/
 对每一帧：
   1. 读取 AMB3R 的逐帧点图 pts（392×518×3）       ← 网络预测的深度，不是 GT 网格
   2. GPT/SAM3 mask（1296×968 实例图）→ resize 640×480 → center crop 518×392
-  3. mask 命中且 conf ≥ 0.3 的每个像素：取该像素的 3D 位置，应用 Sim(3)
+  3. mask 命中且 conf ≥ 0.3 的每个像素：取该像素的 3D 位置，转进交付坐标系 amb3r_floor
+     （默认 `--frame amb3r_floor`；旧 source 用的 `--frame scannet_scan` 是套 GT 拟合的 Sim(3)）
 ```
 
 方向仍是**从像素出发**：一个像素最多得到一个点，所以没有多射线歧义，遮挡者的表面从未被查询。与已删除的 `mesh_first_surface_v1` 的区别只在深度的来源——那套把 GT 网格光栅化出每像素首表面，这套直接用 AMB3R 预测的深度。
 
 选 AMB3R 而不是 GT 网格的理由：GT 网格有重建空洞（黑色椅背、细结构、扫描角度差的区域），那些像素上反投影会落到**相机实际看到的表面之后**的东西上；AMB3R 在这些位置仍给出网络预测的深度。
+
+**坐标系**（2026-11-18 起）：默认输出在交付坐标系 `amb3r_floor`（`lifting_policy: amb3r_floor_v1`，见下文“交付坐标系”），只用 AMB3R 自己的点和位姿，不再套 GT 拟合的旋转平移；背景换成 AMB3R 自己的 metric-head 点云同样转过去。`--frame scannet_scan`（`amb3r_per_frame_v1`）只为重建旧 source 保留，下面这段说的是它：
 
 **已知代价**：`sim3_oracle_scale` 是**对着 GT 相机位姿拟合**的（`alignment_scale = 0.8875`，五厘米 F-score 从 0.099 涨到 0.562），所以这份几何**不能**用作 AMB3R 的独立精度评价，只能作为 mask 反投影的深度来源。另外 AMB3R 的 mask source 只含被 mask 声称的像素（约 12 万/帧），**不含全场景点云**，所以页面背景必须取自 Sim(3) 拟合所用的那份规范点云——`amb3r_mask_source` 会把这份点云编码成 `assets/background.js` 随 source 一起写出。
 
@@ -158,8 +161,8 @@ $SAM31_PYTHON -m src.perception.point_prompt.objects --run point-full100_v2     
 .venv/bin/python -m src.perception.point_prompt.source pack --run point-full100_v2 \
     --output artifacts/sources/scene0000_00/gpt_point_full100_v2
 .venv/bin/python -m src.geometry.amb3r_mask_source --source artifacts/sources/scene0000_00/gpt_point_full100_v2 \
-    --output artifacts/sources/scene0000_00/scene_amb3r_point_full100_v2 --conf 0.3
-.venv/bin/python -m src.perception.point_prompt.source renumber artifacts/sources/scene0000_00/scene_amb3r_point_full100_v2
+    --output artifacts/sources/scene0000_00/scene_amb3r_point_full100_v2_floor --conf 0.3      # amb3r_floor
+.venv/bin/python -m src.perception.point_prompt.source renumber artifacts/sources/scene0000_00/scene_amb3r_point_full100_v2_floor
 .venv/bin/python -m tools.point_prompt.gt_eval --run point-full100_v2                   # 对照 ScanNet 2D GT（只用于评估）
 .venv/bin/python -m pagegen.build_point_prompt --run point-full100_v2 --left point-full100_v1 --out point-prompt-full100-v2.html
 ```
@@ -168,6 +171,20 @@ $SAM31_PYTHON -m src.perception.point_prompt.objects --run point-full100_v2     
 - 运行记录在 `artifacts/experiments/point-<run>/perception/point_prompt/`（full100_v1/v2、sep_v2–v5、trial1–3、smoke）；历次 GT 评估结果和当时的实验笔记在 `artifacts/experiments/analysis/point_prompt/`。
 - 2026-11 从 `tmp/point_prompt/` 迁入。用新代码重新打包 full100_v2，source 的 manifest 和 801 个 mask 与现有的逐字节相同；renumber 后的 npz 数组也相同；GT 评估、两个结果页也都逐字节复现。
 - `src/perception/point_prompt/clicks.py` 同时被结构件分割（`src/structure/segment/window.py`）使用。
+- harness-v15 用的是 scan 坐标系的 `scene_amb3r_point_full100_v2`；`_floor` 是同一批 mask 在 amb3r_floor 里的抬升（像素、颜色、mask 位逐字节相同，点和位姿差一个刚体变换，误差 < 1e-6 m）。
+
+### 物体交接（harness → handoff/v3）
+
+```bash
+.venv/bin/python -m src.handoff.from_harness --run harness-v15-amb3r-point-full100frames-20261112-0935 \
+    --source artifacts/sources/scene0000_00/scene_amb3r_point_full100_v2_floor     # → artifacts/handoff/scene0000_00/harness_v15
+.venv/bin/python -m src.handoff.check artifacts/handoff/scene0000_00/harness_v15
+```
+
+- 物体 = run 最后一版状态里的存活物体；点云 = 每个物体所持观测（最多 5 个）的抬升点并集，2 cm 体素，和 harness 自己的融合点云一致（体素网格随坐标系转了，点数差几个百分点）。
+- 几何从 `--source` 读：run 当初用哪个坐标系的 source 跑都行，只要是同一批 mask 和像素（`match_sources` 逐个观测核对帧号、mask 文件和点数），坐标就取 amb3r_floor 的。
+- 关键帧：持有观测里按 GT 交接同一规则挑最多 3 张，mask 就是那次观测的 mask；位姿是 AMB3R 自己的，内参用场景 `.txt`（和墙体、GT 交接相同）。每张记录 `observation_id` 与 `reprojection_px`（这一帧自己的点经位姿和内参投回去离原像素多远；中位数 9 px，少数小物体到 30–55 px）。
+- v15：97 个物体、161 张关键帧，`floor_z = 0`。
 
 ## 墙体几何与墙体交接
 
