@@ -28,9 +28,8 @@ from pathlib import Path
 import numpy as np
 
 from src import config
-from src.geometry.amb3r_mask_source import DEFAULT_SIM3
-from src.geometry.floor_frame import Frame, scannet_scan_to_frame
-from src.structure.frames import OUT_ROOT, RAYS, axis_alignment_for_eval
+from src.structure.frames import OUT_ROOT, RAYS
+from tools.structure.gt_eval import gt_reference, match_gt   # the GT comparison lives in the evaluator
 
 DOCS = config.ROOT / "docs"
 DEFAULT_OUT = DOCS / "assets/structure-geom/data.js"
@@ -50,51 +49,6 @@ def thin(xyz, *cols, v):
     key = np.floor(xyz / v).astype(np.int64)
     _, first = np.unique(key, axis=0, return_index=True)
     return (xyz[first], *[c[first] for c in cols])
-
-
-def gt_to_frame() -> np.ndarray:
-    """ScanNet axis-aligned frame (the GT page's) -> amb3r_floor. Evaluation only."""
-    S = scannet_scan_to_frame(Frame.load(), json.loads(DEFAULT_SIM3.read_text())["sim3_oracle_scale"])
-    return S @ np.linalg.inv(axis_alignment_for_eval())
-
-
-def gt_reference():
-    """ScanNet wall faces and thickness measurements, moved into amb3r_floor. Display only."""
-    if not GT_DATA.is_file():
-        return [], []
-    s = GT_DATA.read_text()
-    gt = json.loads(s[s.index("{"):s.index(";\nwindow.STRUCT.pos")])
-    G = gt_to_frame()
-    T = lambda p: G[:3, :3] @ np.asarray(p, dtype=np.float64) + G[:3, 3]
-    R = G[:3, :3]
-    faces = []
-    for f in gt["faces"]:
-        fc, fn, fu = T(f["c"]), R @ np.array(f["nh"]), R @ np.array(f["u"])
-        faces.append({"key": f["key"], "name": f["name"], "c": fc[:2].tolist(),
-                      "n": (fn[:2] / np.linalg.norm(fn[:2])).tolist(), "u": (fu[:2] / np.linalg.norm(fu[:2])).tolist(),
-                      "a": f["a"], "corners": [T(q).tolist() for q in f["corners"]], "area_m2": f["area_m2"]})
-    gaps = [{"name": g["name"], "a": g["a"], "b": g["b"], "cm": g["cm"], "spread_cm": g["spread_cm"],
-             "p0": T(g["p0"]).tolist(), "p1": T(g["p1"]).tolist()} for g in gt.get("gaps", [])]
-    return faces, gaps
-
-
-def match_gt(r: dict, faces: list) -> dict | None:
-    """The GT face a plane lies on: facing within 20 deg, within 40 cm, overlapping 20 cm along it."""
-    wc, wn, wu = np.array(r["point"]), np.array(r["normal"]), np.array(r["along"])
-    best = None
-    for f in faces:
-        ang = float(np.degrees(np.arccos(np.clip(wn @ np.array(f["n"]), -1, 1))))
-        if ang > 20:
-            continue
-        ends = [(wc + q * wu - f["c"]) @ np.array(f["u"]) for q in r["a"]]
-        lo, hi = max(min(ends), f["a"][0]), min(max(ends), f["a"][1])
-        off = float((wc + np.mean(r["a"]) * wu - f["c"]) @ np.array(f["n"]))
-        if hi - lo < 0.2 or abs(off) > 0.4:
-            continue
-        if best is None or hi - lo > best["overlap_m"]:
-            best = {"face": f["key"], "name": f["name"], "angle_deg": ang, "offset_cm": off * 100,
-                    "overlap_m": float(hi - lo), "gt_length_m": float(f["a"][1] - f["a"][0]), "gt_area_m2": f["area_m2"]}
-    return best
 
 
 def closed_with_handoff(closed: dict, handoff_path: Path) -> dict:

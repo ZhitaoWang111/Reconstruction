@@ -16,9 +16,7 @@ from __future__ import annotations
 import argparse
 import base64
 import html
-import io
 import json
-import zipfile
 from collections import Counter
 from pathlib import Path
 
@@ -29,18 +27,16 @@ from src import config
 from src.geometry.floor_frame import frame_path
 from src.structure.frames import OUT_ROOT, RAYS, masks_dir
 
-from .build_structure_geom import GT_DATA, gt_reference, match_gt
+from tools.structure import gt_eval
 
 DOCS = config.ROOT / "docs"
 OUT = DOCS / "structure-overview.html"
 ASSETS = DOCS / "assets/structure-overview"
 SEG_PAGE_ASSETS = "assets/structure-{run}"          # per-frame rgb/kept/gt pictures of the segmentation page
 HANDOFF = config.ARTIFACTS_ROOT / "handoff/scene0000_00/walls_harness"
-SCENE = config.SCANNET_ROOT / "scene0000_00"
 LABELS = ("wall", "floor", "door", "window")
 ZH = {"wall": "墙", "floor": "地面", "door": "门扇", "window": "窗"}
 # what counts as right inside a mask of each label (doorframe trim inside a wall or door mask is fine)
-RIGHT = {"wall": {"wall", "doorframe"}, "floor": {"floor"}, "door": {"door", "doorframe"}, "window": {"window"}}
 EXAMPLE_FRAMES = (1229, 3800, 2794)
 FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 
@@ -74,84 +70,8 @@ def segmentation(run: str) -> dict:
             "segment_calls": Counter(r["segment_calls"] for r in frames), "results": frames, "dir": seg}
 
 
-def gt_purity(seg: dict) -> dict:
-    """Per kept mask: share of its pixels on GT objects of its own class (doorframe allowed in wall/door)."""
-    agg = json.loads((SCENE / "scene0000_00.aggregation.json").read_text())
-    labels = {int(g["objectId"]): g["label"] for g in agg["segGroups"]}
-    z = zipfile.ZipFile(SCENE / "scene0000_00_2d-instance.zip")
-    rows, missed_floor, frames_with = [], [], Counter()
-    for r in seg["results"]:
-        fid = r["frame_id"]
-        g = np.asarray(Image.open(io.BytesIO(z.read(f"instance/{fid}.png")))).astype(int) - 1
-        share_gt = {c: float(np.isin(g, [i for i, x in labels.items() if x == c]).mean()) for c in LABELS}
-        for c in LABELS:
-            if share_gt[c] >= (0.05 if c == "floor" else 0.01):
-                frames_with[c] += 1
-        for k in r["kept"]:
-            m = np.asarray(Image.open(seg["dir"] / f"frame_{fid:06d}" / k["mask_file"]).convert("L")) > 0
-            v = g[m]; v = v[v >= 0]
-            by = Counter(labels.get(int(i), "?") for i in v)
-            tot = max(1, sum(by.values()))
-            purity = sum(n for c, n in by.items() if c in RIGHT[k["label"]]) / tot
-            worst = max(((c, n / tot) for c, n in by.items() if c not in RIGHT[k["label"]]), key=lambda x: x[1], default=(None, 0))
-            rows.append({"fid": fid, "label": k["label"], "pid": k["plan_id"], "where": k["where"], "purity": purity,
-                         "area": k["area_fraction"], "worst": worst})
-        if share_gt["floor"] >= 0.05 and not any(k["label"] == "floor" for k in r["kept"]):
-            missed_floor.append((fid, share_gt["floor"]))
-    per = {}
-    for c in LABELS:
-        rs = [x for x in rows if x["label"] == c]
-        if rs:
-            a = np.array([x["area"] for x in rs]); p = np.array([x["purity"] for x in rs])
-            per[c] = {"n": len(rs), "mean": float(p.mean()), "area_weighted": float((p * a).sum() / a.sum()),
-                      "frames_kept": len({x["fid"] for x in rs}), "frames_gt": frames_with[c]}
-    bad = sorted([x for x in rows if x["purity"] < 0.75], key=lambda x: x["purity"])
-    return {"per": per, "bad": bad, "missed_floor": missed_floor}
-
-
-def gt_items() -> dict:
-    s = GT_DATA.read_text()
-    gt = json.loads(s[s.index("{"):s.index(";\nwindow.STRUCT.pos")])
-    return {"faces": {f["key"]: f for f in gt["faces"]}, "items": gt["items"], "gaps": gt.get("gaps", [])}
-
-
-def coverage(run: str, faces: list) -> list:
-    """Per GT wall face: share of its 10 cm cells (0.1-2.3 m high) with any ray surface, with a wall-mask point, with a kept plane."""
-    d = OUT_ROOT / run
-    g = np.load(d / "geom.npz")
-    X = g["X"][g["wall_first"]].astype(np.float64); plane = g["wall_plane"]
-    P = np.load(RAYS)["P"].astype(np.float64)
-    nk = len(json.loads((d / "walls.json").read_text())["walls"])
-    out = []
-    for f in faces:
-        c, n, u = (np.asarray(f[k]) for k in ("c", "n", "u"))
-        L = f["a"][1] - f["a"][0]
-        tot = int(round(L / 0.1)) * 22
-
-        def cells(Q):
-            dd = (Q[:, :2] - c) @ n; a = (Q[:, :2] - c) @ u
-            s = (np.abs(dd) < 0.2) & (a > f["a"][0]) & (a < f["a"][1]) & (Q[:, 2] > 0.1) & (Q[:, 2] < 2.3)
-            return len(set(zip(np.floor(a[s] / 0.1).astype(int), np.floor(Q[s, 2] / 0.1).astype(int))))
-        out.append({"key": f["key"], "name": f["name"], "length_m": L, "rays": min(1.0, cells(P) / tot),
-                    "masks": min(1.0, cells(X) / tot), "kept": min(1.0, cells(X[(plane >= 0) & (plane < nk)]) / tot)})
-    return out
-
-
-def wall_tops(W: dict, gtf: dict, matches: dict) -> list:
-    """Per kept wall: the highest ray surface on its face (p99 of points within 12 cm, above 1.8 m) vs the GT face top."""
-    P = np.load(RAYS)["P"].astype(np.float64)
-    out = []
-    for r in W["walls"]:
-        c, n, u = (np.asarray(r[k]) for k in ("point", "normal", "along"))
-        dd = (P[:, :2] - c) @ n; a = (P[:, :2] - c) @ u
-        s = (np.abs(dd) < 0.12) & (a > r["a"][0] + 0.1) & (a < r["a"][1] - 0.1) & (P[:, 2] > 1.8)
-        m = matches.get(r["id"])
-        out.append({"id": r["id"], "seen_top": float(np.percentile(P[s, 2], 99)) if s.sum() > 20 else None,
-                    "gt_top": gtf[m["face"]]["z"][1] if m else None, "face": m["face"] if m else None})
-    return out
-
-
 def collect(run: str) -> dict:
+    """The run's outputs, plus the GT comparison exactly as tools.structure.gt_eval computes it."""
     d = OUT_ROOT / run
     W = json.loads((d / "walls.json").read_text())
     C = json.loads((d / "closed.json").read_text())
@@ -159,33 +79,11 @@ def collect(run: str) -> dict:
     F = json.loads(frame_path().read_text())
     pts = np.load(d / "points.npz")
     rays = np.load(RAYS)
-    seg = segmentation(run)
-    faces, _ = gt_reference()
-    gti = gt_items()
-    matches = {r["id"]: match_gt(r, faces) for r in W["walls"] + W["rejected"]}
-    # rectangle sides against the GT faces their walls lie on
-    axes = [np.asarray(s["normal"]) for s in C["sides"]]
-    rect_vs_gt = []
-    fmap = {f["key"]: f for f in faces}
-    for sd in C["sides"]:
-        m = matches.get(sd["walls"][0]) if sd["walls"] else None
-        if m:
-            fc = np.asarray(fmap[m["face"]]["c"])
-            rect_vs_gt.append({"side": sd["side"], "face": m["face"], "name": m["name"], "from": sd["from"],
-                               "inward_cm": (sd["offset"] - fc @ axes[sd["k"]]) * 100})
-    # room size per axis, against the distance between the GT faces the two opposite sides lie on
-    by_side = {x["side"]: x for x in rect_vs_gt}
-    size_vs_gt = []
-    for k, (a, b, ours) in enumerate((("W", "E", C["rectangle"]["width_m"]), ("S", "N", C["rectangle"]["depth_m"]))):
-        if a in by_side and b in by_side:
-            ca, cb = (np.asarray(fmap[by_side[x]["face"]]["c"]) for x in (a, b))
-            size_vs_gt.append({"axis": f"{a}–{b}", "ours": ours, "gt": abs((ca - cb) @ axes[k]),
-                               "faces": f"{by_side[a]['face']} {by_side[a]['name']} ↔ {by_side[b]['face']} {by_side[b]['name']}"})
-    return {"run": run, "W": W, "C": C, "H": H, "F": F, "seg": seg, "purity": gt_purity(seg), "size_vs_gt": size_vs_gt,
+    ev = gt_eval.evaluate(run)
+    faces, _ = gt_eval.gt_reference()
+    return {"run": run, "W": W, "C": C, "H": H, "F": F, "seg": segmentation(run), "ev": ev,
             "lift": {LABELS[i]: int((pts["label"] == i).sum()) for i in range(4)}, "points": int(len(pts["xyz"])),
-            "rays": int(len(rays["P"])), "ray_frames": int(len(rays["cams"])), "matches": matches,
-            "rect_vs_gt": rect_vs_gt, "coverage": coverage(run, faces), "tops": wall_tops(W, gti["faces"], matches),
-            "gt": gti, "faces": faces}
+            "rays": int(len(rays["P"])), "ray_frames": int(len(rays["cams"])), "faces": faces}
 
 
 # ---------------------------------------------------------------- plan figure
@@ -268,13 +166,14 @@ def step(no, title, sub, body, io_=None):
 
 
 def page(D: dict) -> str:
-    seg, P, W, C, H, Fr = D["seg"], D["purity"], D["W"], D["C"], D["H"], D["F"]
+    seg, W, C, H, Fr, ev = D["seg"], D["W"], D["C"], D["H"], D["F"], D["ev"]
+    matches = ev["planes"]["matches"]
+    room = ev["room"]
     run = D["run"]
     kept = seg["kept"]
     nk = sum(kept.values())
     walls_kept = W["walls"]
     op = [(w["id"], o) for w in H["walls"] for o in w["openings"]]
-    gt_open = [i for i in D["gt"]["items"] if i["label"] in ("door", "window", "opening")]
     rect = C["rectangle"]
     # ---------------------------------------------------------------- 00 overview
     flow = [("01", "2D 结构件分割", "GPT 点选 + SAM3", f"{nk} 个 mask"),
@@ -302,14 +201,14 @@ def page(D: dict) -> str:
 
     # ---------------------------------------------------------------- 01 segmentation
     cfg = seg["cfg"]
-    per = P["per"]
-    pur_bars = bars([(f"{ZH[c]}（{per[c]['n']}）", per[c]["mean"], f"按面积加权 {pct(per[c]['area_weighted'])}") for c in LABELS if c in per],
+    per = ev["seg"]["per_label"]
+    pur_bars = bars([(f"{ZH[c]}（{per[c]['masks']}）", per[c]["mean_purity"], f"按面积加权 {pct(per[c]['area_weighted_purity'])}") for c in LABELS if c in per],
                     ref=0.9, ref_label="90%")
     det = table(["类别", "保留的 mask", "出现该类的帧（GT）", "有该类 mask 的帧", "平均纯度", "按面积加权"],
-                [[ZH[c], per[c]["n"], per[c]["frames_gt"], per[c]["frames_kept"], pct(per[c]["mean"]), pct(per[c]["area_weighted"])]
+                [[ZH[c], per[c]["masks"], per[c]["frames_gt"], per[c]["frames_with_mask"], pct(per[c]["mean_purity"]), pct(per[c]["area_weighted_purity"])]
                  for c in LABELS if c in per])
-    badrows = [[x["fid"], ZH[x["label"]], esc(x["pid"]), esc(x["where"][:48]), pct(x["purity"]),
-                f'{pct(x["worst"][1])} 落在 {esc(str(x["worst"][0]))}'] for x in P["bad"]]
+    badrows = [[x["frame"], ZH[x["label"]], esc(x["plan_id"]), esc(x["where"][:48]), pct(x["purity"]),
+                f'{pct(x["worst"][1])} 落在 {esc(str(x["worst"][0]))}'] for x in ev["seg"]["low_purity"]]
     ex = "".join(
         f'<figure class="ex"><div class="tri"><img src="{SEG_PAGE_ASSETS.format(run=run)}/{fid}_rgb.jpg" alt="原图 {fid}">'
         f'<img src="{SEG_PAGE_ASSETS.format(run=run)}/{fid}_kept.jpg" alt="保留的 mask {fid}">'
@@ -327,9 +226,9 @@ def page(D: dict) -> str:
 <h3>和 GT 比：每个 mask 有多少像素落在对的类别上</h3>
 <p class="note">GT 是 ScanNet 的 2D 实例标注，只用于检查。门框像素落在墙或门的 mask 里算对。</p>
 {pur_bars}{det}
-<h3>纯度低于 75% 的 mask（{len(P['bad'])} 个）</h3>
+<h3>纯度低于 75% 的 mask（{len(ev['seg']['low_purity'])} 个）</h3>
 {table(["帧", "类别", "计划", "模型写的位置", "纯度", "最多的错类"], badrows)}
-<p>地面漏标的帧：{"、".join(f"{fid}（画面 {pct(s)} 是地面）" for fid, s in P["missed_floor"]) or "无"}。每帧 SAM 调用次数：{calls}。</p>
+<p>GT 里有、却没有对应 mask 的帧：{"、".join(f"{m['frame']} {ZH[m['label']]}（画面 {pct(m['gt_share'])}）" for m in ev["seg"]["missing"]) or "无"}。每帧 SAM 调用次数：{calls}。</p>
 <div class="exs">{ex}</div>
 <p class="more">逐帧看全部 50 帧：<a href="structure-{run}.html">structure-{run}.html</a></p>"""
     s1 = step(1, "2D 结构件分割", f"src/structure/segment/window.py · {esc(cfg['model'])} · prompt {cfg['prompt_sha256'][:8]}", s1_body,
@@ -365,12 +264,15 @@ def page(D: dict) -> str:
     pr = W["params"]
     wrows = []
     for r in walls_kept:
-        m = D["matches"].get(r["id"])
+        m = matches.get(r["id"])
         wrows.append([r["id"], f"{r['length_m']:.2f} m", f"{r['area_m2']:.2f} m²", len(r["frames"]), f"{r['rms_cm']:.1f} cm",
                       f"{m['face']} {esc(m['name'])}" if m else "—", f"{m['offset_cm']:+.1f} cm" if m else "—"])
     op_rows = [[wid, f"{o['width_m']:.2f} × {o['height_m']:.2f} m", f"{o['z_floor'][0]:.2f}–{o['z_floor'][1]:.2f} m",
                 " / ".join(f"{k} {v}" for k, v in o["bounds"].items())] for wid, o in op]
-    gt_rows = [[esc(i["name"]), f"{i['width_m']:.2f} × {i['height_m']:.2f} m", f"{i['z'][0]:.2f}–{i['z'][1]:.2f} m", i["host"]] for i in gt_open]
+    eo = ev["openings"]
+    gt_rows = [[esc(g["name"]), g["face"], "测到" if g["found"] else "没测到"] for g in eo["gt"]]
+    cmp_rows = [[x["wall"], esc(x["gt"]["name"]), f"{x['gt']['centre_cm']:+.0f} cm", f"{x['gt']['width_cm']:+.0f} cm",
+                 f"{x['gt']['bottom_cm']:+.0f} cm", f"{x['gt']['top_cm']:+.0f} cm"] for x in eo["handed_off"] if x["gt"]]
     s5_body = f"""
 <p>假设墙是竖直平面。四小步：</p>
 <ol class="steps">
@@ -381,9 +283,10 @@ def page(D: dict) -> str:
 墙面上被射线穿过、左右上都有实墙围住的区域是开口。</li></ol>
 <h3>保留的墙面和 GT</h3>{table(["墙面", "长度", "支持面积", "帧", "平面残差", "对应 GT 墙面", "比 GT 靠里"], wrows)}
 <p class="note">“比 GT 靠里”是墙面相对 GT 墙面沿法向的偏移，正数表示往房间里偏。AMB3R 重建出的墙面本身就整体往里偏几厘米，所以这列主要是重建误差，不是拟合误差。</p>
-<h3>开口：测到 {len(op)} 个，GT 里 {len(gt_open)} 个</h3>
+<h3>开口：GT 的 {eo['gt_total']} 个里测到 {eo['gt_found']} 个，误报 {eo['false']} 个</h3>
 {table(["墙", "大小", "离地", "四边"], op_rows)}
-{table(["GT", "大小", "离地", "所在 GT 墙面"], gt_rows)}
+{table(["测到的开口", "对应 GT", "中心偏差", "宽度差", "底边差", "顶边差"], cmp_rows)}
+{table(["GT 开口", "所在 GT 墙面", ""], gt_rows)}
 <p>射线只能测出开着的洞。关着的门扇、玻璃窗会挡住射线，所以入户门和两扇窗测不到，尽管 2D 分割已经标出了门扇和窗。</p>
 <h3>参数</h3>
 {table(["参数", "值", "作用", ""], [
@@ -400,14 +303,14 @@ def page(D: dict) -> str:
                for r in C["walls"]], ref=0.5, ref_label="超过 50% 判为内墙")
     rv = table(["长方形的边", "来自", "对应 GT 墙面", "比 GT 靠里"],
                [[x["side"], "观测墙" if x["from"] == "observed" else "看到的空间", f"{x['face']} {esc(x['name'])}", f"{x['inward_cm']:+.1f} cm"]
-                for x in D["rect_vs_gt"]])
+                for x in room["sides"] if x["face"]])
     hid = {w["evidence"]["planes"][0]: w["id"] for w in H["walls"] if w["role"] == "interior"}
     fin = table(["墙", "类型", "长度", "观测", "推断"],
                 [[f["id"] if f["role"] == "exterior" else f"{hid.get(f['id'], f['id'])}（{f['id']}）", "外墙" if f["role"] == "exterior" else "内墙", f"{f['length_m']:.2f} m",
                   f"{f['length_m'] - f['inferred_m']:.2f} m", f"{f['inferred_m']:.2f} m"] for f in C["final"]])
     tops = table(["墙面", "射线看到的墙面最高处", "GT 墙顶", "统一层高"],
-                 [[t["id"], f"{t['seen_top']:.2f} m" if t["seen_top"] else "—", f"{t['gt_top']:.2f} m" if t["gt_top"] else "—",
-                   f"{C['storey']['height_m']:.2f} m"] for t in D["tops"]])
+                 [[t["plane"], f"{t['seen_top_m']:.2f} m" if t["seen_top_m"] else "—", f"{t['gt_top_m']:.2f} m" if t["gt_top_m"] else "—",
+                   f"{C['storey']['height_m']:.2f} m"] for t in ev["height"]["walls"]])
     s6_body = f"""
 <ol class="steps">
 <li><b>内墙还是外墙</b>：外墙背后是房子外面，任何一帧都看不到；内墙背后是别的房间，从门洞能看到。量每面墙背后那条地带被射线看到的比例：</li></ol>
@@ -421,7 +324,7 @@ def page(D: dict) -> str:
 <figcaption>俯视图，按房间主方向摆正。灰色：射线终点密度（0.3–2.2 m 高）；蓝色实线：保留的墙面；深灰 / 紫色块：交接里的外墙 / 内墙占地；红色虚线：GT 墙面。</figcaption></figure>
 <h3>长方形和 GT</h3>{rv}
 {table(["方向", "长方形", "GT（两面对应墙之间）", "差", "对应的 GT 墙面"],
-       [[x["axis"], f"{x['ours']:.2f} m", f"{x['gt']:.2f} m", f"{(x['ours'] - x['gt']) * 100:+.0f} cm", esc(x["faces"])] for x in D["size_vs_gt"]])}
+       [[x["axis"], f"{x['ours_m']:.2f} m", f"{x['gt_m']:.2f} m", f"{x['diff_cm']:+.0f} cm", " ↔ ".join(x["faces"])] for x in room["size"]])}
 <p class="note">交接里的 W/S/E/N 按 amb3r_floor 里房间的主方向起名，和 ScanNet GT 页面上的“南墙、北墙”不是同一套方位：交接的 ext_W 落在 GT 的北墙上。</p>
 <h3>封闭后每面墙观测了多少</h3>{fin}
 <h3>层高</h3>{tops}
@@ -441,28 +344,28 @@ def page(D: dict) -> str:
               [("输入", "closed.json + walls.json + 关键帧 mask"), ("输出", "walls.json + keyframes/ + README")])
 
     # ---------------------------------------------------------------- 08 coverage
-    cov = D["coverage"]
-    cov_rows = [[f"{c['key']} {esc(c['name'])}", f"{c['length_m']:.2f} m", pct(c["rays"]), pct(c["masks"]), pct(c["kept"])] for c in cov]
+    cov = ev["coverage"]
+    cov_rows = [[f"{c['face']} {esc(c['name'])}", f"{c['length_m']:.2f} m", pct(c["rays"]), pct(c["masks"]), pct(c["kept"])] for c in cov]
     s8_body = f"""<p>每面 GT 墙面按 10 cm × 10 cm 分格（0.1–2.3 m 高），看每一层“看到”了多少格。从射线到 mask 掉得最多，说明瓶颈在 2D 分割的覆盖面，不在几何。</p>
 {table(["GT 墙面", "长度", "有射线终点", "有墙 mask 点", "进了某个平面"], cov_rows)}
 <p class="note">“有射线终点”包括墙前家具挡住的部分，所以不会到 100%。西墙（F6）大半被窗帘和衣柜挡着，按规则不该标成墙。</p>"""
     s8 = step(8, "一层层掉了多少", "GT 只用于这张表", s8_body)
 
     # ---------------------------------------------------------------- 09 weak points
-    tops_ok = [t for t in D["tops"] if t["seen_top"] and t["gt_top"]]
+    tops_ok = [t for t in ev["height"]["walls"] if t["seen_top_m"] and t["gt_top_m"]]
     weak = [
-        ("开口只有射线能测到的", f"测到 {len(op)} 个，GT {len(gt_open)} 个。关着的门、玻璃窗挡住射线；2D 分割已经标出的门扇（5 帧）和窗（3 帧）没有用来生成开口。",
+        ("开口只有射线能测到的", f"GT 的 {eo['gt_total']} 个开口测到 {eo['gt_found']} 个。关着的门、玻璃窗挡住射线；2D 分割已经标出的门扇（5 帧）和窗（3 帧）没有用来生成开口。",
          "门扇 / 窗 mask 落在墙面上的范围生成开口（source: mask），同样要求四边有界。要先定：门窗的洞是否交给下游。"),
         ("层高统一假定 2.8 m", "GT 墙顶 2.33–2.91 m（天花板是斜的）。" + "；".join(
-            f"{t['id']} 看到 {t['seen_top']:.2f} / GT {t['gt_top']:.2f}" for t in tops_ok[:4]) + "。",
+            f"{t['plane']} 看到 {t['seen_top_m']:.2f} / GT {t['gt_top_m']:.2f}" for t in tops_ok[:4]) + "。",
          "每面墙判断墙顶是否被天花板封住（和开口四边同一套射线判断），封住的用实测高度，没有的才用 2.8 m。"),
-        ("房间整体偏小", "；".join(f"{x['axis']} 方向小 {(x['gt'] - x['ours']) * 100:.0f} cm" for x in D["size_vs_gt"]) + "。各边比 GT 靠里："
-         + "、".join(f"{x['side']} {x['inward_cm']:+.0f} cm" for x in D["rect_vs_gt"])
+        ("房间整体偏小", "；".join(f"{x['axis']} 方向小 {-x['diff_cm']:.0f} cm" for x in room["size"]) + "。各边比 GT 靠里："
+         + "、".join(f"{x['side']} {x['inward_cm']:+.0f} cm" for x in room["sides"] if x["inward_cm"] is not None)
          + "。一部分是重建本身的内缩（墙面平均往里几厘米），最大的那一边只看到一小段墙，而它外面还有射线终点。",
          "每条边取“墙面拟合位置”和“最外侧一条密集的射线终点带”中靠外的那个，满足“长方形尽量包住所有点云”。"),
         ("卫生间整体错位，被并进同一条墙线", "卫生间里拍的几帧被 AMB3R 整体往北偏了 10–20 cm；墙线合并允许 30 cm 的深度漂移，于是卫生间南墙并进了主屋南墙，平面被拉偏几厘米，两条厚度线索也只剩一半。",
          "合并时如果两段的前后距离明显超过单面墙的深度波动，就不合并，或者在 evidence 里标出来。"),
-        ("2D 分割只覆盖一部分墙面", "墙 mask 盖住的 GT 墙面格子明显少于射线看到的（见上一节）；50 帧只用了 100 帧的一半；窗的纯度只有 " + (pct(per["window"]["mean"]) if "window" in per else "—") + "。",
+        ("2D 分割只覆盖一部分墙面", "墙 mask 盖住的 GT 墙面格子明显少于射线看到的（见上一节）；50 帧只用了 100 帧的一半；窗的纯度只有 " + (pct(per["window"]["mean_purity"]) if "window" in per else "—") + "。",
          "先量清楚：是帧数不够，还是模型在这些帧里主动没标（24 条“有意不标”的说明）。"),
         ("没有固定的 GT 评估", "这页的 GT 列是每次临时算的；参数改了没法一眼看出哪里变好、哪里变坏。",
          "把这页的对照固化成 tools/structure/gt_eval.py，每次改动都跑，结果写成一行可比较的指标。"),

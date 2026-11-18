@@ -48,6 +48,7 @@ pagegen/build_viewer.py      渲染器 bundle 装配
 pagegen/build_mask_project.py mask 投影检查页
 pagegen/build_walls_handoff.py 墙体交接文件预览页
 pagegen/build_structure_overview.py 结构件识别方案总览页
+tools/structure/gt_eval.py   结构件识别对 ScanNet GT 的评估（基线与对比）
 pagegen/build_point_prompt.py 点选物体感知的逐帧结果页（docs/point-prompt-full100*.html）
 pagegen/build_structure_geom.py 墙体几何工作台页面的数据
 pagegen/build_structure_gt.py 结构件 GT 页面的数据（ScanNet 标注，只用于评估）
@@ -215,6 +216,15 @@ $SAM31_PYTHON -m src.structure.segment.window --run struct_v4_win5 --frames-ever
 ```
 
 模板在 `pagegen/templates/walls_handoff/`，和其他模板一样不进版本库。
+
+**GT 评估**（只用于评估，`src/` 不读）：一次跑出 2D 分割纯度和漏标、每面 GT 墙从射线到 mask 到平面的覆盖、平面偏移、房间尺寸、墙顶、开口（中心、宽、底、顶的偏差）、厚度线索，并和基线比：
+
+```bash
+.venv/bin/python -m tools.structure.gt_eval --run struct_v4_win5 --save-baseline   # 记下当前结果作基线
+.venv/bin/python -m tools.structure.gt_eval --run struct_v4_win5 --compare         # 改动之后：列出变了的指标
+```
+
+结果写在 `artifacts/structure/<run>/gt_eval.json`，基线在 `artifacts/structure/gt_eval_baseline.json`（2026-11-18，commit 585c0e6）。总览页和三维工作台的 GT 对照都从这里取，三处数字不会不一致。
 
 方案总览页 `docs/structure-overview.html`：按步骤讲 2D 分割 → 交付坐标系 → 抬升 → 射线 → 墙面 → 封闭 → 交接，每一步的实测结果、哪些值是假定或手调的，和 GT 的对照，最后列出已知薄弱点。数字全部从产物读：
 
