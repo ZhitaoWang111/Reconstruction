@@ -7,7 +7,9 @@ segmented ones, and not only masked pixels: the 3D point, the camera it was seen
 and the pixel's colour (for display). The space along a ray from the camera to its
 point is empty. No mask, no label, no annotation.
 
-Points are in the lift frame, like lift.py's. Writes artifacts/structure/scene_rays.npz.
+Points are in the amb3r_floor frame, like lift.py's; the file records the frame it was written
+in (`native_to_frame`) and readers refuse a file from another frame. Writes
+artifacts/structure/scene_rays.npz.
 """
 from __future__ import annotations
 
@@ -25,16 +27,16 @@ def rays(maps: PointMaps | None = None) -> int:
     grid = (np.arange(maps.H)[::STRIDE, None] * maps.W + np.arange(maps.W)[None, ::STRIDE]).reshape(-1)
     P, rgb, cam_of, cams, fids = [], [], [], [], []
     for k, (fid, seq) in enumerate(sorted(frame_slots().items())):
-        p = maps.lift(seq)
+        p = maps.points(seq)
         ok_all = maps.valid(seq, p)
         ok = ok_all[grid]
         rgb.append(_sample_rgb(FRAMES / f"frame_{fid:06d}.jpg", grid[ok]))
         P.append(p[grid][ok].astype(np.float32)); cam_of.append(np.full(int(ok.sum()), k, np.int16))
-        cams.append(maps.camera_lift(seq)); fids.append(fid)
+        cams.append(maps.camera(seq)); fids.append(fid)
     OUT_ROOT.mkdir(parents=True, exist_ok=True)
     P = np.concatenate(P)
     np.savez_compressed(RAYS, P=P, rgb=np.concatenate(rgb), cam_of=np.concatenate(cam_of),
-                        cams=np.array(cams), frames=np.array(fids))
+                        cams=np.array(cams), frames=np.array(fids), native_to_frame=maps.frame.M)
     print(f"{len(P)} rays from {len(cams)} frames -> {RAYS}")
     return len(P)
 

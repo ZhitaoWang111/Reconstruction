@@ -2,11 +2,9 @@
 
     python -m src.structure.lift --run struct_v4_win5
 
-One mask pixel gives one point: the AMB3R point map at that pixel, Sim(3)-corrected into
-the scan frame, then ScanNet's axisAlignment (the lift frame; see frames.py). Per point:
-position, surface normal from the point-map grid (turned towards the camera), colour,
-frame, mask index and label. The vertical is not taken from axisAlignment; walls.py
-refits it from the floor points.
+One mask pixel gives one point: the AMB3R point map at that pixel, in the amb3r_floor frame
+(z = 0 on the floor, +z up; see frames.py). Per point: position, surface normal from the
+point-map grid (turned towards the camera), colour, frame, mask index and label.
 
 Writes `points.npz` and `masks.json` to artifacts/structure/<run>/.
 """
@@ -47,8 +45,8 @@ def lift(run: str, maps: PointMaps | None = None) -> dict:
     for folder in sorted(masks_dir(run).glob("frame_*")):
         result = json.loads((folder / "result.json").read_text())
         fid = int(result["frame_id"]); seq = slot[fid]
-        pts = maps.lift(seq)
-        cam = maps.camera_lift(seq)
+        pts = maps.points(seq)
+        cam = maps.camera(seq)
         cams[fid] = cam
         nrm = grid_normals(pts.reshape(maps.H, maps.W, 3), cam).reshape(-1, 3)
         ok_all = maps.valid(seq, pts) & np.isfinite(nrm).all(1)

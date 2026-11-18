@@ -1,4 +1,4 @@
-"""Write the wall handoff (walls/v1) from the wall geometry of a structure segmentation run.
+"""Write the wall handoff (walls/v2) from the wall geometry of a structure segmentation run.
 
     python -m src.handoff.walls_from_harness --run struct_v4_win5
 
@@ -9,12 +9,13 @@ Inputs, all produced earlier by `src.structure` and read as files:
 * `artifacts/structure/<run>/walls.json` - the observed wall planes they came from, and the
   floor plane that defines the floor frame;
 * the run's kept 2D wall masks (one result.json per segmented frame);
-* the AMB3R point maps, poses and the Sim(3) into the scan frame, as `src.structure.lift` used them.
+* the AMB3R point maps and poses in the amb3r_floor frame (artifacts/scenes/<scene>/amb3r_floor.json),
+  as `src.structure.lift` used them. The handoff is written in that frame; the walls are already in it.
 
 Two facts that shaped this file and must not be rediscovered downstream:
 
-1. Key-frame camera poses are AMB3R's own poses, Sim(3)-corrected into the scan frame,
-   not the ScanNet GT poses. The wall geometry was lifted with AMB3R, so its own poses
+1. Key-frame camera poses are AMB3R's own poses, in the amb3r_floor frame, not the
+   ScanNet GT poses. The wall geometry was lifted with AMB3R, so its own poses
    are the ones that put a wall back where its pixels are: projecting the lifted wall
    points back into frames 112, 894, 1229 and 4471 lands a median 6-16 px from their
    pixel with AMB3R poses and 24-79 px with GT poses.
@@ -35,9 +36,9 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage
 
 from src import config
-from src.geometry.amb3r_mask_source import AMBR3R_INTERMEDIATE, AMBR3R_SIZE, DEFAULT_NPZ, DEFAULT_SIM3
+from src.geometry.amb3r_mask_source import AMBR3R_INTERMEDIATE, AMBR3R_SIZE, DEFAULT_NPZ
 from src.geometry.backproject_masks import align_mask, crop_box
-from src.structure.frames import FRAMES, OUT_ROOT, SCENE, FloorFrame, PointMaps, frame_slots, masks_dir
+from src.structure.frames import FRAMES, OUT_ROOT, SCENE, PointMaps, frame_slots, masks_dir
 from src.structure.lift import grid_normals
 
 from . import schema, walls_schema as ws
@@ -61,31 +62,17 @@ FONT_LATIN = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 # ---------------------------------------------------------------- frames and geometry
 class Frames:
-    """Floor frame <-> scan frame, and the AMB3R point map of one frame in the floor frame."""
+    """The AMB3R point map and camera of one frame, in the amb3r_floor frame the walls are in."""
 
-    def __init__(self, walls_json: dict, maps: PointMaps | None = None):
+    def __init__(self, maps: PointMaps | None = None):
         self.maps = maps or PointMaps()
-        self.floor = FloorFrame(walls_json["floor"])
-        A = self.maps.A
-        floor_to_lift = np.eye(4); floor_to_lift[:3, :3] = self.floor.R.T; floor_to_lift[:3, 3] = self.floor.c
-        self.floor_to_scan = np.linalg.inv(A) @ floor_to_lift
-
-    def to_floor(self, p_scan):
-        A = self.maps.A
-        return self.floor(np.asarray(p_scan, dtype=np.float64) @ A[:3, :3].T + A[:3, 3])
-
-    def to_scan(self, p_floor):
-        p = np.asarray(p_floor, dtype=np.float64)
-        return p @ self.floor_to_scan[:3, :3].T + self.floor_to_scan[:3, 3]
 
     def frame(self, seq: int):
         W, H = AMBR3R_SIZE
-        p_scan = self.maps.scan(seq)
-        valid = self.maps.valid(seq, p_scan)
-        pose = self.maps.camera_to_world_scan(seq)
-        P = self.to_floor(p_scan).reshape(H, W, 3)
-        cam = self.to_floor(pose[:3, 3][None])[0]
-        return P, valid.reshape(H, W), pose, p_scan.reshape(H, W, 3), cam
+        p = self.maps.points(seq)
+        valid = self.maps.valid(seq, p)
+        pose = self.maps.camera_to_world(seq)
+        return p.reshape(H, W, 3), valid.reshape(H, W), pose, pose[:3, 3]
 
 
 def grid_index(width: int, height: int):
@@ -122,8 +109,8 @@ def line_intersection(p, d, q, e):
 
 
 # ---------------------------------------------------------------- the walls
-def build_walls(closed: dict, planes: dict, frames: Frames):
-    """walls/v1 wall records (geometry, segments, joins, evidence) from the closed walls."""
+def build_walls(closed: dict, planes: dict):
+    """walls/v2 wall records (geometry, segments, joins, evidence) from the closed walls."""
     names = {0: "ext_W", 1: "ext_S", 2: "ext_E", 3: "ext_N"}
     side_of = {f"side{k}": v for k, v in names.items()}
     interior = [f for f in closed["final"] if f["role"] == "interior"]
@@ -222,17 +209,13 @@ def build_walls(closed: dict, planes: dict, frames: Frames):
                         or bd.get("bottom") not in ws.OPENING_BOTTOM_BOUNDS:
                     continue                                 # not closed by wall on every side: not a hole we can vouch for
                 z0, z1 = round(o["z"][0], 4), round(o["z"][1], 4)
-                # floor frame first, so the hole composes with the wall line the consumer builds from;
-                # the scan-frame copy saves it a transform
                 corners = [[*(np.asarray(r["P0"]) + s_ * d), z] for s_, z in ((a0, z0), (a1, z0), (a1, z1), (a0, z1))]
-                scan = [[round(float(v), 5) for v in frames.to_scan(np.asarray(q_))] for q_ in corners]
                 holes.append({"from_m": a0, "to_m": a1, "z_floor": [z0, z1],
                               "width_m": round(a1 - a0, 3), "height_m": round(z1 - z0, 3),
                               "kind": "opening", "source": "ray_test", "rays_through": int(o["rays"]),
                               "closed_above": bool(o["closed_above"]),
                               "bounds": o["bounds"], "seen_bottom_m": round(o["seen_bottom_m"], 4),
                               "corners_floor": [[round(float(v), 5) for v in q_] for q_ in corners],
-                              "corners_scan": scan,
                               "note": "rays see through the wall here, with wall on both sides and above; when bounds.bottom "
                                       "is floor, the low strip the rays could not reach (they hit the floor "
                                       "first) is taken to be open too, so the hole starts at z = 0"})
@@ -277,7 +260,7 @@ def frame_candidates(walls, frames: Frames, run_dir: Path, slot: dict, width: in
         for k in wall_masks:
             union |= np.asarray(Image.open(folder / k["mask_file"]).convert("L")) > 0
         ug = align_mask(union, AMBR3R_INTERMEDIATE, AMBR3R_SIZE)
-        P, valid, pose, p_scan, cam = frames.frame(seq)
+        P, valid, pose, cam = frames.frame(seq)
         N = grid_normals(P, cam)
         okn = np.isfinite(N).all(2)
         for w in walls:
@@ -314,7 +297,7 @@ def frame_candidates(walls, frames: Frames, run_dir: Path, slot: dict, width: in
                      float(np.clip(np.percentile(along, 98), 0, w["length_m"]))]
             # how well pose + intrinsics put the lifted points back on their own pixels
             Tinv = np.linalg.inv(pose)
-            q = p_scan[keep & valid] @ Tinv[:3, :3].T + Tinv[:3, 3]
+            q = P[keep & valid] @ Tinv[:3, :3].T + Tinv[:3, 3]
             K = frames.K
             u_ = K[0, 0] * q[:, 0] / q[:, 2] + K[0, 2]; v_ = K[1, 1] * q[:, 1] / q[:, 2] + K[1, 2]
             reproj = float(np.median(np.hypot(u_ - gx[keep & valid], v_ - gy[keep & valid])))
@@ -396,7 +379,7 @@ def rectify(wall, kf_cand, frames: Frames, rgb: Image.Image, H: float):
             break
     xy = q + lam[:, None] * room
     X = np.stack(np.broadcast_arrays(xy[None, :, 0], xy[None, :, 1], h[:, None]), -1).reshape(-1, 3)
-    p = frames.to_scan(X)
+    p = X
     Tinv = np.linalg.inv(kf_cand["pose"])
     pc = p @ Tinv[:3, :3].T + Tinv[:3, 3]
     K = frames.K
@@ -475,7 +458,7 @@ def preview(doc: dict, frames_xy: dict, path: Path):
     img.save(path)
 
 
-README = """# 墙体交接文件（walls/v1）
+README = """# 墙体交接文件（walls/v2）
 
 场景 `{scene}`，来源 run `{run}`。交付**墙体**和墙上测到的**开口**。门、窗本身（门扇、窗、门框、窗框）和天花板、地面网格不在里面（见 `not_included`）。
 校验：`python -m src.handoff.walls_check {out}`。字段定义写在 `src/handoff/walls_schema.py` 里。
@@ -492,9 +475,10 @@ README = """# 墙体交接文件（walls/v1）
 
 ## 坐标
 
-- 和物体交接（handoff/v2）一样：ScanNet **扫描坐标系**，米，+Z 向上，没有应用 axisAlignment。墙和物体可以直接叠放。
-- 墙的几何写在**地面坐标系**里（地面在 z = 0、墙竖直），字段名带 `_floor`。用 `floor_frame_to_scan` 转到扫描坐标系：`p_scan = floor_frame_to_scan @ [x, y, z, 1]`。二维点 `[x, y]` 就是 z = 0 时的地面坐标。
-- 关键帧的 `camera_to_world` 在扫描坐标系里，OpenCV 约定（+X 右、+Y 下、+Z 前），和物体交接相同，内参在 `camera`。用法：`p_cam = inverse(camera_to_world) @ p_scan`，`u = fx·x/z + cx`，`v = fy·y/z + cy`。
+- 坐标系是 **`amb3r_floor`**，和物体交接（handoff/v3）相同：AMB3R 自己的重建扶正到地面上，米，+Z 向上，**地面就是 z = 0**，原点在第一帧相机正下方的地面上。定义见 `{definition}`。墙和物体可以直接叠放。
+- 所有坐标都在这个坐标系里，不需要再转换。二维点 `[x, y]` 就是 z = 0 时的地面坐标，字段名带 `_floor`。
+- 尺度来源写在 `frame.scale`：本场景是 `{scale_source}`（{scale_value:.4f}）。`oracle_gt_poses` 表示尺度是用 ScanNet GT 相机位姿校正的，只有尺度来自 GT。
+- 关键帧的 `camera_to_world` 也在这个坐标系里，OpenCV 约定（+X 右、+Y 下、+Z 前），和物体交接相同，内参在 `camera`。用法：`p_cam = inverse(camera_to_world) @ p`，`u = fx·x/z + cx`，`v = fy·y/z + cy`。
 
 ## 一面墙怎么生成
 
@@ -505,7 +489,7 @@ README = """# 墙体交接文件（walls/v1）
    - `mitre`：两面墙在转角斜接（外墙四角，以及内墙之间）；
    - `butt`：内墙停在外墙的房间一侧墙面上，外墙不受影响。
    如果改了厚度，请用墙线和 `joins` 重算，不要直接改 `footprint_floor`。
-5. `openings` 是射线检验**测到的洞**：从这个洞看过去，墙从下到上都被射线穿过，上方还有实墙封住（`closed_above`）。`from_m` / `to_m` 是沿墙位置（从 start 起算），`z_floor` 是离地高度范围（地面坐标系），`corners_floor` 是这个洞的四角（地面坐标系，顺序同墙段：起点下、终点下、终点上、起点上），`corners_scan` 是同一组点换算到扫描坐标系。生成墙体时要在这些位置留出洞。
+5. `openings` 是射线检验**测到的洞**：从这个洞看过去，墙从下到上都被射线穿过，上方还有实墙封住（`closed_above`）。`from_m` / `to_m` 是沿墙位置（从 start 起算），`z_floor` 是离地高度范围（地面坐标系），`corners_floor` 是这个洞的四角（顺序同墙段：起点下、终点下、终点上、起点上）。生成墙体时要在这些位置留出洞。
    - 这里只有**开着的**门洞和通道。关着的门扇、玻璃窗会把射线挡在门面或玻璃面上，测不到，所以某个墙的 `openings` 为空，只说明“没测到洞”，不等于“这面墙没有门或窗”。
    - `kind` 只写 `opening`，不写门或窗：射线只能说明那里是个洞，不能说明洞里是门、是窗还是什么都没有。
    - `bounds` 说明洞的四条边各由什么界定：左、右、上为 `solid`（射线停在实墙上）；下边为 `floor`（洞和地面之间没有实墙，贴地那一条射线打不到，按到地面处理，`z_floor` 从 0 起，`seen_bottom_m` 是实际看到的最低处）或 `solid`（下方有墙，例如窗台）。只有四边都这样界定的洞才会写进来。
@@ -517,7 +501,7 @@ README = """# 墙体交接文件（walls/v1）
 - `covers_m` 是这一帧拍到的沿墙范围（从 start 起算的米数）。推断补上的墙段没有任何一帧拍到；生成外观时请参考同一面墙已观测部分的外观。
 - `view_angle_deg` 是视线和墙面法向的夹角，0° 表示正对。斜视超过 60° 的帧，墙面会被拉伸得厉害。
 - `plane_offset_m` 是这一帧看到的墙面相对墙平面的深度偏差（不同帧之间可差约 0.1 m）；`reprojection_px` 是把这一帧的墙点投回图像时，和它原像素的距离中位数，用来衡量位姿和内参是否可信。
-- 相机位姿是 AMB3R 自己的位姿（经 Sim(3) 转到扫描坐标系），不是 ScanNet 的 GT 位姿：墙是用 AMB3R 抬到三维的，用它自己的位姿投回去才对得上（实测 6–16 px，GT 位姿 24–79 px）。
+- 相机位姿是 AMB3R 自己的位姿（转到 `amb3r_floor`），不是 ScanNet 的 GT 位姿：墙是用 AMB3R 抬到三维的，用它自己的位姿投回去才对得上（实测 6–16 px，GT 位姿 24–79 px）。
 
 ## 哪些值是假定的
 
@@ -567,12 +551,12 @@ def build(run: str, output: Path, scene: Path = SCENE, rectified: bool = False) 
                            source=f"{scene / (scene.name + '.txt')} (fx_color, fy_color, mx_color, my_color, "
                                   "colorWidth, colorHeight); the same intrinsics as the object handoff")
     width, height = int(camera["width"]), int(camera["height"])
-    frames = Frames(planes)
+    frames = Frames()
     frames.K = np.asarray(camera["K"], dtype=np.float64)
     slot = frame_slots()
     H = float(closed["storey"]["height_m"])
 
-    walls = build_walls(closed, planes, frames)
+    walls = build_walls(closed, planes)
     print(f"{len(walls)} walls; scoring key frames over {len(list(segmentation.glob('frame_*')))} segmented frames", flush=True)
     cands = frame_candidates(walls, frames, segmentation, slot, width, height, H)
 
@@ -633,24 +617,20 @@ def build(run: str, output: Path, scene: Path = SCENE, rectified: bool = False) 
     ext = {w["id"]: w for w in walls if w["role"] == "exterior"}
     inner = [ext[k]["start_floor"] for k in ("ext_S", "ext_E", "ext_N", "ext_W")]
     outer = [ext[k]["footprint_floor"][3] for k in ("ext_S", "ext_E", "ext_N", "ext_W")]
-    up = frames.floor_to_scan[:3, 2]; origin = frames.floor_to_scan[:3, 3]
     doc = {
         "schema_version": ws.SCHEMA_VERSION, "scene_id": scene.name,
         "producer": {"name": "harness_structure", "run": run,
                      "note": "walls lifted from 2D wall masks (point-prompt segmentation) with AMB3R depth, "
                              "planes found per mask and cut where the scene's rays see through, then closed "
-                             "with a rectangle; GT was not read",
+                             "with a rectangle; no GT annotation, axisAlignment or GT pose was read (the frame's "
+                             "scale source is in `frame.scale`)",
                      "sources": {"closed_walls": str(geom / "closed.json"),
                                  "wall_planes": str(geom / "walls.json"),
-                                 "masks": str(segmentation), "rgb": str(FRAMES), "point_maps": str(DEFAULT_NPZ),
-                                 "sim3": str(DEFAULT_SIM3)}},
-        "coordinate_frame": "scannet_scan", "units": "meters", "up_axis": "Z",
-        "floor_frame_to_scan": [[round(float(x), 9) for x in row] for row in frames.floor_to_scan],
-        "floor_frame_note": "p_scan = floor_frame_to_scan @ [x, y, z, 1]; floor frame: z = 0 on the floor plane, "
-                            "+z up, x/y as the ScanNet axis-aligned frame turned by the floor tilt",
+                                 "masks": str(segmentation), "rgb": str(FRAMES), "point_maps": str(DEFAULT_NPZ)}},
+        "coordinate_frame": ws.FRAME, "units": "meters", "up_axis": "Z",
+        "frame": frames.maps.frame.block(),
         "camera": camera,
-        "storey": {"floor_z_floor": 0.0, "floor_plane_scan": {"point": [round(float(x), 5) for x in origin],
-                                                             "normal": [round(float(x), 6) for x in up]},
+        "storey": {"floor_z_floor": 0.0,
                    "height_m": H, "kind": closed["storey"]["kind"],
                    "evidence": {"observed_wall_top_m": round(closed["storey"]["observed_wall_top_m"], 3),
                                 "why_not_measured": closed["storey"]["why"]}},
@@ -690,6 +670,8 @@ def build(run: str, output: Path, scene: Path = SCENE, rectified: bool = False) 
                     f"| {w['evidence']['key_frames_show']['observed_share']:.0%} / {w['evidence']['key_frames_show']['wall_share']:.0%} |")
     (output / "README.md").write_text(README.format(
         scene=scene.name, run=run, out=output, w=width, h=height, storey=H,
+        definition=doc["frame"]["definition"], scale_source=doc["frame"]["scale"]["source"],
+        scale_value=doc["frame"]["scale"]["value"],
         top=closed["storey"]["observed_wall_top_m"], te=closed["thickness"]["exterior_m"],
         ti=closed["thickness"]["interior_m"], rows="\n".join(rows),
         issues="\n".join(f"- {x}" for x in known_issues_zh(doc))))

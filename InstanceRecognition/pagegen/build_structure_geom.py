@@ -12,8 +12,9 @@ Reads only what `src.structure` and the wall handoff wrote:
   so the thickness drawn on the page is the one handed off, corners included)
 
 The GT comparison is display only: the ScanNet wall faces and measured thicknesses are read
-from docs/assets/structure-gt/data.js (built from the annotation by the GT page) and moved
-into the floor frame. Nothing here feeds back into the walls.
+from docs/assets/structure-gt/data.js (built from the annotation by the GT page, in ScanNet's
+axis-aligned frame) and moved into amb3r_floor through the scan frame. Nothing here feeds
+back into the walls.
 
 Points are thinned on a voxel grid per label and quantised to uint16 over the scene bounds.
 """
@@ -27,7 +28,9 @@ from pathlib import Path
 import numpy as np
 
 from src import config
-from src.structure.frames import OUT_ROOT, RAYS, FloorFrame, rotation_to_z
+from src.geometry.amb3r_mask_source import DEFAULT_SIM3
+from src.geometry.floor_frame import Frame, scannet_scan_to_frame
+from src.structure.frames import OUT_ROOT, RAYS, axis_alignment_for_eval
 
 DOCS = config.ROOT / "docs"
 DEFAULT_OUT = DOCS / "assets/structure-geom/data.js"
@@ -49,14 +52,21 @@ def thin(xyz, *cols, v):
     return (xyz[first], *[c[first] for c in cols])
 
 
-def gt_reference(floor: dict):
-    """ScanNet wall faces and thickness measurements, moved into the floor frame. Display only."""
+def gt_to_frame() -> np.ndarray:
+    """ScanNet axis-aligned frame (the GT page's) -> amb3r_floor. Evaluation only."""
+    S = scannet_scan_to_frame(Frame.load(), json.loads(DEFAULT_SIM3.read_text())["sim3_oracle_scale"])
+    return S @ np.linalg.inv(axis_alignment_for_eval())
+
+
+def gt_reference():
+    """ScanNet wall faces and thickness measurements, moved into amb3r_floor. Display only."""
     if not GT_DATA.is_file():
         return [], []
     s = GT_DATA.read_text()
     gt = json.loads(s[s.index("{"):s.index(";\nwindow.STRUCT.pos")])
-    T = FloorFrame(floor)
-    R = rotation_to_z(np.asarray(floor["up_in_lift_frame"], dtype=np.float64))
+    G = gt_to_frame()
+    T = lambda p: G[:3, :3] @ np.asarray(p, dtype=np.float64) + G[:3, 3]
+    R = G[:3, :3]
     faces = []
     for f in gt["faces"]:
         fc, fn, fu = T(f["c"]), R @ np.array(f["nh"]), R @ np.array(f["u"])
@@ -144,7 +154,7 @@ def build(run: str, out: Path = DEFAULT_OUT, handoff: Path = HANDOFF) -> dict:
     FR = np.concatenate(fr).astype(np.uint16); MK = np.concatenate(mk).astype(np.uint16); RGB = np.concatenate(rgs)
 
     # ---- planes, each with its GT face for the comparison columns
-    faces, gaps = gt_reference(W["floor"])
+    faces, gaps = gt_reference()
     walls = []
     for r in planes:
         wc, wu = np.array(r["point"]), np.array(r["along"])
@@ -162,14 +172,14 @@ def build(run: str, out: Path = DEFAULT_OUT, handoff: Path = HANDOFF) -> dict:
 
     # ---- background: the scene rays, in the same floor frame
     z = np.load(RAYS)
-    B, Brgb = thin(FloorFrame(W["floor"])(z["P"].astype(np.float64)), z["rgb"], v=BG_VOXEL)
+    B, Brgb = thin(z["P"].astype(np.float64), z["rgb"], v=BG_VOXEL)
     blo, bhi = B.min(0), B.max(0)
     bq = np.round((B - blo) / np.maximum(bhi - blo, 1e-6) * 65535).astype(np.uint16)
 
     lo, hi = X0.min(0), X0.max(0)
     q = np.round((X0 - lo) / np.maximum(hi - lo, 1e-6) * 65535).astype(np.uint16)
     doc = {"run": run, "sources": {"structure": str(d), "rays": str(RAYS), "handoff": str(handoff)},
-           "unit": "m", "axis": "floor frame: z up, z=0 at the floor", "n": int(len(X0)),
+           "unit": "m", "axis": "amb3r_floor: z up, z=0 at the floor", "n": int(len(X0)),
            "lo": lo.tolist(), "hi": hi.tolist(), "pos": b64(q), "rgb": b64(RGB.astype(np.uint8)),
            "cat": b64(CAT), "plane": b64(PL), "frame": b64(FR), "mask": b64(MK),
            "masks": masks, "cams": [{"frame": int(f), "p": np.array(c).tolist()} for f, c in zip(p["cam_frames"], g["cams"])],

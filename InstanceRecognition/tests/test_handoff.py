@@ -1,4 +1,4 @@
-"""Handoff contract: camera intrinsics, extrinsics, floor_z and axis alignment."""
+"""Handoff contract: camera intrinsics, extrinsics, floor_z and the amb3r_floor frame block."""
 import json
 import shutil
 from pathlib import Path
@@ -47,8 +47,10 @@ def _handoff(tmp_path, width=64, height=48):
     record = schema.empty_object("obj_0001")
     record.update({"label": "chair", "cloud": "clouds/obj_0001.ply", "point_count": 4,
                    "key_frames": [frame]})
+    frame = {"definition": "docs/amb3r-floor-frame.md", "file": "test", "native_to_frame": np.eye(4).tolist(),
+             "scale": {"value": 1.0, "source": "native"}, "first_frame": {"amb3r_index": 0}}
     manifest = schema.manifest("scene_test", {"name": "test"}, objects=1, camera=camera,
-                               floor_z=0.05, axis_alignment={"matrix": np.eye(4).tolist()})
+                               floor_z=0.0, frame=frame)
     (tmp_path / "manifest.json").write_text(json.dumps(manifest))
     (tmp_path / "objects.json").write_text(json.dumps([record]))
     return tmp_path
@@ -79,7 +81,7 @@ def test_camera_to_world_must_be_rigid(tmp_path, pose):
     assert any("camera_to_world" in p for p in check.check(directory))
 
 
-@pytest.mark.parametrize("key", ["camera", "floor_z", "axis_alignment"])
+@pytest.mark.parametrize("key", ["camera", "floor_z", "frame"])
 def test_manifest_scene_fields_are_required(tmp_path, key):
     directory = _handoff(tmp_path)
     _edit(directory, "manifest", lambda d: d.pop(key))
@@ -140,7 +142,19 @@ def test_scene_meta_and_floor(tmp_path):
 
 def test_real_handoff_if_present():
     """The committed-to artifact satisfies the contract and projects onto its masks."""
-    directory = Path("artifacts/handoff/scene0000_00/gt")
+    directory = Path("artifacts/handoff/scene0000_00/gt_amb3r_floor")
     if not (directory / "manifest.json").is_file():
         pytest.skip("handoff artifact not built on this machine")
     assert check.check(directory) == []
+
+
+@pytest.mark.parametrize("change,message", [
+    (lambda d: d.update(coordinate_frame="scannet_scan"), "coordinate_frame"),
+    (lambda d: d.update(floor_z=0.5), "floor is at z = 0"),
+    (lambda d: d.update(axis_alignment={"matrix": np.eye(4).tolist()}), "axis_alignment is not part"),
+    (lambda d: d["frame"].update(native_to_frame=np.diag([1.0, 1.0, -1.0, 1.0]).tolist()), "times a rotation"),
+])
+def test_manifest_is_in_amb3r_floor(tmp_path, change, message):
+    directory = _handoff(tmp_path)
+    _edit(directory, "manifest", change)
+    assert any(message in p for p in check.check(directory))

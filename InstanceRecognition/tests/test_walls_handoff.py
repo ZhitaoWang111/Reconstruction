@@ -1,4 +1,4 @@
-"""Wall handoff (walls/v1): the checker catches each broken promise, and the real handoff holds them."""
+"""Wall handoff (walls/v2): the checker catches each broken promise, and the real handoff holds them."""
 import json
 from pathlib import Path
 
@@ -7,6 +7,10 @@ import pytest
 from PIL import Image
 
 from src.handoff import schema, walls_check, walls_schema as ws
+from src.handoff.walls_from_harness import ALONG_MARGIN
+
+FRAME_BLOCK = {"definition": "docs/amb3r-floor-frame.md", "file": "test", "native_to_frame": (np.eye(4) * [2, 2, 2, 1]).tolist(),
+               "scale": {"value": 2.0, "source": "native"}, "first_frame": {"amb3r_index": 0}}
 
 REAL = Path(__file__).resolve().parents[1] / "artifacts/handoff/scene0000_00/walls_harness"
 
@@ -59,8 +63,8 @@ def _square(tmp_path, size=4.0, t=0.3):
         "covers_m": [1.0, 3.0], "view_angle_deg": 5.0, "distance_m": 2.0,
         "camera_to_world": _pose(-np.pi / 2, (2.0, 2.0, 1.3))}]
     doc = {"schema_version": ws.SCHEMA_VERSION, "scene_id": "test", "producer": {"name": "test"},
-           "coordinate_frame": "scannet_scan", "units": "meters", "up_axis": "Z",
-           "floor_frame_to_scan": np.eye(4).tolist(),
+           "coordinate_frame": ws.FRAME, "units": "meters", "up_axis": "Z",
+           "frame": FRAME_BLOCK,
            "camera": schema.camera(width, height, 50.0, 50.0, 31.5, 23.5, source="test"),
            "storey": {"height_m": 2.8, "kind": "assumed"},
            "thickness_defaults": {"exterior_m": t, "interior_m": 0.15, "kind": "assumed"},
@@ -133,11 +137,10 @@ def _opening(w, a0, a1, z0, z1):
             "closed_above": True, "bounds": {"left": "solid", "right": "solid", "top": "solid",
                                              "bottom": "floor" if z0 == 0 else "solid"},
             "seen_bottom_m": max(z0, 0.2), "corners_floor": [[round(v, 5) for v in q] for q in quad],
-            "corners_scan": [[round(v, 5) for v in q] for q in quad], "note": "rays see through"}
+            "note": "rays see through"}
 
 
 def test_a_measured_opening_passes(tmp_path):
-    """The fixture's floor frame is the scan frame, so the two corner sets coincide."""
     doc = _square(tmp_path)
     doc["walls"][0]["openings"] = [_opening(doc["walls"][0], 1.0, 1.9, 0.0, 2.0)]
     assert _rewrite(tmp_path, doc) == []
@@ -150,7 +153,7 @@ def test_a_measured_opening_passes(tmp_path):
     ({"kind": "door"}, "kind must be opening"),
     ({"source": "guess"}, "kind must be opening"),
     ({"corners_floor": [[0, 1, 0]] * 4}, "not on the wall's face"),        # 1 m off the south wall's line
-    ({"corners_scan": [[0, 0, 0]] * 4}, "corners_scan is not corners_floor"),
+    ({"corners_floor": [[1.0, 0, 0], [1.9, 0, 0], [1.9, 0, 1.5], [1.0, 0, 1.5]]}, "disagree with from_m/to_m/z_floor"),
     ({"bounds": {"left": "unseen", "right": "solid", "top": "solid", "bottom": "floor"}}, "sides and top must be solid"),
     ({"bounds": {"left": "solid", "right": "solid", "top": "solid", "bottom": "solid"}}, "disagrees with z_floor"),
 ])
@@ -201,6 +204,18 @@ def test_convention_fields_match_the_object_handoff(tmp_path):
     assert any("extrinsics convention" in p for p in _rewrite(tmp_path, doc))
 
 
+@pytest.mark.parametrize("change,message", [
+    (lambda d: d.update(coordinate_frame="scannet_scan"), "coordinate_frame"),
+    (lambda d: d["frame"].update(native_to_frame=(np.eye(4) * [2, 3, 2, 1]).tolist()), "times a rotation"),
+    (lambda d: d["frame"].update(scale={"value": 2.0, "source": "guess"}), "scale.source"),
+    (lambda d: d["frame"].pop("scale"), "frame missing"),
+])
+def test_the_frame_block_is_checked(tmp_path, change, message):
+    doc = _square(tmp_path)
+    change(doc)
+    assert any(message in p for p in _rewrite(tmp_path, doc))
+
+
 # ---------------------------------------------------------------- the real handoff
 real = pytest.mark.skipif(not (REAL / "walls.json").is_file(), reason="wall handoff not built")
 
@@ -220,7 +235,7 @@ def test_real_key_frame_masks_land_on_their_wall():
     The reverse test (project the wall face, expect it inside the mask) does not work:
     furniture in front of the wall is correctly left out of the mask."""
     doc = json.loads((REAL / "walls.json").read_text())
-    Minv = np.linalg.inv(np.asarray(doc["floor_frame_to_scan"])); K = np.asarray(doc["camera"]["K"])
+    K = np.asarray(doc["camera"]["K"])                       # walls and cameras share amb3r_floor
     rng = np.random.default_rng(0)
     for w in doc["walls"]:
         a = np.asarray(w["start_floor"]); d = (np.asarray(w["end_floor"]) - a) / w["length_m"]
@@ -230,16 +245,29 @@ def test_real_key_frame_masks_land_on_their_wall():
             pick = rng.choice(len(us), min(4000, len(us)), replace=False); us, vs = us[pick], vs[pick]
             T = np.asarray(k["camera_to_world"])
             rays = np.c_[(us - K[0, 2]) / K[0, 0], (vs - K[1, 2]) / K[1, 1], np.ones(len(us))] @ T[:3, :3].T
-            o = Minv[:3, :3] @ T[:3, 3] + Minv[:3, 3]; r = rays @ Minv[:3, :3].T
+            o, r = T[:3, 3], rays
             face = a - list(k["plane_offset_m"].values())[0] * back
             t = ((face - o[:2]) @ back) / (r[:, :2] @ back)
             X = o + t[:, None] * r
             s, z = (X[:, :2] - a) @ d, X[:, 2]
-            on = (t > 0) & (s > -0.2) & (s < w["length_m"] + 0.2) & (z > -0.2) & (z < w["height_m"] + 0.2)
+            # along the wall: the producer keeps mask pixels up to ALONG_MARGIN past a plane's observed end
+            m_ = ALONG_MARGIN
+            on = (t > 0) & (s > -m_) & (s < w["length_m"] + m_) & (z > -0.2) & (z < w["height_m"] + 0.2)
             tag = (w["id"], k["source_frame_id"])
             assert on.mean() > 0.9, (*tag, round(on.mean(), 3))
             lo, hi = np.percentile(s[on], [2, 98])
             assert abs(lo - k["covers_m"][0]) < 0.25 and abs(hi - k["covers_m"][1]) < 0.25, (*tag, lo, hi, k["covers_m"])
+
+
+@real
+def test_real_handoff_is_in_the_delivery_frame():
+    doc = json.loads((REAL / "walls.json").read_text())
+    assert doc["schema_version"] == "walls/v2" and doc["coordinate_frame"] == "amb3r_floor"
+    assert doc["frame"]["scale"]["source"] == "oracle_gt_poses"
+    assert "floor_frame_to_scan" not in doc and all("corners_scan" not in o for w in doc["walls"] for o in w["openings"])
+    # the key-frame cameras stand where people hold a phone: 1-1.6 m above z = 0
+    heights = [k["camera_to_world"][2][3] for w in doc["walls"] for k in w["key_frames"]]
+    assert 1.0 < min(heights) and max(heights) < 1.7
 
 
 @real
@@ -249,8 +277,10 @@ def test_real_handoff_marks_what_is_assumed():
     t = {w["role"]: w["thickness_m"] for w in doc["walls"]}
     assert t == {"exterior": 0.3, "interior": 0.15}
     assert all(w["thickness_kind"] == "assumed" for w in doc["walls"])
-    inferred = {w["id"]: w["evidence"]["inferred_m"] / w["length_m"] for w in doc["walls"]}
-    assert inferred["ext_W"] > 0.7 and inferred["ext_S"] < 0.1
+    # one exterior wall (behind the curtains and the wardrobe) is mostly inferred, one is almost all seen;
+    # which side each is called depends on the room axis in the frame, so check the shares, not the names
+    inferred = sorted(w["evidence"]["inferred_m"] / w["length_m"] for w in doc["walls"] if w["role"] == "exterior")
+    assert inferred[-1] > 0.75 and inferred[0] < 0.1
 
 
 @real
@@ -275,7 +305,9 @@ def test_real_handoff_carries_the_measured_opening():
     assert len(holes) == 1
     wid, o = holes[0]
     assert (wid, o["kind"], o["source"]) == ("int_3", "opening", "ray_test")
-    assert o["width_m"] == pytest.approx(0.6, abs=0.05) and o["height_m"] == pytest.approx(1.9, abs=0.05)
+    # GT (doorframe #63): 0.63 x 1.95 m from the floor. The ray test works on 10 cm cells, and which
+    # cells a boundary falls in moves with the grid's phase, so allow one cell either way.
+    assert o["width_m"] == pytest.approx(0.63, abs=0.1) and o["height_m"] == pytest.approx(1.95, abs=0.16)
     assert o["z_floor"][0] == 0.0 and o["bounds"]["bottom"] == "floor" and o["seen_bottom_m"] == pytest.approx(0.2)
     assert o["closed_above"] is True
     assert "openings" not in doc["not_included"]

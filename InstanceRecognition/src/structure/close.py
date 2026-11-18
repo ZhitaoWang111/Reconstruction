@@ -34,7 +34,7 @@ import numpy as np
 from scipy import ndimage
 
 from . import walls as wl
-from .frames import RAYS, FloorFrame, Rays, run_dir
+from .frames import RAYS, Rays, run_dir
 
 STOREY = 2.80                                   # m; assumed, not measured
 THICK = {"exterior": 0.30, "interior": 0.15}    # m; assumed, not measured
@@ -104,7 +104,7 @@ def close(run: str, storey: float = STOREY) -> dict:
     W = json.loads((d / "walls.json").read_text())
     g = np.load(d / "geom.npz")
     X = g["X"][g["wall_first"]].astype(np.float64); plane = g["wall_plane"]
-    rays = Rays(FloorFrame(W["floor"]), RAYS)
+    rays = Rays(RAYS)
     walls = [dict(r) for r in W["walls"]]
     others = [dict(r) for r in W["rejected"]]      # the far side of a partition is often only here
     for i, r in enumerate(walls):

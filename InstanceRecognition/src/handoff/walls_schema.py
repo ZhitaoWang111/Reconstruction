@@ -12,7 +12,8 @@ version and a consumer must not read `openings: []` as "a solid wall here".
 A sibling of the object handoff (`schema.py`, handoff/v2), and deliberately shaped
 like it so one reader can open both:
 
-* the same coordinate frame - ScanNet *scan* frame, metres, +Z up, no axisAlignment;
+* the same coordinate frame - `amb3r_floor` (docs/amb3r-floor-frame.md): AMB3R's own
+  reconstruction scaled and stood upright, z = 0 on the floor, +Z up, metres;
 * the same `camera` block (pinhole intrinsics + the OpenCV camera-to-world convention);
 * the same key-frame record - up to three frames, roles primary/secondary/third,
   each with `rgb`, `mask`, `boxed`, `bbox_xyxy`, `visible_pixels`, `camera_to_world`.
@@ -27,11 +28,10 @@ completely; `footprint` is the same thing pre-computed (corners mitred where the
 `joins` say so) for consumers that just want a prism. A consumer that changes a
 thickness must recompute the footprint from the line, not edit the footprint.
 
-All coordinates are scan frame. The floor frame (z = 0 on the floor, walls vertical)
-is often easier to build in; `floor_frame_to_scan` maps it to the scan frame:
-`p_scan = floor_frame_to_scan @ [x, y, z, 1]`. Every 2D point in this file is the
-(x, y) of a floor-frame point at z = 0, and every 3D point is scan frame - the field
-name says which (`*_floor` or `*_scan`).
+All coordinates are amb3r_floor, the frame the object handoff uses too: z = 0 is the floor
+and walls are vertical, so no transform is needed. Every 2D point in this file is the (x, y)
+of a point at z = 0; `*_floor` in a field name says so. The top-level `frame` block says how
+the frame was made and where its scale came from (`scale.source`).
 
 Observed or not
 ---------------
@@ -44,7 +44,11 @@ from __future__ import annotations
 
 from .schema import KEYFRAME_ROLES
 
-SCHEMA_VERSION = "walls/v1"
+# v2 (2026-11-18): coordinate_frame scannet_scan -> amb3r_floor; floor_frame_to_scan, opening
+# corners_scan and storey.floor_plane_scan are gone (the walls are already in the delivery frame),
+# `frame` is new.
+SCHEMA_VERSION = "walls/v2"
+FRAME = "amb3r_floor"
 
 ROLES = ("exterior", "interior")
 SEGMENT_KINDS = ("observed", "inferred")
@@ -58,7 +62,7 @@ OPENING_SOURCES = ("ray_test",)
 
 TOP_REQUIRED = (
     "schema_version", "scene_id", "producer", "coordinate_frame", "units", "up_axis",
-    "floor_frame_to_scan", "camera", "storey", "thickness_defaults", "outline",
+    "frame", "camera", "storey", "thickness_defaults", "outline",
     "walls", "not_included", "known_issues",
 )
 
@@ -71,10 +75,10 @@ WALL_REQUIRED = (
 SEGMENT_REQUIRED = ("from_m", "to_m", "kind", "source_planes")
 
 # An opening, as measured: along the wall from `start`, between floor and its head, and
-# the same hole in the scan frame. `kind` is opening, not door or window, because the ray
+# its four corners. `kind` is opening, not door or window, because the ray
 # test shows a hole and nothing about what fills it.
 OPENING_REQUIRED = ("from_m", "to_m", "z_floor", "width_m", "height_m", "kind", "source",
-                    "rays_through", "closed_above", "bounds", "seen_bottom_m", "corners_floor", "corners_scan")
+                    "rays_through", "closed_above", "bounds", "seen_bottom_m", "corners_floor")
 
 # How each edge of an opening is closed. Sides and top must be wall; the bottom is wall or the floor.
 OPENING_SIDE_BOUNDS = ("solid",)

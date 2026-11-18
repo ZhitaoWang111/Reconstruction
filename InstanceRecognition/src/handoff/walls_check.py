@@ -1,10 +1,12 @@
-"""Check a wall handoff directory (walls/v1) against its contract, whoever produced it.
+"""Check a wall handoff directory (walls/v2) against its contract, whoever produced it.
 
     .venv/bin/python -m src.handoff.walls_check artifacts/handoff/scene0000_00/walls_harness
 
+walls/v2.
+
 Every check is a promise the README makes to the wall generator:
 
-* the frame and camera conventions match the object handoff;
+* the frame (amb3r_floor, with a valid `frame` block) and camera conventions match the object handoff;
 * every wall is a straight, non-degenerate line with the room on its left, a unit
   `normal_to_back` pointing away from the room, a positive thickness and height;
 * `segments` run end to end along the wall, without gaps or overlaps;
@@ -24,6 +26,7 @@ import numpy as np
 from PIL import Image
 
 from . import schema, walls_schema as ws
+from .check import frame_problems
 
 TOL = 1e-3          # m; geometric agreement
 JOIN_TOL = 0.02     # m; a joined end must lie this close to the other wall's line
@@ -54,8 +57,9 @@ def check(directory: Path) -> list[str]:
     missing = [k for k in ws.TOP_REQUIRED if k not in doc]
     if missing:
         return problems + [f"missing top-level fields {missing}"]
-    if (doc["coordinate_frame"], doc["units"], doc["up_axis"]) != ("scannet_scan", "meters", "Z"):
-        problems.append("coordinate_frame/units/up_axis differ from the object handoff (scannet_scan, meters, Z)")
+    if (doc["coordinate_frame"], doc["units"], doc["up_axis"]) != (ws.FRAME, "meters", "Z"):
+        problems.append(f"coordinate_frame/units/up_axis differ from the object handoff ({ws.FRAME}, meters, Z)")
+    problems += frame_problems(doc["frame"])
     cam = doc["camera"]
     cam_missing = [k for k in schema.CAMERA_REQUIRED if k not in cam]
     if cam_missing:
@@ -66,8 +70,6 @@ def check(directory: Path) -> list[str]:
             problems.append("camera K disagrees with fx/fy/cx/cy")
         if cam["extrinsics"] != schema.EXTRINSICS_CONVENTION:
             problems.append("camera extrinsics convention differs from the object handoff")
-    if not _rigid(doc["floor_frame_to_scan"]):
-        problems.append("floor_frame_to_scan is not a rigid 4x4 transform")
     if doc["storey"].get("kind") not in ws.VALUE_KINDS or not doc["storey"].get("height_m", 0) > 0:
         problems.append("storey needs a positive height_m and kind measured|assumed")
     if doc["thickness_defaults"].get("kind") not in ws.VALUE_KINDS:
@@ -131,16 +133,16 @@ def check(directory: Path) -> list[str]:
             if o["kind"] != "opening" or o["source"] not in ws.OPENING_SOURCES:
                 problems.append(f"{tag}: kind must be opening, source one of {ws.OPENING_SOURCES}")
             quad = np.asarray(o["corners_floor"], float)
-            scan = np.asarray(o["corners_scan"], float)
-            if quad.shape != (4, 3) or scan.shape != (4, 3):
-                problems.append(f"{tag}: corners_floor and corners_scan must be four [x, y, z] points")
+            if quad.shape != (4, 3):
+                problems.append(f"{tag}: corners_floor must be four [x, y, z] points")
             else:
                 for q in quad:
                     if _dist_to_line(q[:2], a, b) > JOIN_TOL or q[2] < -TOL or q[2] > w["height_m"] + TOL:
                         problems.append(f"{tag}: corner {q.tolist()} is not on the wall's face"); break
-                expect = np.c_[quad, np.ones(4)] @ np.asarray(doc["floor_frame_to_scan"], float).T
-                if np.abs(expect[:, :3] - scan).max() > 0.002:
-                    problems.append(f"{tag}: corners_scan is not corners_floor through floor_frame_to_scan")
+                expect = [[*(a + s_ * d), z] for s_, z in ((o["from_m"], o["z_floor"][0]), (o["to_m"], o["z_floor"][0]),
+                                                           (o["to_m"], o["z_floor"][1]), (o["from_m"], o["z_floor"][1]))]
+                if np.abs(quad - np.asarray(expect)).max() > 0.002:
+                    problems.append(f"{tag}: corners_floor disagree with from_m/to_m/z_floor")
             spans.append((o["from_m"], o["to_m"]))
         spans.sort()
         for (a0, a1), (b0, _) in zip(spans, spans[1:]):

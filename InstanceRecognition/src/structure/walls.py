@@ -1,9 +1,11 @@
-"""Steps 2-3: the floor plane and the up direction, then the wall planes.
+"""Steps 2-3: check the floor, then the wall planes.
 
     python -m src.structure.walls --run struct_v4_win5
 
-Step 2  One plane through the floor points (RANSAC, refit). Its normal is the up
-        direction; from here on everything is in the floor frame (z = 0 on the floor).
+Step 2  The points arrive in the amb3r_floor frame (src.geometry.floor_frame), which was
+        fitted to the floor masks: z = 0 is the floor and +z is up. Here the floor points
+        are only measured against z = 0 (residual, tilt, area) so a frame fitted to another
+        run's masks shows up.
 Step 3  Wall planes, assuming walls are flat and vertical:
 
   3a  Local planes, one mask at a time. A mask's wall points are split by their own facing
@@ -24,8 +26,8 @@ it, which is what replaced the gap and merge lengths the first two versions need
 Parameters left: DRIFT (one surface's depth can disagree by up to ~24 cm between frames
 here; results do not change between 15 and 70 cm), FACING_DEG, and the support floor.
 
-Writes `walls.json` (floor plane, kept and rejected planes with their openings, ray cuts)
-and `geom.npz` (points in the floor frame, and the plane each thinned wall point went to).
+Writes `walls.json` (floor check, kept and rejected planes with their openings, ray cuts)
+and `geom.npz` (points in the amb3r_floor frame, and the plane each thinned wall point went to).
 No annotation is read.
 """
 from __future__ import annotations
@@ -36,7 +38,9 @@ import json
 import numpy as np
 from scipy import ndimage
 
-from .frames import RAYS, FloorFrame, Rays, rotation_to_z, run_dir
+from src.geometry.floor_frame import Frame
+
+from .frames import RAYS, Rays, run_dir
 
 rng = np.random.default_rng(0)
 
@@ -74,10 +78,26 @@ def ransac_plane(p, tol, iters=400):
     return best
 
 
-def voxel_thin(xyz, *cols):
-    key = np.floor(xyz / VOXEL).astype(np.int64)
+def room_axis(normals) -> float:
+    """The room's main horizontal direction (radians, mod 90 deg) from wall normals: each points
+    at its angle times four, so walls at right angles to each other agree."""
+    n = np.asarray(normals, dtype=np.float64)[:, :2]
+    n = n[np.linalg.norm(n, axis=1) > 0.5]
+    return float(np.angle(np.exp(4j * np.arctan2(n[:, 1], n[:, 0])).sum()) / 4)
+
+
+def voxel_thin(xyz, *cols, axis: float = 0.0):
+    """One point per VOXEL cube, the cubes turned to the room's axis.
+
+    A thinned point stands for VOXEL**2 of surface, which holds only for a wall parallel to the
+    cubes' sides: a wall at 35 deg to them crosses more cubes and comes out up to 13% larger here.
+    Turning the cubes to the room's own axis keeps that from depending on where +x happens to point.
+    """
+    c, s = np.cos(axis), np.sin(axis)
+    q = np.c_[xyz[:, 0] * c + xyz[:, 1] * s, -xyz[:, 0] * s + xyz[:, 1] * c, xyz[:, 2]]
+    key = np.floor(q / VOXEL).astype(np.int64)
     _, first = np.unique(key, axis=0, return_index=True)
-    return (xyz[first], *[c[first] for c in cols], first)
+    return (xyz[first], *[c_[first] for c_ in cols], first)
 
 
 def line_ransac(xy, tol, iters=600):
@@ -152,15 +172,14 @@ def ray_grid(rays, c, n, lo, hi):
     return rays.grid(c, n, lo, hi, CELL, DRIFT, Z_LO, Z_HI)
 
 
-def fit_floor(xyz, frame, mask, lab):
+def floor_check(xyz, frame, mask, lab, frame_doc: dict) -> dict:
+    """The floor points measured against z = 0 of the frame they arrive in."""
     f = xyz[lab == 1]
-    sub = f[rng.choice(len(f), min(len(f), 80000), replace=False)]
-    c, n = fit_plane(sub[ransac_plane(sub, 0.03)])
-    if n[2] < 0:
-        n = -n
-    res = np.abs((f - c) @ n)
-    return {"point_in_lift_frame": c.tolist(), "up_in_lift_frame": n.tolist(),
-            "tilt_from_lift_z_deg": float(np.degrees(np.arccos(min(1, n[2])))),
+    c, n = fit_plane(f[rng.choice(len(f), min(len(f), 80000), replace=False)])
+    res = np.abs(f[:, 2])
+    return {"frame": frame_doc["file"], "frame_floor_fit": frame_doc["floor_fit"],
+            "tilt_deg": float(np.degrees(np.arccos(min(1.0, abs(n[2]))))),
+            "plane_z_m": float(c[2]),
             "residual_median_cm": float(np.median(res) * 100), "residual_p90_cm": float(np.percentile(res, 90) * 100),
             "within_3cm": float(np.mean(res < 0.03)), "points": int(len(f)),
             "masks": int(len(np.unique(mask[lab == 1]))), "frames": int(len(np.unique(frame[lab == 1])))}
@@ -172,23 +191,23 @@ def walls(run: str, dump: bool = False) -> dict:
     xyz, nrm, lab = pts["xyz"].astype(np.float64), pts["normal"].astype(np.float64), pts["label"]
     frame, mask = pts["frame"], pts["mask"]
 
-    # ---- step 2: floor
-    floor = fit_floor(xyz, frame, mask, lab)
-    T = FloorFrame(floor)
-    R = rotation_to_z(np.asarray(floor["up_in_lift_frame"]))
-    X, N = T(xyz), nrm @ R.T
-    C = T(pts["cam_xyz"].astype(np.float64))
+    # ---- step 2: the floor, as the frame left it
+    F = Frame.load()
+    X, N, C = xyz, nrm, pts["cam_xyz"].astype(np.float64)
+    floor = floor_check(X, frame, mask, lab, F.doc)
+    w = lab == 0
+    axis = room_axis(N[w][np.abs(N[w][:, 2]) < np.sin(np.radians(HORIZ_DEG))])
     fz = X[lab == 1]
-    floor["area_m2"] = float(len(voxel_thin(fz)[0]) * VOXEL ** 2)
+    floor["area_m2"] = float(len(voxel_thin(fz, axis=axis)[0]) * VOXEL ** 2)
     floor["extent"] = [np.percentile(fz[:, 0], [0.5, 99.5]).tolist(), np.percentile(fz[:, 1], [0.5, 99.5]).tolist()]
-    print(f"floor: {floor['tilt_from_lift_z_deg']:.2f} deg off the lift vertical, residual median "
+    print(f"floor: {floor['tilt_deg']:.2f} deg off +z, at z = {floor['plane_z_m'] * 100:+.1f} cm, residual median "
           f"{floor['residual_median_cm']:.1f} cm, about {floor['area_m2']:.1f} m2")
 
-    # ---- step 3: wall points, thinned
-    w = lab == 0
-    P, Nw, Fw, Mw, first = voxel_thin(X[w], N[w], frame[w], mask[w])
+    # ---- step 3: wall points, thinned on cubes turned to the room's axis
+    P, Nw, Fw, Mw, first = voxel_thin(X[w], N[w], frame[w], mask[w], axis=axis)
+    print(f"thinning grid turned to the room axis, {np.degrees(axis):+.2f} deg")
     horiz = np.abs(Nw[:, 2]) < np.sin(np.radians(HORIZ_DEG))
-    rays = Rays(T, RAYS)
+    rays = Rays(RAYS, F)
     print(f"rays: {len(rays.P)} from {rays.frames} frames")
 
     # ---- 3a: local planes, one mask at a time, then one sweep over what the masks left
@@ -342,7 +361,7 @@ def walls(run: str, dump: bool = False) -> dict:
                         wall_first=np.flatnonzero(w)[first], wall_plane=plane_of, wall_horizontal=horiz)
     strip = lambda r: {k: v for k, v in r.items() if k != "idx"}
     doc = {"run": run,
-           "params": {"voxel_m": VOXEL, "tol_m": TOL, "split_deg": SPLIT_DEG, "drift_m": DRIFT, "facing_deg": FACING_DEG,
+           "params": {"voxel_m": VOXEL, "voxel_axis_deg": float(np.degrees(axis)), "tol_m": TOL, "split_deg": SPLIT_DEG, "drift_m": DRIFT, "facing_deg": FACING_DEG,
                       "cell_m": CELL, "min_rays": MIN_RAYS, "min_local_m2": MIN_LOCAL, "min_area_m2": MIN_AREA,
                       "min_frames": MIN_FRAMES, "min_opening_m2": MIN_OPENING, "horizontal_deg": HORIZ_DEG},
            "floor": floor, "walls": [strip(r) for r in kept], "rejected": [strip(r) for r in rejected], "cuts": cuts,

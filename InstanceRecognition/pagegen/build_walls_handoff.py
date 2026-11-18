@@ -1,4 +1,4 @@
-"""Publish a wall handoff (walls/v1) as a page for the people who will build the walls.
+"""Publish a wall handoff (walls/v2) as a page for the people who will build the walls.
 
     python -m pagegen.build_walls_handoff --handoff artifacts/handoff/scene0000_00/walls_harness
 
@@ -8,9 +8,9 @@ and inferred stretches, its joins and thickness, and its key frames with the wal
 projected into them through the camera the file carries - so a wrong pose, wrong
 intrinsics or a wall in the wrong place is visible at a glance, not only in a checker.
 
-Background: the scene rays the walls were cut with (every pixel of every frame), put in
-the floor frame with the floor plane recorded in `producer.sources.wall_planes`. When
-either file is gone the page publishes without a background, as the object page does.
+Background: the scene rays the walls were cut with (every pixel of every frame), already in
+the handoff's amb3r_floor frame. When the file is gone, or was written in another frame, the
+page publishes without a background, as the object page does.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from PIL import Image
 
 from src import config
 from src.handoff.walls_from_harness import known_issues_zh
-from src.structure.frames import RAYS, FloorFrame
+from src.structure.frames import RAYS
 
 TEMPLATES = config.WEB_ROOT / "walls_handoff"
 DEFAULT_OUTPUT = config.SITE_ROOT / "handoff"
@@ -63,12 +63,14 @@ def plan_image(points: np.ndarray, path: Path) -> dict:
 
 
 def background(doc: dict, rays: Path, media: Path) -> dict | None:
-    planes = Path((doc.get("producer", {}).get("sources", {}) or {}).get("wall_planes", ""))
-    if not (planes.is_file() and rays.is_file()):
+    if not rays.is_file():
         return None
-    to_floor = FloorFrame(json.loads(planes.read_text())["floor"])
     z = np.load(rays)
-    points = to_floor(z["P"].astype(np.float64))
+    M = np.asarray(doc["frame"]["native_to_frame"], dtype=np.float64)
+    if "native_to_frame" not in z.files or not np.allclose(z["native_to_frame"], M, atol=1e-6):
+        print(f"{rays} is not in this handoff's frame; no background")
+        return None
+    points = z["P"].astype(np.float64)
     plan = plan_image(points, media / "plan_density.png")
     plan["image"] = "media/plan_density.png"
     keys = np.floor(points / BACKGROUND_VOXEL).astype(np.int64)
@@ -79,7 +81,7 @@ def background(doc: dict, rays: Path, media: Path) -> dict | None:
     return {"n": int(len(points)), "lo": low.round(5).tolist(), "hi": high.round(5).tolist(),
             "pos": b64(quantised), "rgb": b64(rgb.astype(np.uint8)), "voxel_m": BACKGROUND_VOXEL,
             "rays": int(len(z["P"])), "frames": int(len(z["cams"])), "plan": plan,
-            "source": "every 4th pixel of every frame (src.structure.rays), floor frame"}
+            "source": "every 4th pixel of every frame (src.structure.rays), amb3r_floor"}
 
 
 def build(handoff: Path, output: Path, rays: Path = RAYS) -> None:

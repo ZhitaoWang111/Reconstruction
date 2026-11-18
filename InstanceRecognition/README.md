@@ -31,7 +31,8 @@ src/harness/                 run, publish, client, observations, state, tools,
                              inputs, history, spatial_context, paths, prompt.txt
 src/geometry/                amb3r_mask_source（唯一的 lifting）,
                              assemble_perception_source（感知产物 → liftable source）,
-                             backproject_masks（共享 helper）, incremental_objects
+                             backproject_masks（共享 helper）, incremental_objects,
+                             floor_frame（交付坐标系 amb3r_floor）
 src/perception/               gpt_sam31, label_frames, gpt_labels（文本提示感知链路）
                              point_prompt/（点选感知：clicks 共用的 SAM3 点选、objects 物体、source 打包）
 src/structure/               结构件：segment/（2D 点选分割）, lift, rays, walls, close（→ 封闭墙体）,
@@ -170,15 +171,16 @@ $SAM31_PYTHON -m src.perception.point_prompt.objects --run point-full100_v2     
 
 ## 墙体几何与墙体交接
 
-从 RGB 帧到给墙体生成模块的交接文件 `walls/v1`。全程不读 ScanNet 标注。
+从 RGB 帧到给墙体生成模块的交接文件 `walls/v2`。全程不读 ScanNet 标注、`axisAlignment` 和 GT 位姿；坐标系见下面“交付坐标系”。
 
 ```bash
 # ① 2D 结构件分割（GPT 点选 + SAM3；需 SAM 环境与网关）：每 2 帧取 1 帧，5 帧一个对话
 $SAM31_PYTHON -m src.structure.segment.window --run struct_v4_win5 --frames-every 2
 # ② 墙体几何与交接
+.venv/bin/python -m src.geometry.floor_frame --run struct_v4_win5   # 地面 mask → 交付坐标系 amb3r_floor（每个场景一次）
 .venv/bin/python -m src.structure.lift  --run struct_v4_win5    # mask 像素 → 带法向的三维点
 .venv/bin/python -m src.structure.rays                          # 全部帧的全部像素 → 射线（与 run 无关，只需跑一次）
-.venv/bin/python -m src.structure.walls --run struct_v4_win5    # 地面定竖直方向；逐 mask 拟合平面，射线检验切开墙线
+.venv/bin/python -m src.structure.walls --run struct_v4_win5    # 核对地面；逐 mask 拟合平面，射线检验切开墙线
 .venv/bin/python -m src.structure.close --run struct_v4_win5    # 分内外墙、长方形封闭、层高与墙厚（假定值）
 .venv/bin/python -m src.handoff.walls_from_harness --run struct_v4_win5
 .venv/bin/python -m src.handoff.walls_check artifacts/handoff/scene0000_00/walls_harness
@@ -212,9 +214,19 @@ GT 页面 `docs/structure-gt-3d.html` 只读 ScanNet 标注网格：把墙实例
 - **开口**：墙面上一块被射线穿过的区域，左、右、上都由实墙围住，就是墙上的洞，写进交接文件的 `openings`（下游在那里留洞）。洞的下边如果和地面之间没有实墙，就按到地面处理：贴地那一条射线打不到墙面（先打在墙前的地上），看不到不等于有墙。每个开口的 `bounds` 记录四条边各由什么界定。关着的门、玻璃窗会挡住射线，测不出来。
 - **内外墙**看墙背后有没有被看到的空间：外墙背后是房子外面，任何一帧都看不到。
 - 层高 2.8 m 和墙厚 30 / 15 cm 是**假定值**（没有一帧拍到天花板，外墙背后从没被看到），在交接文件里标为 `assumed`。
-- 关键帧的相机位姿用 **AMB3R 自己的位姿**（经 Sim(3) 转到扫描坐标系），不用 ScanNet GT 位姿：墙是用 AMB3R 抬上去的，投回图像时 AMB3R 位姿差 5–16 px，GT 位姿差 24–79 px。
+- 关键帧的相机位姿用 **AMB3R 自己的位姿**（转到 `amb3r_floor`），不用 ScanNet GT 位姿：墙是用 AMB3R 抬上去的，投回图像时 AMB3R 位姿差 5–16 px，GT 位姿差 24–79 px。
 
-`struct_v4_win5` 是在 `tmp/point_prompt/run_window.py` 时期跑的，迁移后 prompt 与工具完全一致（prompt sha256 相同），结果拷进了 `artifacts/structure/struct_v4_win5/segmentation/`；从这里重跑后面的步骤，产物与之前逐位相同。
+### 交付坐标系 `amb3r_floor`
+
+所有交接文件（墙体 `walls/v2`、物体 `handoff/v3`）都用这个坐标系，定义写在 `docs/amb3r-floor-frame.md`：AMB3R 自己的重建乘上尺度后扶正，+Z 是我们分割出的地面的法向（朝相机一侧），地面 z = 0，原点在第一帧相机脚下，+X 是第一帧相机朝向的水平投影，单位米。每个场景只拟合一次，存在 `artifacts/scenes/<scene>/amb3r_floor.json`，墙体流水线和交接都读它。
+
+- 不再用 ScanNet 的 `axisAlignment` 摆正，墙不一定和 x、y 轴平行；房间主方向由 `close.py` 自己估，写在 `outline.axis_deg`。
+- 尺度：scene0000_00 暂用 `oracle_gt_poses`（AMB3R 相机中心对 GT 相机中心做 Umeyama 拟合得到的尺度 0.8875，只取尺度，不取旋转平移），交接文件的 `frame.scale` 写明来源。换场景前要换成不依赖 GT 的尺度估计。
+- 和 ScanNet 比较时用 `src.geometry.floor_frame.scannet_scan_to_frame`（scan 坐标系 → 本坐标系的刚体变换），只用于评估和 GT 交接。
+- GT 交接 `src.handoff.from_gt` 把 GT 网格和 GT 位姿转进同一坐标系，输出到 `artifacts/handoff/scene0000_00/gt_amb3r_floor/`；旧的 `gt/`（handoff/v2，scan 坐标系）留着，ObjectGeneration 和 SceneAssembly 按路径和 sha256 钉住了它，等下游切换后再删。
+- 2026-11-18 迁移时核对：把旧交接用 `scannet_scan_to_frame` 换过来，与新交接相比，墙端点最多差 1.6 cm，关键帧位姿差 < 1e-6，GT 交接的点、位姿差 < 1e-5 m、关键帧图片逐字节相同。开口宽高随 10 cm 射线格子的相位变了一格（0.60 × 1.90 → 0.70 × 1.80 m，GT 0.63 × 1.95 m）。
+
+`struct_v4_win5` 是在 `tmp/point_prompt/run_window.py` 时期跑的，迁移后 prompt 与工具完全一致（prompt sha256 相同），结果拷进了 `artifacts/structure/struct_v4_win5/segmentation/`。
 
 ## 三个页面的定位
 

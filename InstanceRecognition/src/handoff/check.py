@@ -32,6 +32,30 @@ def _ply_vertex_count(path: Path) -> int:
                 raise ValueError("no vertex element")
 
 
+def frame_problems(block) -> list[str]:
+    """The `frame` block both handoffs carry: a scaled rotation plus translation, and a named scale source."""
+    if not isinstance(block, dict):
+        return ["frame is not an object"]
+    out = []
+    missing = [k for k in schema.COORD_FRAME_REQUIRED if k not in block]
+    if missing:
+        return [f"frame missing {missing}"]
+    M = np.asarray(block["native_to_frame"], dtype=np.float64)
+    scale = block["scale"] or {}
+    s = scale.get("value")
+    if scale.get("source") not in schema.SCALE_SOURCES:
+        out.append(f"frame.scale.source {scale.get('source')!r} not one of {schema.SCALE_SOURCES}")
+    if not isinstance(s, (int, float)) or not s > 0:
+        out.append(f"frame.scale.value {s!r} is not a positive number")
+    elif M.shape != (4, 4) or not np.allclose(M[3], [0, 0, 0, 1]):
+        out.append("frame.native_to_frame is not a 4x4 affine matrix")
+    else:
+        R = M[:3, :3] / s
+        if not (np.allclose(R @ R.T, np.eye(3), atol=1e-6) and np.linalg.det(R) > 0):
+            out.append("frame.native_to_frame is not scale.value times a rotation")
+    return out
+
+
 def check(directory: Path, strict_missing: bool = True) -> list[str]:
     """Return every problem found; an empty list means the directory is usable."""
     problems: list[str] = []
@@ -47,7 +71,7 @@ def check(directory: Path, strict_missing: bool = True) -> list[str]:
     if manifest.get("schema_version") != schema.SCHEMA_VERSION:
         problems.append(f"schema_version {manifest.get('schema_version')!r} "
                         f"!= {schema.SCHEMA_VERSION!r}")
-    if manifest.get("coordinate_frame") != "scannet_scan":
+    if manifest.get("coordinate_frame") != schema.FRAME:
         problems.append(f"unexpected coordinate_frame {manifest.get('coordinate_frame')!r}")
     if manifest.get("units") != "meters":
         problems.append(f"unexpected units {manifest.get('units')!r}")
@@ -66,12 +90,13 @@ def check(directory: Path, strict_missing: bool = True) -> list[str]:
         if camera["extrinsics"] != schema.EXTRINSICS_CONVENTION:
             problems.append(f"manifest camera extrinsics convention {camera['extrinsics']} "
                             f"!= {schema.EXTRINSICS_CONVENTION}")
-    if "floor_z" in manifest and not isinstance(manifest["floor_z"], (int, float)):
-        problems.append(f"floor_z {manifest['floor_z']!r} is not a number")
-    alignment = (manifest.get("axis_alignment") or {}).get("matrix")
-    if "axis_alignment" in manifest and (
-            alignment is None or np.asarray(alignment, dtype=np.float64).shape != (4, 4)):
-        problems.append("axis_alignment.matrix is not a 4x4 matrix")
+    if "floor_z" in manifest and not (isinstance(manifest["floor_z"], (int, float)) and abs(manifest["floor_z"]) < 0.1):
+        problems.append(f"floor_z {manifest['floor_z']!r}: the floor is at z = 0 in {schema.FRAME}, "
+                        "give or take how far this producer's clouds sit from the reconstructed floor")
+    if "axis_alignment" in manifest:
+        problems.append("axis_alignment is not part of the contract any more (the frame is amb3r_floor)")
+    if "frame" in manifest:
+        problems += frame_problems(manifest["frame"])
 
     records = json.loads(objects_path.read_text())
     if not isinstance(records, list) or not records:

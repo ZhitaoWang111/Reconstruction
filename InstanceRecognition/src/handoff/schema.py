@@ -13,11 +13,15 @@ two producers would drift and `check.py` would be checking the wrong thing.
 
 Coordinate frame
 ----------------
-Points are in the ScanNet *scan* frame: metres, gravity-aligned, +Z up, no
-`axisAlignment` applied. That is the frame the AMB3R source was Sim(3)-aligned
-into (median surface distance 0.12 m against 2.97 m for the axis-aligned mesh),
-so GT clouds and harness clouds can be overlaid directly. The axis alignment
-matrix is recorded in the manifest for anyone who needs the NYU frame instead.
+Points and poses are in `amb3r_floor` (docs/amb3r-floor-frame.md): AMB3R's own
+reconstruction, scaled and stood upright on the floor we segmented - metres, +Z up,
+z = 0 on the floor, origin below the first camera. No ScanNet axisAlignment, no GT pose.
+The manifest's `frame` block carries the AMB3R -> frame matrix and where the scale came
+from (`scale.source`: `oracle_gt_poses` on ScanNet until a GT-free scale exists). The GT
+producer maps the ScanNet mesh and poses into the same frame, so GT and harness directories
+can still be overlaid directly. `floor_z` is where this directory's own clouds have their
+floor: 0 for a harness producer (the frame is fitted to that floor), -0.026 m for the
+ScanNet GT on scene0000_00 (the GT mesh sits that far from the floor AMB3R reconstructed).
 
 Camera
 ------
@@ -39,7 +43,14 @@ from __future__ import annotations
 # `floor_z` and `axis_alignment`, and every key frame must carry
 # `camera_to_world`. A v1 directory fails these checks, so the version moved;
 # every v1 field is still written unchanged, so a v1 reader keeps working.
-SCHEMA_VERSION = "handoff/v2"
+# v3 (2026-11-18): coordinate_frame scannet_scan -> amb3r_floor. `axis_alignment` is gone,
+# `frame` is required, `floor_z` is within 10 cm of 0. Every coordinate moved, so a v2 reader that
+# assumed the scan frame would place things wrongly; hence the version.
+SCHEMA_VERSION = "handoff/v3"
+FRAME = "amb3r_floor"
+# What a manifest's `frame` block must carry (src.geometry.floor_frame.Frame.block()).
+COORD_FRAME_REQUIRED = ("definition", "file", "native_to_frame", "scale", "first_frame")
+SCALE_SOURCES = ("oracle_gt_poses", "native")
 
 # Labels that describe the building rather than a thing in it. The object
 # generator should skip these by default: nine wall segments are not nine assets.
@@ -87,7 +98,7 @@ FRAME_REQUIRED = (
 # Scene-level fields every manifest must carry, checked by `check.py`.
 MANIFEST_REQUIRED = (
     "schema_version", "scene_id", "producer", "coordinate_frame", "units", "up_axis",
-    "camera", "floor_z", "axis_alignment",
+    "camera", "floor_z", "frame",
 )
 CAMERA_REQUIRED = ("model", "width", "height", "fx", "fy", "cx", "cy", "K",
                    "extrinsics")
@@ -98,7 +109,7 @@ EXTRINSICS_CONVENTION = {
     "direction": "camera_to_world",
     "axes": "opencv",
     "axes_detail": "+X right, +Y down, +Z forward (optical axis); not OpenGL",
-    "frame": "scannet_scan",
+    "frame": FRAME,
     "units": "meters",
     "layout": "4x4 row-major; rotation in [:3,:3], camera centre in [:3,3]",
 }
@@ -175,7 +186,7 @@ def manifest(scene_id: str, producer: dict, **extra) -> dict:
         "schema_version": SCHEMA_VERSION,
         "scene_id": scene_id,
         "producer": producer,
-        "coordinate_frame": "scannet_scan",
+        "coordinate_frame": FRAME,
         "units": "meters",
         "up_axis": "Z",
         "bbox_convention": BBOX_CONVENTION,

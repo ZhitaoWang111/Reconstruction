@@ -1,13 +1,12 @@
-"""Shared plumbing: where things live, the AMB3R point maps, the floor frame, and the rays.
+"""Shared plumbing: where things live, the AMB3R point maps in the delivery frame, and the rays.
 
-Three coordinate frames meet in this package and every array says which it is in:
+One coordinate frame runs through this package: `amb3r_floor` (docs/amb3r-floor-frame.md,
+src.geometry.floor_frame) - AMB3R's reconstruction scaled and stood upright, z = 0 on the
+floor, metres. Every point, camera, plane and wall from `lift.py` on is in it, and the
+handoff is written in it too, so there is no conversion at the end.
 
-* scan    - ScanNet scan frame, metres, +Z up (what the AMB3R Sim(3) maps into, and the
-            frame of every handoff file);
-* lift    - the scan frame with ScanNet's axisAlignment applied, only so the room is
-            roughly square to the axes; `lift.py` writes its points here;
-* floor   - `walls.py` refits the floor plane and turns its normal onto +z: z = 0 is the
-            floor and walls are vertical. Everything from `walls.py` on is in this frame.
+Neither ScanNet's axisAlignment nor its GT poses are read. The frame file says where its
+scale came from.
 """
 from __future__ import annotations
 
@@ -17,13 +16,13 @@ from pathlib import Path
 import numpy as np
 
 from src import config
-from src.geometry.amb3r_mask_source import (AMBR3R_SIZE, DEFAULT_NPZ, DEFAULT_SIM3, _apply_sim3,
-                                           _apply_sim3_to_pose, _load_sim3)
+from src.geometry.amb3r_mask_source import AMBR3R_SIZE, DEFAULT_NPZ
+from src.geometry.floor_frame import Frame, frame_path
 
 # Inputs
 SLOTS = config.ARTIFACTS_ROOT / "sources/scene0000_00/gpt_sam31_uniform500_full_v1/manifest.json"
 FRAMES = config.ARTIFACTS_ROOT / "frames/scene0000_00"
-SCENE = config.SCANNET_ROOT / "scene0000_00"
+SCENE = config.SCANNET_ROOT / "scene0000_00"     # camera intrinsics (the handoff's `camera` block); GT pages
 
 # Outputs: everything per run under artifacts/structure/<run>/ (segmentation/ first, then
 # points, planes, closure); the scene rays do not depend on the run.
@@ -49,40 +48,44 @@ def frame_slots() -> dict[int, int]:
     return {int(f["source_frame_id"]): int(f["sequence_index"]) for f in json.loads(SLOTS.read_text())["frames"]}
 
 
-def axis_alignment(scene: Path = SCENE) -> np.ndarray:
+class PointMaps:
+    """The AMB3R point maps, confidences and poses, read once, delivered in the amb3r_floor frame.
+
+    `frame=None` gives the native arrays only (what the frame itself is fitted from).
+    """
+
+    def __init__(self, npz: Path = DEFAULT_NPZ, frame: Frame | None | str = "default"):
+        z = np.load(str(npz))
+        self.pts, self.conf, self.pose = z["pts"], z["conf"], z["pose"]
+        self.frame = Frame.load() if frame == "default" else frame
+        self.H, self.W = AMBR3R_SIZE[1], AMBR3R_SIZE[0]
+
+    def native(self, seq: int) -> np.ndarray:
+        """(H*W, 3) points of one frame in AMB3R's own frame and units."""
+        return self.pts[seq].reshape(-1, 3).astype(np.float64)
+
+    def points(self, seq: int) -> np.ndarray:
+        """(H*W, 3) points of one frame in the amb3r_floor frame."""
+        return self.frame.points(self.native(seq))
+
+    def camera_to_world(self, seq: int) -> np.ndarray:
+        """4x4 camera-to-world (OpenCV axes) in the amb3r_floor frame."""
+        return self.frame.pose(self.pose[seq])
+
+    def camera(self, seq: int) -> np.ndarray:
+        return self.camera_to_world(seq)[:3, 3]
+
+    def valid(self, seq: int, points: np.ndarray) -> np.ndarray:
+        return (self.conf[seq].reshape(-1) >= CONF) & np.isfinite(points).all(1)
+
+
+def axis_alignment_for_eval(scene: Path = SCENE) -> np.ndarray:
+    """ScanNet's axisAlignment (scan -> NYU axis-aligned). For comparing with GT pages only;
+    nothing in the wall pipeline reads it."""
     for line in (scene / f"{scene.name}.txt").read_text().splitlines():
         if line.startswith("axisAlignment"):
             return np.array([float(x) for x in line.split("=")[1].split()]).reshape(4, 4)
     raise ValueError(f"no axisAlignment in {scene}")
-
-
-class PointMaps:
-    """The AMB3R point maps, confidences and poses, read once (each npz access reloads the array)."""
-
-    def __init__(self, npz: Path = DEFAULT_NPZ, sim3: Path = DEFAULT_SIM3, scene: Path = SCENE):
-        z = np.load(str(npz))
-        self.pts, self.conf, self.pose = z["pts"], z["conf"], z["pose"]
-        self.transform, _ = _load_sim3(sim3)
-        self.A = axis_alignment(scene)
-        self.H, self.W = AMBR3R_SIZE[1], AMBR3R_SIZE[0]
-
-    def scan(self, seq: int) -> np.ndarray:
-        """(H*W, 3) points of one frame in the scan frame."""
-        return _apply_sim3(self.pts[seq].reshape(-1, 3), self.transform).astype(np.float64)
-
-    def lift(self, seq: int) -> np.ndarray:
-        """(H*W, 3) points of one frame in the lift frame."""
-        p = self.scan(seq)
-        return p @ self.A[:3, :3].T + self.A[:3, 3]
-
-    def camera_to_world_scan(self, seq: int) -> np.ndarray:
-        return _apply_sim3_to_pose(self.pose[seq], self.transform).astype(np.float64)
-
-    def camera_lift(self, seq: int) -> np.ndarray:
-        return (self.A @ self.camera_to_world_scan(seq))[:3, 3]
-
-    def valid(self, seq: int, points: np.ndarray) -> np.ndarray:
-        return (self.conf[seq].reshape(-1) >= CONF) & np.isfinite(points).all(1)
 
 
 def rotation_to_z(n: np.ndarray) -> np.ndarray:
@@ -94,19 +97,8 @@ def rotation_to_z(n: np.ndarray) -> np.ndarray:
     return np.eye(3) + K + K @ K * ((1 - c) / s ** 2)
 
 
-class FloorFrame:
-    """lift <-> floor, from the floor plane `walls.py` fitted (stored in walls.json)."""
-
-    def __init__(self, floor: dict):
-        self.c = np.asarray(floor["point_in_lift_frame"], dtype=np.float64)
-        self.R = rotation_to_z(np.asarray(floor["up_in_lift_frame"], dtype=np.float64))
-
-    def __call__(self, p_lift):
-        return (np.asarray(p_lift, dtype=np.float64) - self.c) @ self.R.T
-
-
 class Rays:
-    """All rays of the sequence (see rays.py), in the floor frame, and the ray test on a wall plane.
+    """All rays of the sequence (see rays.py), in the amb3r_floor frame, and the ray test on a wall plane.
 
     A ray runs from a camera to the surface its pixel saw; the space along it is empty.
     On the vertical plane through c with normal n, `grid` counts per cell (along x height)
@@ -116,10 +108,13 @@ class Rays:
     behind passed through.
     """
 
-    def __init__(self, to_floor, path: Path = RAYS):
+    def __init__(self, path: Path = RAYS, frame: Frame | None = None):
         z = np.load(path)
-        self.P = to_floor(z["P"].astype(np.float64))
-        self.C = to_floor(z["cams"].astype(np.float64))[z["cam_of"]]
+        frame = frame or Frame.load()
+        if "native_to_frame" not in z.files or not np.allclose(z["native_to_frame"], frame.M, atol=1e-9):
+            raise SystemExit(f"{path} was not written in the current amb3r_floor frame; rerun python -m src.structure.rays")
+        self.P = z["P"].astype(np.float64)
+        self.C = z["cams"].astype(np.float64)[z["cam_of"]]
         self.frames = len(z["cams"])
 
     def grid(self, c, n, lo, hi, cell, drift, z_lo, z_hi):

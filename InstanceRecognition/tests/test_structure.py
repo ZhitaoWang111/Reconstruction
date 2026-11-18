@@ -3,7 +3,7 @@ import numpy as np
 
 from src.structure import close as cl
 from src.structure import walls as wl
-from src.structure.frames import FloorFrame, Rays, rotation_to_z
+from src.structure.frames import Rays, rotation_to_z
 from src.structure.lift import grid_normals
 
 
@@ -53,14 +53,22 @@ def test_rotation_to_z_keeps_heading():
     assert abs(np.degrees(np.arctan2(x[1], x[0]))) < 0.1   # a horizontal direction stays where it pointed
 
 
-def test_floor_frame_puts_the_floor_at_zero():
-    n = np.array([0.01, 0.02, 1.0]); n /= np.linalg.norm(n)
-    c = np.array([0.5, -0.3, 0.07])
-    T = FloorFrame({"point_in_lift_frame": c.tolist(), "up_in_lift_frame": n.tolist()})
-    u = np.cross(n, [1, 0, 0]); u /= np.linalg.norm(u); v = np.cross(n, u)
-    on_floor = c + np.random.default_rng(0).uniform(-3, 3, (50, 1)) * u + np.random.default_rng(1).uniform(-3, 3, (50, 1)) * v
-    assert np.abs(T(on_floor)[:, 2]).max() < 1e-9
-    assert np.allclose(T(c + 2.0 * n)[2], 2.0)
+def test_thinning_does_not_depend_on_where_x_points():
+    """A wall at 35 deg to +x thins to the same count once the cubes turn to the room's axis."""
+    rng = np.random.default_rng(0)
+    a, z = rng.uniform(0, 4, 40000), rng.uniform(0, 2.5, 40000)
+    for deg in (0.0, 35.0):
+        t = np.radians(deg)
+        wall = np.c_[a * np.cos(t), a * np.sin(t), z]
+        normals = np.tile([-np.sin(t), np.cos(t), 0.0], (len(wall), 1))
+        axis = wl.room_axis(normals)
+        assert abs(np.degrees(np.angle(np.exp(4j * (axis - t)))) / 4) < 1e-6
+        n_turned = len(wl.voxel_thin(wall, axis=axis)[0])
+        n_fixed = len(wl.voxel_thin(wall)[0])
+        if deg == 0.0:
+            ref = n_turned
+        else:
+            assert abs(n_turned / ref - 1) < 0.02 and n_fixed / ref > 1.08     # the fixed grid inflates it
 
 
 def test_grid_normals_point_to_the_camera():

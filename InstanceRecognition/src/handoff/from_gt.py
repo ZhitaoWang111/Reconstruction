@@ -13,12 +13,12 @@ Three source quirks are handled here and must not be rediscovered downstream:
    offset +1 and 0.38 at offset 0; and reading value 10 as objectId 10 makes a
    362-vertex sink cover 5.5 million pixels while offset +1 makes it the floor.
 
-2. The GT mesh coordinates are the raw scan frame, *not* the axis-aligned frame.
-   The AMB3R source was Sim(3)-corrected into the raw scan frame - median surface
-   distance 0.12 m against the AMB3R cloud, versus 2.97 m if `axisAlignment` is
-   applied first. Writing the aligned mesh here would silently put GT and harness
-   clouds in different coordinate frames, which is exactly the mistake the whole
-   `coordinate_frame` field exists to prevent.
+2. The GT mesh and GT poses are in ScanNet's raw scan frame, *not* the axis-aligned
+   frame and *not* the delivery frame. Every handoff is delivered in `amb3r_floor`
+   (docs/amb3r-floor-frame.md), so the mesh and the poses are moved into it with
+   `scannet_scan_to_frame` - the rigid map the oracle Sim(3) and the frame together
+   define. GT and harness directories therefore overlay directly. `axisAlignment` is
+   not used at all.
 
 3. Key frames are computed, not looked up. ScanNet has no key-frame annotation;
    5578 2D instance masks are the whole of it, and visibility has to be derived
@@ -36,7 +36,7 @@ Three source quirks are handled here and must not be rediscovered downstream:
 Usage::
 
     python -m src.handoff.from_gt --scene /path/to/scene0000_00 \\
-        --output artifacts/handoff/scene0000_00/gt
+        --output artifacts/handoff/scene0000_00/gt_amb3r_floor
 """
 from __future__ import annotations
 
@@ -53,6 +53,9 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy.ndimage import laplace
 
 from src import config
+from src.geometry.amb3r_mask_source import DEFAULT_SIM3
+from src.geometry.floor_frame import Frame, scannet_scan_to_frame
+
 from . import schema
 
 # The harness sample defines `seq`; the ScanNet archive defines `source_frame_id`.
@@ -61,7 +64,9 @@ from . import schema
 SOURCE = config.ARTIFACTS_ROOT / "sources/scene0000_00/scene_amb3r_v1"
 FRAMES = config.ARTIFACTS_ROOT / "frames/scene0000_00"
 DEFAULT_SCENE = config.SCANNET_ROOT / "scene0000_00"
-DEFAULT_OUTPUT = config.ARTIFACTS_ROOT / "handoff/scene0000_00/gt"
+# handoff/v3 in amb3r_floor. `handoff/scene0000_00/gt` is the handoff/v2 directory in the scan frame;
+# ObjectGeneration and SceneAssembly pin it by path and sha256, so it stays until they move over.
+DEFAULT_OUTPUT = config.ARTIFACTS_ROOT / "handoff/scene0000_00/gt_amb3r_floor"
 DEFAULT_GT_INPUT = config.WORKSPACE / "Video2PointCloud/data/scannet/scene0000_00_uniform500/input"
 
 # Separation thresholds, tried in order until three views are found. Objects flat
@@ -191,7 +196,7 @@ def read_scene_meta(scene: Path) -> dict:
 
 
 def floor_height(points: np.ndarray, owner: np.ndarray, labels: dict) -> dict:
-    """Height of the floor in the scan frame: the median z of the `floor` vertices.
+    """Height of the GT floor in the frame `points` are in: the median z of the `floor` vertices.
 
     Median rather than minimum because the floor instance carries rugs, skirting
     and a few stray vertices up to 0.36 m; the 1st percentile already sits 3 cm
@@ -209,7 +214,7 @@ def floor_height(points: np.ndarray, owner: np.ndarray, labels: dict) -> dict:
     tilt = float(np.degrees(np.arccos(min(1.0, abs(normal[2])))))
     return {
         "value": round(float(np.median(z)), 4),
-        "definition": "median z of the vertices of the `floor` instance(s), scan frame, meters",
+        "definition": "median z of the vertices of the `floor` instance(s), meters",
         "floor_object_ids": [f"obj_{i:04d}" for i in sorted(ids)],
         "vertex_count": int(take.sum()),
         "z_percentiles": {"p05": round(float(np.percentile(z, 5)), 4),
@@ -220,7 +225,7 @@ def floor_height(points: np.ndarray, owner: np.ndarray, labels: dict) -> dict:
 
 
 def camera_centres(sequence_count: int) -> np.ndarray | None:
-    """Camera centre per sampled frame, in the scan frame the clouds live in.
+    """AMB3R camera centre per sampled frame, in the scan frame (the caller moves them on).
 
     AMB3R's pose is camera-to-world and its world is not the scan frame; the
     evaluation record carries the Sim(3) that maps one to the other, and that is
@@ -368,11 +373,16 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
                            meta["fx_color"], meta["fy_color"], meta["mx_color"], meta["my_color"],
                            source=f"{scene / (scene.name + '.txt')} (fx_color, fy_color, "
                                   "mx_color, my_color, colorWidth, colorHeight)")
-    alignment = np.asarray(meta["axisAlignment"], dtype=np.float64).reshape(4, 4)
+    # Everything is delivered in amb3r_floor: the scan-frame mesh, centres and GT poses move into it.
+    delivery = Frame.load()
+    to_frame = scannet_scan_to_frame(delivery, json.loads(DEFAULT_SIM3.read_text())["sim3_oracle_scale"])
+    points = (points.astype(np.float64) @ to_frame[:3, :3].T + to_frame[:3, 3]).astype(np.float32)
     floor = floor_height(points, owner, labels)
     centres = camera_centres(len(sequence))
-    # Per-frame GT camera-to-world poses (4x4, scan frame). Used directly because
-    # this handoff is GT-derived; no AMB3R or Sim(3) is involved.
+    if centres is not None:
+        centres = centres @ to_frame[:3, :3].T + to_frame[:3, 3]
+    # Per-frame GT camera-to-world poses (4x4, scan frame), moved into amb3r_floor.
+    # GT poses because this handoff is GT-derived.
     gt_poses = {}
     gt_input_dir = Path(gt_input).resolve()
     if gt_input_dir.is_dir():
@@ -381,7 +391,7 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
             if npz_path.is_file():
                 with np.load(npz_path) as z:
                     if "camera_pose" in z.files:
-                        gt_poses[seq_idx] = z["camera_pose"].astype(np.float64)
+                        gt_poses[seq_idx] = to_frame @ z["camera_pose"].astype(np.float64)
 
     instance_zip = scene / f"{scene.name}_2d-instance.zip"
     with zipfile.ZipFile(instance_zip) as archive:
@@ -567,22 +577,21 @@ def build(scene: Path, output: Path, source: Path = SOURCE, frames: Path = FRAME
         keyframe_view_counts=views,
         source_frame_ids=sequence,
         camera=camera,
+        frame=delivery.block(),
         floor_z=floor["value"],
-        floor=floor,
-        axis_alignment={
-            "matrix": alignment.tolist(),
-            "maps": "scannet_scan -> scannet_axis_aligned (p_aligned = M @ [x, y, z, 1])",
-            "applied_to_this_handoff": False,
-            "source": str(scene / f"{scene.name}.txt") + " (axisAlignment)",
-        },
+        floor={**floor, "note": "the GT floor measured in amb3r_floor. The frame puts the floor AMB3R "
+                                "reconstructed at z = 0; the GT mesh's floor sits `value` from it (the "
+                                "oracle Sim(3) does not align the two exactly), and objects in this "
+                                "handoff stand on the GT floor, so floor_z is that value"},
+        scannet_scan_to_frame={"matrix": [[round(float(v), 12) for v in row] for row in to_frame],
+                               "use": "evaluation only: maps ScanNet scan-frame data (the raw mesh, GT poses) "
+                                      "into this handoff's frame; a harness handoff has no such matrix"},
         keyframe_policy=schema.keyframe_policy(
             pool=f"{len(sequence)}-frame harness sample",
             occlusion_floor=VISIBILITY_FLOOR,
             occlusion_floor_structural=VISIBILITY_FLOOR_STRUCTURAL,
             edge_penalty=EDGE_PENALTY, separation_deg=SEPARATIONS_DEG,
             max_views=MAX_VIEWS, min_frame_gap=MIN_FRAME_GAP),
-        axis_alignment_note="clouds use the raw scan frame; apply axis_alignment.matrix "
-                            "only if the NYU (axis-aligned) frame is required",
     )
     (output / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
