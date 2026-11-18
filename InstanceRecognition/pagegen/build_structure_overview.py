@@ -80,15 +80,16 @@ def collect(run: str) -> dict:
     pts = np.load(d / "points.npz")
     rays = np.load(RAYS)
     ev = gt_eval.evaluate(run)
-    faces, _ = gt_eval.gt_reference()
+    gs = gt_eval.gt_surface()
+    gtw = gs["points"][gs["wall"]]
     return {"run": run, "W": W, "C": C, "H": H, "F": F, "seg": segmentation(run), "ev": ev,
             "lift": {LABELS[i]: int((pts["label"] == i).sum()) for i in range(4)}, "points": int(len(pts["xyz"])),
-            "rays": int(len(rays["P"])), "ray_frames": int(len(rays["cams"])), "faces": faces}
+            "rays": int(len(rays["P"])), "ray_frames": int(len(rays["cams"])), "gt_wall_points": gtw}
 
 
 # ---------------------------------------------------------------- plan figure
 def plan_figure(D: dict, path: Path) -> None:
-    """Top view in the room's own axes: ray density, kept planes, closed outline, GT faces dashed."""
+    """Top view in the room's own axes: ray density, GT wall points (orange), kept planes, closed outline."""
     C, W, H = D["C"], D["W"], D["H"]
     th = np.radians(C["axis_deg"])
     R = np.array([[np.cos(th), np.sin(th)], [-np.sin(th), np.cos(th)]])      # floor -> room axes
@@ -109,13 +110,10 @@ def plan_figure(D: dict, path: Path) -> None:
     for w in H["walls"]:
         poly = [S(q) for q in (np.asarray(w["footprint_floor"]) @ R.T)]
         dr.polygon(poly, fill=(22, 25, 29, 60) if w["role"] == "exterior" else (98, 80, 214, 70))
-    for f in D["faces"]:                                                    # GT faces, dashed red
-        c, u = np.asarray(f["c"]), np.asarray(f["u"])
-        a0, a1 = f["a"]
-        n = max(2, int((a1 - a0) / 0.08))
-        for i in range(0, n, 2):
-            p0 = (c + (a0 + (a1 - a0) * i / n) * u) @ R.T; p1 = (c + (a0 + (a1 - a0) * min(i + 1, n) / n) * u) @ R.T
-            dr.line([S(p0), S(p1)], fill=(227, 73, 72), width=3)
+    gw = D["gt_wall_points"]                                                # GT wall points, 0.1-2.6 m, orange
+    gw = gw[(gw[:, 2] > 0.1) & (gw[:, 2] < 2.6), :2] @ R.T
+    for q in gw[::3]:
+        x, y = S(q); dr.point([(x, y), (x + 1, y), (x, y + 1)], fill=(194, 65, 12, 160))
     for r in W["walls"]:                                                    # kept planes, solid blue
         c, u = np.asarray(r["point"]), np.asarray(r["along"])
         p0, p1 = (c + r["a"][0] * u) @ R.T, (c + r["a"][1] * u) @ R.T
@@ -167,7 +165,7 @@ def step(no, title, sub, body, io_=None):
 
 def page(D: dict) -> str:
     seg, W, C, H, Fr, ev = D["seg"], D["W"], D["C"], D["H"], D["F"], D["ev"]
-    matches = ev["planes"]["matches"]
+    gtoff = {x["plane"]: x for x in ev["planes"]["planes"]}
     room = ev["room"]
     occ = ev["occupancy"]
     run = D["run"]
@@ -251,13 +249,13 @@ def page(D: dict) -> str:
     pr = W["params"]
     wrows = []
     for r in walls_kept:
-        m = matches.get(r["id"])
+        m = gtoff.get(r["id"])
         wrows.append([r["id"], f"{r['length_m']:.2f} m", f"{r['area_m2']:.2f} m²", len(r["frames"]), f"{r['rms_cm']:.1f} cm",
-                      f"{m['face']} {esc(m['name'])}" if m else "—", f"{m['offset_cm']:+.1f} cm" if m else "—"])
+                      f"{m['gt_m2']:.2f} m²" if m else "—", f"{m['offset_cm']:+.1f} cm" if m and m["offset_cm"] is not None else "—"])
     op_rows = [[wid, f"{o['width_m']:.2f} × {o['height_m']:.2f} m", f"{o['z_floor'][0]:.2f}–{o['z_floor'][1]:.2f} m",
                 " / ".join(f"{k} {v}" for k, v in o["bounds"].items())] for wid, o in op]
     eo = ev["openings"]
-    gt_rows = [[esc(g["name"]), g["face"], "测到" if g["found"] else "没测到"] for g in eo["gt"]]
+    gt_rows = [[esc(g["name"]), g["wall"], "测到" if g["found"] else "没测到"] for g in eo["gt"]]
     cmp_rows = [[x["wall"], esc(x["gt"]["name"]), f"{x['gt']['centre_cm']:+.0f} cm", f"{x['gt']['width_cm']:+.0f} cm",
                  f"{x['gt']['bottom_cm']:+.0f} cm", f"{x['gt']['top_cm']:+.0f} cm"] for x in eo["handed_off"] if x["gt"]]
     s5_body = f"""
@@ -268,12 +266,12 @@ def page(D: dict) -> str:
 <li><b>射线切开</b>：沿每条线做 10 cm 网格，一整列从下到上都被射线穿过、又没有实体的地方把线切断。共切了 {len(W['cuts'])} 刀。</li>
 <li><b>留下墙面</b>：每段支持面积 ≥ {pr['min_area_m2']} m²、至少 {pr['min_frames']} 帧看到的留下：{len(walls_kept)} 面保留，{len(W['rejected'])} 面丢弃。
 墙面上被射线穿过、左右上都有实墙围住的区域是开口。</li></ol>
-<h3>保留的墙面和 GT</h3>{table(["墙面", "长度", "支持面积", "帧", "平面残差", "对应 GT 墙面", "比 GT 靠里"], wrows)}
-<p class="note">“比 GT 靠里”是墙面相对 GT 墙面沿法向的偏移，正数表示往房间里偏。AMB3R 重建出的墙面本身就整体往里偏几厘米，所以这列主要是重建误差，不是拟合误差。</p>
+<h3>保留的墙面和 GT</h3>{table(["墙面", "长度", "支持面积", "帧", "平面残差", "附近的 GT 墙", "比 GT 墙点靠里"], wrows)}
+<p class="note">“附近的 GT 墙”是这个平面范围内、前后 40 cm 的 GT 墙点面积；“比 GT 墙点靠里”是它们到平面的距离中位数，正数表示往房间里偏。AMB3R 重建出的墙面本身就整体往里偏几厘米，所以这列主要是重建误差，不是拟合误差。</p>
 <h3>开口：GT 的 {eo['gt_total']} 个里测到 {eo['gt_found']} 个，误报 {eo['false']} 个</h3>
 {table(["墙", "大小", "离地", "四边"], op_rows)}
 {table(["测到的开口", "对应 GT", "中心偏差", "宽度差", "底边差", "顶边差"], cmp_rows)}
-{table(["GT 开口", "所在 GT 墙面", ""], gt_rows)}
+{table(["GT 开口", "落在交接的哪面墙上", ""], gt_rows)}
 <p>射线只能测出开着的洞。关着的门扇、玻璃窗会挡住射线，所以入户门和两扇窗测不到，尽管 2D 分割已经标出了门扇和窗。</p>
 <h3>参数</h3>
 {table(["参数", "值", "作用", ""], [
@@ -288,9 +286,9 @@ def page(D: dict) -> str:
     # ---------------------------------------------------------------- 06 close
     bs = bars([(f"{r['id']}（{'内' if r['role'] == 'interior' else '外'}）", r["behind_seen"], "墙背后 0.15–0.8 m 的地面上被射线看到的比例")
                for r in C["walls"]], ref=0.5, ref_label="超过 50% 判为内墙")
-    rv = table(["长方形的边", "来自", "对应 GT 墙面", "比 GT 靠里"],
-               [[x["side"], "观测墙" if x["from"] == "observed" else "看到的空间", f"{x['face']} {esc(x['name'])}", f"{x['inward_cm']:+.1f} cm"]
-                for x in room["sides"] if x["face"]])
+    rv = table(["长方形的边", "来自", "这条边附近的 GT 墙", "比 GT 墙点靠里"],
+               [[x["side"], "观测墙" if x["from"] == "observed" else "看到的空间", f"{x['gt_m2']:.2f} m²",
+                 f"{x['inward_cm']:+.1f} cm" if x["inward_cm"] is not None else "—"] for x in room["sides"]])
     hid = {w["evidence"]["planes"][0]: w["id"] for w in H["walls"] if w["role"] == "interior"}
     fin = table(["墙", "类型", "长度", "观测", "推断"],
                 [[f["id"] if f["role"] == "exterior" else f"{hid.get(f['id'], f['id'])}（{f['id']}）", "外墙" if f["role"] == "exterior" else "内墙", f"{f['length_m']:.2f} m",
@@ -308,10 +306,10 @@ def page(D: dict) -> str:
 <li><b>内墙延伸</b>：内墙两端沿自身延长，到 {C['params']['max_ext_m']} m 内遇到的第一条墙线为止；如果延长段被射线穿过就不延。</li>
 <li><b>层高和厚度</b>：层高 {C['storey']['height_m']:.2f} m {kind('assumed')}，外墙 {C['thickness']['exterior_m'] * 100:.0f} cm / 内墙 {C['thickness']['interior_m'] * 100:.0f} cm {kind('assumed')}，厚度加在墙背后，房间一侧的墙面不动。</li></ol>
 <figure class="plan"><img src="assets/structure-overview/plan.png" alt="俯视图">
-<figcaption>俯视图，按房间主方向摆正。灰色：射线终点密度（0.3–2.2 m 高）；蓝色实线：保留的墙面；深灰 / 紫色块：交接里的外墙 / 内墙占地；红色虚线：GT 墙面。</figcaption></figure>
+<figcaption>俯视图，按房间主方向摆正。灰色：射线终点密度（0.3–2.2 m 高）；橙色：GT 墙点（0.1–2.6 m）；蓝色实线：保留的墙面；深灰 / 紫色块：交接里的外墙 / 内墙占地。</figcaption></figure>
 <h3>长方形和 GT</h3>{rv}
 {table(["方向", "长方形", "GT（两面对应墙之间）", "差", "对应的 GT 墙面"],
-       [[x["axis"], f"{x['ours_m']:.2f} m", f"{x['gt_m']:.2f} m", f"{x['diff_cm']:+.0f} cm", " ↔ ".join(x["faces"])] for x in room["size"]])}
+       [[x["axis"], f"{x['ours_m']:.2f} m", f"{x['gt_m']:.2f} m", f"{x['diff_cm']:+.0f} cm", "两条对边各自到 GT 墙点的距离相加"] for x in room["size"]])}
 <p class="note">交接里的 W/S/E/N 按 amb3r_floor 里房间的主方向起名，和 ScanNet GT 页面上的“南墙、北墙”不是同一套方位：交接的 ext_W 落在 GT 的北墙上。</p>
 <h3>封闭后每面墙观测了多少</h3>{fin}
 <h3>层高</h3>{tops}
@@ -331,9 +329,9 @@ def page(D: dict) -> str:
               [("输入", "closed.json + walls.json + 关键帧 mask"), ("输出", "walls.json + keyframes/ + README")])
 
     # ---------------------------------------------------------------- 08 coverage
-    fr = [f for f in occ["faces"] if f["face"] != "-"]
-    chain_rows = [[f"{f['face']} {esc(f['name'])}", f"{f['area_m2']:.2f} m²", pct(f["chain_rays"]), pct(f["chain_masks"]),
-                   pct(f["chain_planes"]), pct(f["on_face"]), f"{f['offset_cm']:+.1f} cm" if f["offset_cm"] is not None else "—"] for f in fr]
+    chain_rows = [[w["wall"], f"{w['gt_m2']:.2f} m²", pct(w["chain_rays"]), pct(w["chain_masks"]), pct(w["chain_planes"]),
+                   pct(w["chain_on_face"]), f"{w['offset_cm']:+.1f} cm" if w["offset_cm"] is not None else "—", pct(w["supported"])]
+                  for w in occ["walls"] if w["gt_m2"]]
     c = occ["chain"]; sp = occ["support"]
     chain_bars = bars([("有射线终点", c["rays"], "GT 墙面 10 cm 内有射线终点"), ("有墙 mask 点", c["masks"], "10 cm 内有被 2D 分割标成墙的点"),
                        ("进了保留的平面", c["planes"], "10 cm 内有属于某个保留墙面的点"),
@@ -346,13 +344,14 @@ def page(D: dict) -> str:
 共 {occ['gt_wall_m2']} m² 墙面。点按面积撒，所以“多少比例的点”就是“多少比例的墙面”。两个方向各量一次：</p>
 <h3>GT 墙面有多少被交出去了，证据在哪一层丢的</h3>
 {chain_bars}
-{table(["GT 墙面", "面积", "有射线终点", "有墙 mask 点", "进了保留的平面", "贴着交接墙面", "交接墙面比 GT 靠里"], chain_rows)}
+<p class="note">按交出去的墙拆：每个 GT 墙点归到离它最近的那面交接墙（40 cm 以内），不经过任何对 GT 的墙面划分。</p>
+{table(["交接的墙", "附近的 GT 墙", "有射线终点", "有墙 mask 点", "进了保留的平面", "贴着交接墙面", "交接墙面比 GT 靠里", "这面墙背后有 GT 墙"], chain_rows)}
 <p>“在交接墙体里”接近 100%，因为长方形加 30 cm 厚度把整圈都包住了；更严格的是“贴着交接墙面”（{pct(occ['on_face'])}）：
-差在被家具挡住的墙（F1、F6）和整体内缩的墙面（偏移中位数 {occ['median_offset_cm']:+.1f} cm）。证据链里掉得最多的一步是射线 → 墙 mask。</p>
+差在被家具挡住的墙和整体内缩的墙面（偏移中位数 {occ['median_offset_cm']:+.1f} cm）。证据链里掉得最多的一步是射线 → 墙 mask。</p>
 <h3>交出去的墙面有多少背后真有墙</h3>
 <p>把交接里每面墙的房间一侧墙面每 {sp['step_m'] * 100:.0f} cm 取一点（开口处不取），共 {sp['handed_off_m2']} m²，看 {sp['radius_m'] * 100:.0f} cm 内有没有 GT 墙面；没有的话，最近的 GT 表面是什么：</p>
 {sup_bars}
-<p class="note">高于 GT 墙顶的部分（层高假定 2.8 m）最近的是天花板；推断补上的墙段落在窗帘、柜子前面；离 GT 墙面超过 15 cm 但最近的仍是墙，说明位置偏了。每面墙：{"、".join(f"{w['wall']} {pct(w['supported'])}" for w in sp["walls"])}。</p>"""
+<p class="note">高于 GT 墙顶的部分（层高假定 2.8 m）最近的是天花板；推断补上的墙段落在窗帘、柜子前面；离 GT 墙面超过 15 cm 但最近的仍是墙，说明位置偏了。每面墙见上表最后一列。</p>"""
     s8 = step(8, "和 GT 墙体比", "tools/structure/gt_eval.py · GT 只用于这一节", s8_body)
 
     # ---------------------------------------------------------------- 09 weak points

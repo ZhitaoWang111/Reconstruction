@@ -12,8 +12,8 @@ Reads only what `src.structure` and the wall handoff wrote:
   so the thickness drawn on the page is the one handed off, corners included)
 
 The GT comparison is display only and comes from tools.structure.gt_eval: the GT wall points
-(the annotated mesh's `wall` faces sampled by area, what the evaluator measures against), the
-rectangles fitted around each GT face, and the measured thicknesses. Nothing here feeds back.
+(the annotated mesh's `wall` faces sampled by area, what the evaluator measures against), each
+plane's offset to them, and the thicknesses measured on the mesh. Nothing here feeds back.
 
 Points are thinned on a voxel grid per label and quantised to uint16 over the scene bounds.
 """
@@ -28,7 +28,7 @@ import numpy as np
 
 from src import config
 from src.structure.frames import OUT_ROOT, RAYS
-from tools.structure.gt_eval import face_of_points, gt_reference, gt_surface, match_gt   # the GT comparison lives in the evaluator
+from tools.structure.gt_eval import eval_planes, gt_gaps, gt_surface   # the GT comparison lives in the evaluator
 
 DOCS = config.ROOT / "docs"
 DEFAULT_OUT = DOCS / "assets/structure-geom/data.js"
@@ -107,8 +107,8 @@ def build(run: str, out: Path = DEFAULT_OUT, handoff: Path = HANDOFF) -> dict:
     X0 = np.concatenate(pts).astype(np.float32); CAT = np.concatenate(cats); PL = np.concatenate(plane_of)
     FR = np.concatenate(fr).astype(np.uint16); MK = np.concatenate(mk).astype(np.uint16); RGB = np.concatenate(rgs)
 
-    # ---- planes, each with its GT face for the comparison columns
-    faces, gaps = gt_reference()
+    # ---- planes, each with its offset to the GT wall points for the comparison columns
+    gt_off = {x["plane"]: x for x in eval_planes(W)["planes"]}
     walls = []
     for r in planes:
         wc, wu = np.array(r["point"]), np.array(r["along"])
@@ -121,15 +121,15 @@ def build(run: str, out: Path = DEFAULT_OUT, handoff: Path = HANDOFF) -> dict:
         rec["why"] = WHY_ZH.get(r.get("why", ""), r.get("why", ""))
         rec["corners"] = [[*(wc + r["a"][0] * wu), r["z"][0]], [*(wc + r["a"][1] * wu), r["z"][0]],
                           [*(wc + r["a"][1] * wu), r["z"][1]], [*(wc + r["a"][0] * wu), r["z"][1]]]
-        rec["gt"] = match_gt(r, faces)
+        go = gt_off[r["id"]]
+        rec["gt"] = {"offset_cm": go["offset_cm"], "gt_m2": go["gt_m2"]} if go["offset_cm"] is not None else None
         walls.append(rec)
 
     # ---- GT wall points: the very points tools.structure.gt_eval measures against, thinned for display
     gs = gt_surface()
     G = gs["points"][gs["wall"]]
-    gface = face_of_points(G, faces)
     _, gfirst = np.unique(np.floor(G / GT_VOXEL).astype(np.int64), axis=0, return_index=True)
-    G, gface = G[gfirst], gface[gfirst]
+    G = G[gfirst]
     glo, ghi = G.min(0), G.max(0)
     gq = np.round((G - glo) / np.maximum(ghi - glo, 1e-6) * 65535).astype(np.uint16)
 
@@ -149,20 +149,20 @@ def build(run: str, out: Path = DEFAULT_OUT, handoff: Path = HANDOFF) -> dict:
            "floor": W["floor"], "params": W["params"], "walls": walls, "cuts": W.get("cuts", []),
            "scene_rays": W.get("scene_rays"), "scene_frames": W.get("scene_frames"), "lines": W.get("lines"),
            "local_planes": W.get("local_planes"), "unassigned": W.get("wall_points_unassigned"),
-           "horizontal": W.get("wall_points_horizontal"), "gt_faces": faces, "gt_gaps": gaps,
+           "horizontal": W.get("wall_points_horizontal"), "gt_gaps": gt_gaps(),
            "counts": {str(L): int((CAT == L).sum()) for L in range(4)},
            "closed": closed_with_handoff(closed, handoff) if closed else None,
            "gt_points": {"n": int(len(G)), "lo": glo.tolist(), "hi": ghi.tolist(), "pos": b64(gq),
-                         "face": b64((gface + 1).astype(np.uint8)), "voxel_m": GT_VOXEL, "per_m2": gs["per_m2"],
+                         "voxel_m": GT_VOXEL, "per_m2": gs["per_m2"],
                          "source": "ScanNet annotated mesh, faces labelled wall, sampled by area into amb3r_floor "
-                                   "(tools.structure.gt_eval.gt_surface); face = GT face it lies on, 0 = none"},
+                                   "(tools.structure.gt_eval.gt_surface)"},
            "bg": {"n": int(len(B)), "lo": blo.tolist(), "hi": bhi.tolist(), "pos": b64(bq),
                   "rgb": b64(Brgb.astype(np.uint8)), "voxel_m": BG_VOXEL, "rays": int(len(z["P"])),
                   "frames": int(len(z["cams"]))}}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("window.GEOM=" + json.dumps(doc, ensure_ascii=False, separators=(",", ":")) + ";\n")
     print(f"{len(X0)} points, {len(B)} background points, {len(walls)} planes -> {out} ({out.stat().st_size / 1e6:.2f} MB)")
-    print("planes -> GT:", [(r["id"], r["gt"]["face"] if r["gt"] else None) for r in walls])
+    print("planes -> offset to GT wall points (cm):", [(r["id"], r["gt"]["offset_cm"] if r["gt"] else None) for r in walls])
     return doc
 
 

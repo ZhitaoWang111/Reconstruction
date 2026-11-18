@@ -16,37 +16,42 @@ def _plane(pid, offset, a=(-2.0, 2.0), heading_deg=90.0):
     return {"id": pid, "point": [0.0, offset], "normal": n, "along": [-n[1], n[0]], "a": list(a)}
 
 
-def test_match_gt_takes_the_face_the_plane_lies_on():
-    m = ge.match_gt(_plane("W1", 0.08), [FACE])
-    assert m["face"] == "F1" and m["offset_cm"] == pytest.approx(8.0) and m["overlap_m"] == pytest.approx(4.0)
-    assert ge.match_gt(_plane("W2", 0.6), [FACE]) is None                 # too far in front
-    assert ge.match_gt(_plane("W3", 0.0, heading_deg=-90), [FACE]) is None  # facing the other way
+def _fake_gt(monkeypatch, pts):
+    pts = np.asarray(pts, float)
+    monkeypatch.setattr(ge, "gt_surface", lambda: {"points": pts, "label": np.array(["wall"] * len(pts)),
+                                                   "instance": np.zeros(len(pts), int), "wall": np.ones(len(pts), bool),
+                                                   "per_m2": 2000})
 
 
-def test_planes_report_faces_without_a_plane():
-    other = {**FACE, "key": "F2", "c": [5.0, 5.0]}
-    W = {"walls": [_plane("W1", 0.05)], "rejected": [_plane("R1", 5.0)]}
-    out = ge.eval_planes(W, [FACE, other])
-    assert out["faces_with_plane"] == 1 and out["kept_on_no_face"] == []
-    f1, f2 = out["faces"]
-    assert f1["planes"] == ["W1"] and f1["offset_cm"] == pytest.approx(5.0) and f1["length_covered"] == pytest.approx(4 / 6, abs=1e-4)
-    assert f2["planes"] == [] and f2["offset_cm"] is None
+def _sheet(y, x=(0.0, 4.0), z=(0.0, 2.5), step=0.02):
+    """GT wall points on the plane y = const."""
+    X, Z = np.meshgrid(np.arange(*x, step), np.arange(*z, step))
+    return np.c_[X.ravel(), np.full(X.size, y), Z.ravel()]
 
 
-def test_room_size_is_the_gap_between_the_matched_faces():
-    faces = [{**FACE, "key": k, "c": c, "n": n} for k, c, n in
-             (("FW", [-3.0, 0.0], [1.0, 0.0]), ("FE", [3.5, 0.0], [-1.0, 0.0]),
-              ("FS", [0.0, -3.0], [0.0, 1.0]), ("FN", [0.0, 3.2], [0.0, -1.0]))]
-    planes = {"matches": {"A": {"face": "FW", "name": "w"}, "B": {"face": "FS", "name": "s"},
-                          "C": {"face": "FE", "name": "e"}, "D": {"face": "FN", "name": "n"}}}
-    sides = [{"side": s, "k": k, "from": "observed", "walls": [w], "normal": nn, "offset": off}
-             for s, k, w, nn, off in (("W", 0, "A", [1, 0], -2.9), ("S", 1, "B", [0, 1], -2.9),
-                                      ("E", 2, "C", [-1, 0], -3.4), ("N", 3, "D", [0, -1], -3.1))]
-    C = {"sides": sides, "rectangle": {"width_m": 6.3, "depth_m": 6.0, "area_m2": 37.8, "seen_outside_share": 0.0}}
-    out = ge.eval_room(C, planes, faces)
-    assert {x["axis"]: x["diff_cm"] for x in out["size"]} == {"W-E": pytest.approx(-20.0), "S-N": pytest.approx(-20.0)}
-    assert {x["side"]: x["inward_cm"] for x in out["sides"]} == {"W": pytest.approx(10.0), "S": pytest.approx(10.0),
-                                                                 "E": pytest.approx(10.0), "N": pytest.approx(10.0)}
+def test_plane_offset_is_measured_against_the_gt_points(monkeypatch):
+    _fake_gt(monkeypatch, _sheet(-0.08))               # GT wall 8 cm behind our plane at y = 0 (room on +y)
+    W = {"walls": [{"id": "W1", "point": [2.0, 0.0], "normal": [0.0, 1.0], "along": [-1.0, 0.0], "a": [-1.5, 1.5], "z": [0.1, 2.3]}],
+         "rejected": [{"id": "R1", "point": [2.0, 3.0], "normal": [0.0, 1.0], "along": [-1.0, 0.0], "a": [-1.0, 1.0], "z": [0.1, 2.0]}]}
+    out = ge.eval_planes(W)
+    w1, r1 = out["planes"]
+    assert w1["offset_cm"] == pytest.approx(8.0, abs=0.5) and r1["offset_cm"] is None
+    assert out["kept_without_gt"] == [] and out["mean_abs_offset_cm"] == pytest.approx(8.0, abs=0.5)
+
+
+def test_room_sides_are_measured_against_the_gt_points(monkeypatch):
+    # GT room 0..4 x 0..3, our rectangle 0.1..3.9 x 0.1..2.9: every side 10 cm inside
+    pts = np.r_[_sheet(0.0), _sheet(3.0), _sheet(0.0, x=(0, 3)) @ np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]]),
+                _sheet(4.0, x=(0, 3)) @ np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])]
+    _fake_gt(monkeypatch, pts)
+    sides = [{"side": "W", "from": "observed", "p0": [0.1, 2.9], "p1": [0.1, 0.1], "normal": [1.0, 0.0]},
+             {"side": "S", "from": "observed", "p0": [0.1, 0.1], "p1": [3.9, 0.1], "normal": [0.0, 1.0]},
+             {"side": "E", "from": "observed", "p0": [3.9, 0.1], "p1": [3.9, 2.9], "normal": [-1.0, 0.0]},
+             {"side": "N", "from": "observed", "p0": [3.9, 2.9], "p1": [0.1, 2.9], "normal": [0.0, -1.0]}]
+    C = {"sides": sides, "rectangle": {"width_m": 3.8, "depth_m": 2.8, "area_m2": 10.64, "seen_outside_share": 0.0}}
+    out = ge.eval_room(C)
+    assert all(x["inward_cm"] == pytest.approx(10.0, abs=1.0) for x in out["sides"])
+    assert {x["axis"]: round(x["gt_m"], 2) for x in out["size"]} == {"W-E": 4.0, "S-N": 3.0}
 
 
 def test_compare_lists_what_moved(capsys):
@@ -64,11 +69,12 @@ real = pytest.mark.skipif(not ge.BASELINE.is_file(), reason="no structure GT bas
 def test_real_baseline_has_every_headline():
     doc = json.loads(ge.BASELINE.read_text())
     h = doc["headline"]
-    for k in ("wall.completeness", "wall.on_face", "wall.support", "wall.median_offset_cm",
+    for k in ("wall.in_solid", "wall.on_face", "wall.support", "wall.median_offset_cm",
               "wall.mean_abs_height_error_cm", "chain.rays", "chain.masks", "openings.gt_found", "openings.gt_total"):
         assert k in h and h[k] is not None
-    assert h["openings.gt_total"] == 4
+    assert h["openings.gt_total"] == 4 and h["planes.kept_without_gt"] == 0
     assert h["chain.rays"] >= h["chain.masks"] >= h["chain.planes"]       # evidence only gets lost down the chain
+    assert "F1" not in json.dumps(doc)                                     # no GT face partition anywhere
 
 
 def _room(tmp_wall_h=2.5):
