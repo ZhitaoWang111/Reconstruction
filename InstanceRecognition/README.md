@@ -217,7 +217,7 @@ $SAM31_PYTHON -m src.structure.segment.window --run struct_v4_win5 --frames-ever
 
 模板在 `pagegen/templates/walls_handoff/`，和其他模板一样不进版本库。
 
-**GT 评估**（只用于评估，`src/` 不读）：一次跑出 2D 分割纯度和漏标、每面 GT 墙从射线到 mask 到平面的覆盖、平面偏移、房间尺寸、墙顶、开口（中心、宽、底、顶的偏差）、厚度线索，并和基线比：
+**GT 评估**（只用于评估，`src/` 不读）：参照物是 ScanNet 标注网格里的**墙体占据**——标成 `wall` 的面片按面积均匀采样、转进 amb3r_floor 的点云（2D 实例标注太粗，不用）。量两个方向：GT 墙面有多少落在交接墙体里 / 贴着交接墙面，证据在射线 → 墙 mask → 平面哪一层丢的；交接墙面有多少背后真有 GT 墙，没有的话最近的是什么（天花板、窗帘、柜子……）。另有每面墙的 GT 墙顶对层高、房间尺寸、开口（中心、宽、底、顶）、厚度线索，并和基线比：
 
 ```bash
 .venv/bin/python -m tools.structure.gt_eval --run struct_v4_win5 --save-baseline   # 记下当前结果作基线

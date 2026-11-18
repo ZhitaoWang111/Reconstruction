@@ -50,11 +50,11 @@ def test_room_size_is_the_gap_between_the_matched_faces():
 
 
 def test_compare_lists_what_moved(capsys):
-    base = {"run": "a", "commit": "x", "headline": {"seg.wall.purity": 0.9, "openings.gt_found": 1}}
-    cur = {"run": "a", "commit": "y", "headline": {"seg.wall.purity": 0.9, "openings.gt_found": 3}}
+    base = {"run": "a", "commit": "x", "headline": {"wall.on_face": 0.9, "openings.gt_found": 1}}
+    cur = {"run": "a", "commit": "y", "headline": {"wall.on_face": 0.9, "openings.gt_found": 3}}
     ge.compare(cur, base)
     out = capsys.readouterr().out
-    assert "openings.gt_found" in out and "seg.wall.purity" not in out and "1 of 2" in out
+    assert "openings.gt_found" in out and "wall.on_face" not in out and "1 of 2" in out
 
 
 real = pytest.mark.skipif(not ge.BASELINE.is_file(), reason="no structure GT baseline saved")
@@ -64,7 +64,32 @@ real = pytest.mark.skipif(not ge.BASELINE.is_file(), reason="no structure GT bas
 def test_real_baseline_has_every_headline():
     doc = json.loads(ge.BASELINE.read_text())
     h = doc["headline"]
-    for k in ("seg.wall.purity", "coverage.masks", "planes.faces_with_plane", "planes.mean_abs_offset_cm",
-              "height.mean_abs_storey_error_cm", "openings.gt_found", "openings.gt_total"):
+    for k in ("wall.completeness", "wall.on_face", "wall.support", "wall.median_offset_cm",
+              "wall.mean_abs_height_error_cm", "chain.rays", "chain.masks", "openings.gt_found", "openings.gt_total"):
         assert k in h and h[k] is not None
-    assert h["openings.gt_total"] == 4 and h["planes.faces_total"] == 9
+    assert h["openings.gt_total"] == 4
+    assert h["chain.rays"] >= h["chain.masks"] >= h["chain.planes"]       # evidence only gets lost down the chain
+
+
+def _room(tmp_wall_h=2.5):
+    """One straight wall along x, room on +y: start (0,0) -> end (4,0), thickness 0.2 behind (-y)."""
+    return {"walls": [{"id": "ext_S", "start_floor": [0.0, 0.0], "end_floor": [4.0, 0.0], "normal_to_back": [0.0, -1.0],
+                       "thickness_m": 0.2, "height_m": tmp_wall_h,
+                       "footprint_floor": [[0, 0], [4, 0], [4, -0.2], [0, -0.2]],
+                       "openings": [{"from_m": 1.0, "to_m": 2.0, "z_floor": [0.0, 2.0]}]}]}
+
+
+def test_solids_measure_inside_face_and_hole():
+    S = ge.Solids(_room())
+    X = np.array([[0.5, -0.1, 1.0],      # inside the wall
+                  [0.5, 0.05, 1.0],      # 5 cm into the room, in front of the face
+                  [1.5, -0.1, 1.0],      # inside the opening
+                  [0.5, -0.1, 2.7]])     # above the wall top
+    d, which, hole = S.distance(X)
+    assert d[0] == 0 and d[1] == pytest.approx(0.05) and hole.tolist() == [False, False, True, False]
+    assert d[3] == pytest.approx(0.2)
+    f = S.face_distance(X)
+    assert f[1] == pytest.approx(0.05) and f[0] == pytest.approx(0.1) and np.isinf(f[2])
+    pts, idx = S.face_samples()
+    assert not ((pts[:, 0] > 1.0) & (pts[:, 0] < 2.0) & (pts[:, 2] < 2.0)).any()     # nothing sampled in the hole
+    assert pts[:, 2].max() < 2.5 and np.allclose(pts[:, 1], 0)

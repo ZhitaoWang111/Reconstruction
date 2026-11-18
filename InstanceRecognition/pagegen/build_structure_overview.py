@@ -169,6 +169,7 @@ def page(D: dict) -> str:
     seg, W, C, H, Fr, ev = D["seg"], D["W"], D["C"], D["H"], D["F"], D["ev"]
     matches = ev["planes"]["matches"]
     room = ev["room"]
+    occ = ev["occupancy"]
     run = D["run"]
     kept = seg["kept"]
     nk = sum(kept.values())
@@ -201,19 +202,10 @@ def page(D: dict) -> str:
 
     # ---------------------------------------------------------------- 01 segmentation
     cfg = seg["cfg"]
-    per = ev["seg"]["per_label"]
-    pur_bars = bars([(f"{ZH[c]}（{per[c]['masks']}）", per[c]["mean_purity"], f"按面积加权 {pct(per[c]['area_weighted_purity'])}") for c in LABELS if c in per],
-                    ref=0.9, ref_label="90%")
-    det = table(["类别", "保留的 mask", "出现该类的帧（GT）", "有该类 mask 的帧", "平均纯度", "按面积加权"],
-                [[ZH[c], per[c]["masks"], per[c]["frames_gt"], per[c]["frames_with_mask"], pct(per[c]["mean_purity"]), pct(per[c]["area_weighted_purity"])]
-                 for c in LABELS if c in per])
-    badrows = [[x["frame"], ZH[x["label"]], esc(x["plan_id"]), esc(x["where"][:48]), pct(x["purity"]),
-                f'{pct(x["worst"][1])} 落在 {esc(str(x["worst"][0]))}'] for x in ev["seg"]["low_purity"]]
     ex = "".join(
         f'<figure class="ex"><div class="tri"><img src="{SEG_PAGE_ASSETS.format(run=run)}/{fid}_rgb.jpg" alt="原图 {fid}">'
-        f'<img src="{SEG_PAGE_ASSETS.format(run=run)}/{fid}_kept.jpg" alt="保留的 mask {fid}">'
-        f'<img src="{SEG_PAGE_ASSETS.format(run=run)}/{fid}_gt.jpg" alt="GT {fid}"></div>'
-        f'<figcaption>帧 {fid}：原图 · 保留的 mask（按类别上色） · GT（只用于检查）</figcaption></figure>'
+        f'<img src="{SEG_PAGE_ASSETS.format(run=run)}/{fid}_kept.jpg" alt="保留的 mask {fid}"></div>'
+        f'<figcaption>帧 {fid}：原图 · 保留的 mask（按类别上色：墙蓝、地面绿、门红、窗黄）</figcaption></figure>'
         for fid in EXAMPLE_FRAMES if (DOCS / SEG_PAGE_ASSETS.format(run=run) / f"{fid}_rgb.jpg").is_file())
     calls = ", ".join(f"{k} 次 × {v} 帧" for k, v in sorted(seg["segment_calls"].items()))
     s1_body = f"""
@@ -223,12 +215,7 @@ def page(D: dict) -> str:
 <div class="kpis"><div><b>{nk}</b><span>保留的 mask</span></div><div><b>{seg['windows']}</b><span>对话（每个 {min(seg['rounds'])}–{max(seg['rounds'])} 轮）</span></div>
 <div><b>{seg['prompt_tokens'] / 1e6:.2f} M</b><span>prompt token</span></div><div><b>{seg['seconds'] / 60:.0f} 分钟</b><span>墙钟时间</span></div>
 <div><b>{len(seg['not_planned'])}</b><span>条“有意不标”的说明</span></div></div>
-<h3>和 GT 比：每个 mask 有多少像素落在对的类别上</h3>
-<p class="note">GT 是 ScanNet 的 2D 实例标注，只用于检查。门框像素落在墙或门的 mask 里算对。</p>
-{pur_bars}{det}
-<h3>纯度低于 75% 的 mask（{len(ev['seg']['low_purity'])} 个）</h3>
-{table(["帧", "类别", "计划", "模型写的位置", "纯度", "最多的错类"], badrows)}
-<p>GT 里有、却没有对应 mask 的帧：{"、".join(f"{m['frame']} {ZH[m['label']]}（画面 {pct(m['gt_share'])}）" for m in ev["seg"]["missing"]) or "无"}。每帧 SAM 调用次数：{calls}。</p>
+<p>每帧 SAM 调用次数：{calls}。2D mask 不直接和 GT 比：ScanNet 的 2D 标注粗，墙和柜子、门框的边界常常不准。分割好不好，看它在三维里让多少 GT 墙面被找到（第 08 节“证据链”）。</p>
 <div class="exs">{ex}</div>
 <p class="more">逐帧看全部 50 帧：<a href="structure-{run}.html">structure-{run}.html</a></p>"""
     s1 = step(1, "2D 结构件分割", f"src/structure/segment/window.py · {esc(cfg['model'])} · prompt {cfg['prompt_sha256'][:8]}", s1_body,
@@ -308,9 +295,9 @@ def page(D: dict) -> str:
     fin = table(["墙", "类型", "长度", "观测", "推断"],
                 [[f["id"] if f["role"] == "exterior" else f"{hid.get(f['id'], f['id'])}（{f['id']}）", "外墙" if f["role"] == "exterior" else "内墙", f"{f['length_m']:.2f} m",
                   f"{f['length_m'] - f['inferred_m']:.2f} m", f"{f['inferred_m']:.2f} m"] for f in C["final"]])
-    tops = table(["墙面", "射线看到的墙面最高处", "GT 墙顶", "统一层高"],
-                 [[t["plane"], f"{t['seen_top_m']:.2f} m" if t["seen_top_m"] else "—", f"{t['gt_top_m']:.2f} m" if t["gt_top_m"] else "—",
-                   f"{C['storey']['height_m']:.2f} m"] for t in ev["height"]["walls"]])
+    tops = table(["墙", "交给下游的层高", "落在这面墙上的 GT 墙顶", "高出"],
+                 [[w["wall"], f"{w['height_m']:.2f} m", f"{w['gt_top_m']:.2f} m" if w["gt_top_m"] else "—",
+                   f"{w['height_minus_gt_cm']:+.0f} cm" if w["height_minus_gt_cm"] is not None else "—"] for w in occ["walls"]])
     s6_body = f"""
 <ol class="steps">
 <li><b>内墙还是外墙</b>：外墙背后是房子外面，任何一帧都看不到；内墙背后是别的房间，从门洞能看到。量每面墙背后那条地带被射线看到的比例：</li></ol>
@@ -328,7 +315,7 @@ def page(D: dict) -> str:
 <p class="note">交接里的 W/S/E/N 按 amb3r_floor 里房间的主方向起名，和 ScanNet GT 页面上的“南墙、北墙”不是同一套方位：交接的 ext_W 落在 GT 的北墙上。</p>
 <h3>封闭后每面墙观测了多少</h3>{fin}
 <h3>层高</h3>{tops}
-<p class="note">相机最高只往上看约 24°，所以“看到的最高处”在有些墙上只是视野上限，不一定是墙顶。</p>"""
+<p class="note">GT 墙顶取落在这面墙实体里的 GT 墙面点的 p99。天花板是斜的，所以同一个房间里墙顶从 2.2 m 到 2.8 m 不等。</p>"""
     s6 = step(6, "封闭", "src/structure/close.py", s6_body,
               [("输入", "墙面平面 + 射线"), ("输出", "closed.json（外墙轮廓、内墙、层高、厚度）")])
 
@@ -344,20 +331,37 @@ def page(D: dict) -> str:
               [("输入", "closed.json + walls.json + 关键帧 mask"), ("输出", "walls.json + keyframes/ + README")])
 
     # ---------------------------------------------------------------- 08 coverage
-    cov = ev["coverage"]
-    cov_rows = [[f"{c['face']} {esc(c['name'])}", f"{c['length_m']:.2f} m", pct(c["rays"]), pct(c["masks"]), pct(c["kept"])] for c in cov]
-    s8_body = f"""<p>每面 GT 墙面按 10 cm × 10 cm 分格（0.1–2.3 m 高），看每一层“看到”了多少格。从射线到 mask 掉得最多，说明瓶颈在 2D 分割的覆盖面，不在几何。</p>
-{table(["GT 墙面", "长度", "有射线终点", "有墙 mask 点", "进了某个平面"], cov_rows)}
-<p class="note">“有射线终点”包括墙前家具挡住的部分，所以不会到 100%。西墙（F6）大半被窗帘和衣柜挡着，按规则不该标成墙。</p>"""
-    s8 = step(8, "一层层掉了多少", "GT 只用于这张表", s8_body)
+    fr = [f for f in occ["faces"] if f["face"] != "-"]
+    chain_rows = [[f"{f['face']} {esc(f['name'])}", f"{f['area_m2']:.2f} m²", pct(f["chain_rays"]), pct(f["chain_masks"]),
+                   pct(f["chain_planes"]), pct(f["on_face"]), f"{f['offset_cm']:+.1f} cm" if f["offset_cm"] is not None else "—"] for f in fr]
+    c = occ["chain"]; sp = occ["support"]
+    chain_bars = bars([("有射线终点", c["rays"], "GT 墙面 10 cm 内有射线终点"), ("有墙 mask 点", c["masks"], "10 cm 内有被 2D 分割标成墙的点"),
+                       ("进了保留的平面", c["planes"], "10 cm 内有属于某个保留墙面的点"),
+                       ("贴着交接墙面", occ["on_face"], f"离交接的房间一侧墙面 {occ['tol_m'] * 100:.0f} cm 以内"),
+                       ("在交接墙体里", occ["completeness"], "在交接的墙体（含厚度）里")])
+    why = [(k, v) for k, v in sp["unsupported_nearest_gt"].items()][:7]
+    sup_bars = bars([("GT 墙面", sp["supported"], f"{sp['radius_m'] * 100:.0f} cm 内有 GT 墙面")]
+                    + [(f"最近的是 {k}", v, "") for k, v in why], vmax=1.0)
+    s8_body = f"""<p>GT 用 ScanNet 标注网格里的 <b>墙</b>：把标成 <code>wall</code> 的面片按面积均匀采样（每 m² {2000} 点），转进 amb3r_floor，
+共 {occ['gt_wall_m2']} m² 墙面。点按面积撒，所以“多少比例的点”就是“多少比例的墙面”。两个方向各量一次：</p>
+<h3>GT 墙面有多少被交出去了，证据在哪一层丢的</h3>
+{chain_bars}
+{table(["GT 墙面", "面积", "有射线终点", "有墙 mask 点", "进了保留的平面", "贴着交接墙面", "交接墙面比 GT 靠里"], chain_rows)}
+<p>“在交接墙体里”接近 100%，因为长方形加 30 cm 厚度把整圈都包住了；更严格的是“贴着交接墙面”（{pct(occ['on_face'])}）：
+差在被家具挡住的墙（F1、F6）和整体内缩的墙面（偏移中位数 {occ['median_offset_cm']:+.1f} cm）。证据链里掉得最多的一步是射线 → 墙 mask。</p>
+<h3>交出去的墙面有多少背后真有墙</h3>
+<p>把交接里每面墙的房间一侧墙面每 {sp['step_m'] * 100:.0f} cm 取一点（开口处不取），共 {sp['handed_off_m2']} m²，看 {sp['radius_m'] * 100:.0f} cm 内有没有 GT 墙面；没有的话，最近的 GT 表面是什么：</p>
+{sup_bars}
+<p class="note">高于 GT 墙顶的部分（层高假定 2.8 m）最近的是天花板；推断补上的墙段落在窗帘、柜子前面；离 GT 墙面超过 15 cm 但最近的仍是墙，说明位置偏了。每面墙：{"、".join(f"{w['wall']} {pct(w['supported'])}" for w in sp["walls"])}。</p>"""
+    s8 = step(8, "和 GT 墙体比", "tools/structure/gt_eval.py · GT 只用于这一节", s8_body)
 
     # ---------------------------------------------------------------- 09 weak points
-    tops_ok = [t for t in ev["height"]["walls"] if t["seen_top_m"] and t["gt_top_m"]]
+    hs = [w for w in occ["walls"] if w["height_minus_gt_cm"] is not None]
     weak = [
         ("开口只有射线能测到的", f"GT 的 {eo['gt_total']} 个开口测到 {eo['gt_found']} 个。关着的门、玻璃窗挡住射线；2D 分割已经标出的门扇（5 帧）和窗（3 帧）没有用来生成开口。",
          "门扇 / 窗 mask 落在墙面上的范围生成开口（source: mask），同样要求四边有界。要先定：门窗的洞是否交给下游。"),
-        ("层高统一假定 2.8 m", "GT 墙顶 2.33–2.91 m（天花板是斜的）。" + "；".join(
-            f"{t['plane']} 看到 {t['seen_top_m']:.2f} / GT {t['gt_top_m']:.2f}" for t in tops_ok[:4]) + "。",
+        ("层高统一假定 2.8 m", "交出去的墙比落在上面的 GT 墙顶高：" + "、".join(f"{w['wall']} {w['height_minus_gt_cm']:+.0f} cm" for w in hs)
+         + f"。交出去的墙面有 {pct(sp['unsupported_nearest_gt'].get('ceiling', 0))} 离 GT 墙面超过 15 cm 且最近的是天花板。",
          "每面墙判断墙顶是否被天花板封住（和开口四边同一套射线判断），封住的用实测高度，没有的才用 2.8 m。"),
         ("房间整体偏小", "；".join(f"{x['axis']} 方向小 {-x['diff_cm']:.0f} cm" for x in room["size"]) + "。各边比 GT 靠里："
          + "、".join(f"{x['side']} {x['inward_cm']:+.0f} cm" for x in room["sides"] if x["inward_cm"] is not None)
@@ -365,10 +369,8 @@ def page(D: dict) -> str:
          "每条边取“墙面拟合位置”和“最外侧一条密集的射线终点带”中靠外的那个，满足“长方形尽量包住所有点云”。"),
         ("卫生间整体错位，被并进同一条墙线", "卫生间里拍的几帧被 AMB3R 整体往北偏了 10–20 cm；墙线合并允许 30 cm 的深度漂移，于是卫生间南墙并进了主屋南墙，平面被拉偏几厘米，两条厚度线索也只剩一半。",
          "合并时如果两段的前后距离明显超过单面墙的深度波动，就不合并，或者在 evidence 里标出来。"),
-        ("2D 分割只覆盖一部分墙面", "墙 mask 盖住的 GT 墙面格子明显少于射线看到的（见上一节）；50 帧只用了 100 帧的一半；窗的纯度只有 " + (pct(per["window"]["mean_purity"]) if "window" in per else "—") + "。",
+        ("2D 分割只覆盖一部分墙面", f"GT 墙面 {pct(c['rays'])} 有射线终点，只有 {pct(c['masks'])} 有墙 mask 点（见上一节）；50 帧只用了 100 帧的一半。",
          "先量清楚：是帧数不够，还是模型在这些帧里主动没标（24 条“有意不标”的说明）。"),
-        ("没有固定的 GT 评估", "这页的 GT 列是每次临时算的；参数改了没法一眼看出哪里变好、哪里变坏。",
-         "把这页的对照固化成 tools/structure/gt_eval.py，每次改动都跑，结果写成一行可比较的指标。"),
         ("尺度来自 GT", f"{Fr['scale']['source']}：换场景时没有 GT 位姿。metric head 原始尺度偏大约 12.7%。",
          "用门高、门宽这类已知尺寸估尺度；和物体链一起做。"),
         ("开口边界只有 ±10 cm", "射线网格 10 cm 一格；换坐标系时开口从 0.60 × 1.90 变成 0.70 × 1.80 m（GT 0.63 × 1.95）。",
@@ -380,7 +382,7 @@ def page(D: dict) -> str:
           f'<p class="sub">按对交接质量的影响排序；每条给出现状的实测和一个改法，作为下一步梳理的起点</p>{wk}</section>')
 
     rail = "".join(f'<a href="#s{i}"><span class="n">{i:02d}</span>{t}</a>' for i, t in enumerate(
-        ["一页看全", "2D 分割", "交付坐标系", "抬升", "射线", "墙面", "封闭", "交接", "一层层掉了多少", "薄弱点"]))
+        ["一页看全", "2D 分割", "交付坐标系", "抬升", "射线", "墙面", "封闭", "交接", "和 GT 墙体比", "薄弱点"]))
     return PAGE.format(rail=rail, run=esc(run), body=s0 + s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9,
                        nk=nk, nw=len(H["walls"]), rect=f"{rect['width_m']:.2f} × {rect['depth_m']:.2f} m",
                        tok=f"{seg['prompt_tokens'] / 1e6:.2f}")
@@ -429,7 +431,7 @@ th,td{{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line-2);ve
 .bt{{position:relative;height:14px;background:var(--line-2);border-radius:2px}} .bt b{{display:block;height:100%;background:var(--bar);border-radius:0 4px 4px 0}}
 .bt .ref{{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink-3)}} .bar-row:hover .bt b{{filter:brightness(1.12)}}
 .bar-ref-note{{font-size:12px;color:var(--ink-3)}}
-.exs{{display:grid;gap:14px;margin:10px 0}} .tri{{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}} .tri img{{width:100%;border-radius:6px;border:1px solid var(--line)}}
+.exs{{display:grid;gap:14px;margin:10px 0}} .tri{{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}} .tri img{{width:100%;border-radius:6px;border:1px solid var(--line)}}
 figcaption{{font-size:12.5px;color:var(--ink-3);margin-top:4px}} .plan img{{max-width:100%;border:1px solid var(--line);border-radius:8px}}
 ol.steps{{padding-left:22px}} ol.steps li{{margin-bottom:6px}}
 .weak{{display:grid;grid-template-columns:44px 1fr;gap:12px;padding:14px 0;border-bottom:1px solid var(--line-2)}}

@@ -1,60 +1,61 @@
-"""Structure recognition (src.structure) against ScanNet GT: one fixed set of numbers per run.
+"""Structure recognition (src.structure) against the ScanNet GT wall surface: one fixed set of numbers per run.
 
     .venv/bin/python -m tools.structure.gt_eval --run struct_v4_win5                 # print, write gt_eval.json
     .venv/bin/python -m tools.structure.gt_eval --run struct_v4_win5 --save-baseline # also keep it as the baseline
     .venv/bin/python -m tools.structure.gt_eval --run struct_v4_win5 --compare       # this run vs the baseline
 
-Evaluation only: nothing in src/ reads it. GT is the ScanNet annotation of scene0000_00 -
-the 2D instance PNGs for the masks, and the wall faces, doors, windows and thicknesses that
-pagegen.build_structure_gt measured on the annotated mesh (docs/assets/structure-gt/data.js),
-moved into amb3r_floor through the oracle Sim(3) and axisAlignment.
+Evaluation only: nothing in src/ reads it. The reference is the space the GT walls occupy:
+the faces of the annotated mesh labelled `wall`, sampled uniformly (2000 points per m2, seed 0)
+and moved into amb3r_floor through the oracle Sim(3). Points per area, so a share of points is
+a share of wall surface. The 2D instance annotation is not used (too coarse to judge masks by).
 
-Metrics, grouped by the step they judge:
+What is measured, against what was handed off (the wall solids: footprint x [0, height_m],
+minus the openings):
 
-  seg       2D segmentation: per label, the share of a mask's pixels on GT objects of its
-            class (doorframe allowed in wall and door masks), mean and area-weighted; masks
-            under 75%; frames whose GT shows a class that got no mask.
-  coverage  per GT wall face, 10 cm cells (0.1-2.3 m high) with a ray endpoint, a wall-mask
-            point, a point in a kept plane: where the evidence is lost.
-  planes    per GT face, the kept plane on it: offset along the normal (+ = into the room),
-            angle, length covered; GT faces with no plane; kept planes on no GT face.
-  room      the closed rectangle per axis against the distance between the GT faces its
-            opposite sides lie on; each side's offset.
-  height    per kept plane, the highest ray surface on it against the GT face top; the
-            storey height handed off against the GT tops.
-  openings  each handed-off opening against the GT door / window / doorway on the same face
-            (centre along the wall, width, bottom, top); GT openings found / missed.
-  thickness the thickness hints against the GT measurements.
+  completeness  share of GT wall surface inside a handed-off wall solid (within TOL), and the
+                stricter share within TOL of a room-side face (a 30 cm solid swallows a
+                15 cm offset; the face does not); per GT face.
+  offset        per GT face, where the GT wall surface sits relative to the room-side face of
+                the wall it falls on (+ = GT is behind our face, i.e. our face is into the room).
+  support       our room-side faces sampled every 5 cm: share with GT wall surface within
+                SUPPORT; of the rest, share above the GT wall top, share in front of some other
+                GT surface (curtain, cabinet, door, window), share with no GT surface at all.
+  height        per wall, the GT wall top (p99 of GT wall points on it) against height_m.
+  holes         GT wall surface inside the handed-off openings (a real hole has none), and the
+                GT doors / windows / doorway (from the mesh annotation) found or missed.
+  chain         share of GT wall surface reached by each stage: a ray endpoint, a wall-mask
+                point, a point in a kept plane, a handed-off wall - where the evidence is lost.
+  room          the closed rectangle per axis against the GT faces its opposite sides lie on.
+  thickness     the thickness hints against the GT measurements.
 
 Results go to artifacts/structure/<run>/gt_eval.json; the baseline to
-artifacts/structure/gt_eval_baseline.json. `--compare` prints every headline that moved.
+artifacts/structure/gt_eval_baseline.json. `--compare` prints every headline number that moved.
 """
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import subprocess
-import zipfile
 from collections import Counter
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from scipy.spatial import cKDTree
 
 from src import config
 from src.geometry.amb3r_mask_source import DEFAULT_SIM3
 from src.geometry.floor_frame import Frame, scannet_scan_to_frame
-from src.structure.frames import OUT_ROOT, RAYS, axis_alignment_for_eval, masks_dir
+from src.structure.frames import OUT_ROOT, RAYS, axis_alignment_for_eval
 
 SCENE = config.SCANNET_ROOT / "scene0000_00"
 GT_DATA = config.ROOT / "docs/assets/structure-gt/data.js"
 HANDOFF = config.ARTIFACTS_ROOT / "handoff/scene0000_00/walls_harness"
 BASELINE = OUT_ROOT / "gt_eval_baseline.json"
-LABELS = ("wall", "floor", "door", "window")
-RIGHT = {"wall": {"wall", "doorframe"}, "floor": {"floor"}, "door": {"door", "doorframe"}, "window": {"window"}}
-PRESENT = {"wall": 0.01, "floor": 0.05, "door": 0.01, "window": 0.01}   # share of the frame for "the GT shows it"
-LOW_PURITY = 0.75
+GT_SAMPLES_PER_M2 = 2000
+TOL = 0.10            # m; a GT wall point this close to a handed-off solid counts as covered
+SUPPORT = 0.15        # m; our face sample with GT wall surface this close (along its normal) is supported
+FACE_STEP = 0.05      # m; sampling of our room-side faces
 CELL = 0.10
 BAND = (0.1, 2.3)
 MATCH_DEG, MATCH_OFF, MATCH_OVERLAP = 20.0, 0.40, 0.20
@@ -112,6 +113,99 @@ def gt_openings(faces: list) -> list:
     return out
 
 
+@lru_cache(maxsize=1)
+def gt_surface() -> dict:
+    """The annotated mesh sampled by area, in amb3r_floor: points, their GT label and instance, and the wall subset."""
+    from pagegen import build_structure_gt as gsg
+    P, _, Fc, owner, labels, _ = gsg.load(SCENE)
+    pts, _, fo, _, _ = gsg.sample_faces(P, Fc, owner, np.random.default_rng(0), per_m2=GT_SAMPLES_PER_M2)
+    S = scannet_scan_to_frame(Frame.load(), json.loads(DEFAULT_SIM3.read_text())["sim3_oracle_scale"])
+    pts = pts @ S[:3, :3].T + S[:3, 3]
+    lab = np.array([labels.get(int(o), "unannotated") for o in fo])
+    return {"points": pts, "label": lab, "instance": fo, "wall": lab == "wall", "per_m2": GT_SAMPLES_PER_M2}
+
+
+class Solids:
+    """The handed-off walls as solids: footprint (room face + thickness behind it) x [0, height_m], minus openings."""
+
+    def __init__(self, H: dict):
+        self.walls = []
+        for w in H["walls"]:
+            a, b = np.asarray(w["start_floor"]), np.asarray(w["end_floor"])
+            L = float(np.linalg.norm(b - a)); d = (b - a) / L
+            self.walls.append({"id": w["id"], "a": a, "d": d, "back": np.asarray(w["normal_to_back"]), "L": L,
+                               "t": float(w["thickness_m"]), "h": float(w["height_m"]),
+                               "fp": np.asarray(w["footprint_floor"]), "openings": w["openings"]})
+
+    def distance(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Per point: distance to the nearest solid (0 inside), which wall, and whether it lies in that wall's opening."""
+        best = np.full(len(X), np.inf); which = np.full(len(X), -1); in_hole = np.zeros(len(X), bool)
+        for k, w in enumerate(self.walls):
+            dxy = polygon_distance(X[:, :2], w["fp"])
+            dz = np.maximum(np.maximum(-X[:, 2], X[:, 2] - w["h"]), 0)
+            dist = np.hypot(dxy, dz)
+            s = (X[:, :2] - w["a"]) @ w["d"]; q = (X[:, :2] - w["a"]) @ w["back"]
+            hole = np.zeros(len(X), bool)
+            for o in w["openings"]:
+                hole |= (s > o["from_m"]) & (s < o["to_m"]) & (X[:, 2] > o["z_floor"][0]) & (X[:, 2] < o["z_floor"][1]) \
+                    & (q > -TOL) & (q < w["t"] + TOL)
+            closer = dist < best
+            best[closer], which[closer], in_hole[closer] = dist[closer], k, hole[closer]
+        return best, which, in_hole
+
+    def face_distance(self, X: np.ndarray) -> np.ndarray:
+        """Per point: distance to the nearest room-side face (the sheet start->end x [0, height_m]), openings left open."""
+        best = np.full(len(X), np.inf)
+        for w in self.walls:
+            s = (X[:, :2] - w["a"]) @ w["d"]; q = (X[:, :2] - w["a"]) @ w["back"]
+            ds = np.maximum(np.maximum(-s, s - w["L"]), 0)
+            dz = np.maximum(np.maximum(-X[:, 2], X[:, 2] - w["h"]), 0)
+            d = np.sqrt(ds ** 2 + q ** 2 + dz ** 2)
+            for o in w["openings"]:
+                d[(s > o["from_m"]) & (s < o["to_m"]) & (X[:, 2] > o["z_floor"][0]) & (X[:, 2] < o["z_floor"][1])] = np.inf
+            best = np.minimum(best, d)
+        return best
+
+    def face_samples(self) -> tuple[np.ndarray, np.ndarray]:
+        """Our room-side faces every FACE_STEP along x height, openings left out: (points, wall index)."""
+        pts, idx = [], []
+        for k, w in enumerate(self.walls):
+            s = np.arange(FACE_STEP / 2, w["L"], FACE_STEP); z = np.arange(FACE_STEP / 2, w["h"], FACE_STEP)
+            S, Z = np.meshgrid(s, z, indexing="ij"); S, Z = S.ravel(), Z.ravel()
+            keep = np.ones(len(S), bool)
+            for o in w["openings"]:
+                keep &= ~((S > o["from_m"]) & (S < o["to_m"]) & (Z > o["z_floor"][0]) & (Z < o["z_floor"][1]))
+            xy = w["a"] + S[keep, None] * w["d"]
+            pts.append(np.c_[xy, Z[keep]]); idx.append(np.full(int(keep.sum()), k))
+        return np.concatenate(pts), np.concatenate(idx)
+
+
+def polygon_distance(p: np.ndarray, poly: np.ndarray) -> np.ndarray:
+    """Distance from 2D points to a convex polygon (0 inside)."""
+    n = len(poly)
+    area = 0.5 * np.sum(poly[:, 0] * np.roll(poly[:, 1], -1) - np.roll(poly[:, 0], -1) * poly[:, 1])
+    sign = 1.0 if area > 0 else -1.0
+    inside = np.ones(len(p), bool); dmin = np.full(len(p), np.inf)
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]; e = b - a
+        cross = e[0] * (p[:, 1] - a[1]) - e[1] * (p[:, 0] - a[0])
+        inside &= sign * cross >= 0
+        t = np.clip(((p - a) @ e) / max(e @ e, 1e-12), 0, 1)
+        dmin = np.minimum(dmin, np.linalg.norm(p - (a + t[:, None] * e), axis=1))
+    return np.where(inside, 0.0, dmin)
+
+
+def face_of_points(X: np.ndarray, faces: list) -> np.ndarray:
+    """Each GT wall point's GT face (index into faces): the face plane it lies within 10 cm of, inside its extent."""
+    out = np.full(len(X), -1); best = np.full(len(X), 0.10)
+    for i, f in enumerate(faces):
+        c, n, u = (np.asarray(f[k]) for k in ("c", "n", "u"))
+        d = np.abs((X[:, :2] - c) @ n); a = (X[:, :2] - c) @ u
+        ok = (d < best) & (a > f["a"][0] - 0.05) & (a < f["a"][1] + 0.05)
+        out[ok], best[ok] = i, d[ok]
+    return out
+
+
 def match_gt(r: dict, faces: list) -> dict | None:
     """The GT face a plane lies on: facing within 20 deg, within 40 cm, overlapping 20 cm along it."""
     wc, wn, wu = np.array(r["point"]), np.array(r["normal"]), np.array(r["along"])
@@ -131,73 +225,68 @@ def match_gt(r: dict, faces: list) -> dict | None:
     return best
 
 
-# ---------------------------------------------------------------- 2D segmentation
-def eval_segmentation(run: str) -> dict:
-    seg = masks_dir(run)
-    agg = json.loads((SCENE / "scene0000_00.aggregation.json").read_text())
-    labels = {int(g["objectId"]): g["label"] for g in agg["segGroups"]}
-    z = zipfile.ZipFile(SCENE / "scene0000_00_2d-instance.zip")
-    rows, missing, frames_gt, frames_kept = [], [], Counter(), Counter()
-    results = [json.loads(p.read_text()) for p in sorted(seg.glob("frame_*/result.json"))]
-    for r in results:
-        fid = r["frame_id"]
-        g = np.asarray(Image.open(io.BytesIO(z.read(f"instance/{fid}.png")))).astype(int) - 1
-        share = {c: float(np.isin(g, [i for i, x in labels.items() if x == c]).mean()) for c in LABELS}
-        have = {k["label"] for k in r["kept"]}
-        for c in LABELS:
-            if share[c] >= PRESENT[c]:
-                frames_gt[c] += 1
-                if c in have:
-                    frames_kept[c] += 1
-                else:
-                    missing.append({"frame": fid, "label": c, "gt_share": round(share[c], 3)})
-        for k in r["kept"]:
-            m = np.asarray(Image.open(seg / f"frame_{fid:06d}" / k["mask_file"]).convert("L")) > 0
-            v = g[m]; v = v[v >= 0]
-            by = Counter(labels.get(int(i), "?") for i in v)
-            tot = max(1, sum(by.values()))
-            purity = sum(n for c, n in by.items() if c in RIGHT[k["label"]]) / tot
-            worst = max(((c, n / tot) for c, n in by.items() if c not in RIGHT[k["label"]]), key=lambda x: x[1], default=(None, 0.0))
-            rows.append({"frame": fid, "label": k["label"], "plan_id": k["plan_id"], "where": k["where"],
-                         "purity": round(purity, 4), "area": k["area_fraction"], "worst": [worst[0], round(worst[1], 3)]})
-    per = {}
-    for c in LABELS:
-        rs = [x for x in rows if x["label"] == c]
-        if rs:
-            a = np.array([x["area"] for x in rs]); p = np.array([x["purity"] for x in rs])
-            per[c] = {"masks": len(rs), "mean_purity": round(float(p.mean()), 4),
-                      "area_weighted_purity": round(float((p * a).sum() / a.sum()), 4),
-                      "frames_gt": frames_gt[c], "frames_with_mask": frames_kept[c],
-                      "frame_recall": round(frames_kept[c] / frames_gt[c], 4) if frames_gt[c] else None}
-    wins = [json.loads(p.read_text()) for p in sorted(seg.glob("window_*/window.json"))]
-    return {"frames": len(results), "masks": len(rows), "per_label": per,
-            "low_purity": sorted([x for x in rows if x["purity"] < LOW_PURITY], key=lambda x: x["purity"]),
-            "missing": missing, "prompt_tokens": sum(w["usage"]["prompt_tokens"] for w in wins),
-            "windows": len(wins)}
-
-
 # ---------------------------------------------------------------- 3D
-def eval_coverage(run: str, faces: list) -> list:
+def eval_occupancy(run: str, H: dict, faces: list) -> dict:
+    """GT wall surface against the handed-off solids, and the evidence chain that led to them."""
+    gs = gt_surface()
+    G = gs["points"][gs["wall"]]
+    per_m2 = gs["per_m2"]
+    solids = Solids(H)
+    dist, which, in_hole = solids.distance(G)
+    covered = (dist < TOL) & ~in_hole
+    on_face = solids.face_distance(G) < TOL
+    fidx = face_of_points(G, faces)
+    # signed position of the GT surface relative to our room face (+ = behind it, our face sits into the room)
+    q = np.full(len(G), np.nan)
+    for k, w in enumerate(solids.walls):
+        m = which == k
+        q[m] = (G[m, :2] - w["a"]) @ w["back"]
+    # evidence chain: GT wall points reached by each stage (within CELL)
     d = OUT_ROOT / run
     g = np.load(d / "geom.npz")
-    X = g["X"][g["wall_first"]].astype(np.float64); plane = g["wall_plane"]
-    P = np.load(RAYS)["P"].astype(np.float64)
+    Xw = g["X"][g["wall_first"]].astype(np.float64); plane = g["wall_plane"]
     nk = len(json.loads((d / "walls.json").read_text())["walls"])
-    nz = int(round((BAND[1] - BAND[0]) / CELL))
-    out = []
-    for f in faces:
-        c, n, u = (np.asarray(f[k]) for k in ("c", "n", "u"))
-        L = f["a"][1] - f["a"][0]
-        tot = max(1, int(round(L / CELL)) * nz)
-
-        def cells(Q):
-            dd = (Q[:, :2] - c) @ n; a = (Q[:, :2] - c) @ u
-            s = (np.abs(dd) < 0.2) & (a > f["a"][0]) & (a < f["a"][1]) & (Q[:, 2] > BAND[0]) & (Q[:, 2] < BAND[1])
-            return len(set(zip(np.floor(a[s] / CELL).astype(int), np.floor(Q[s, 2] / CELL).astype(int))))
-        out.append({"face": f["key"], "name": f["name"], "length_m": round(L, 3),
-                    "rays": round(min(1.0, cells(P) / tot), 4), "masks": round(min(1.0, cells(X) / tot), 4),
-                    "kept": round(min(1.0, cells(X[(plane >= 0) & (plane < nk)]) / tot), 4)})
-    return out
+    P = np.load(RAYS)["P"].astype(np.float64)
+    reach = lambda Q: cKDTree(Q).query(G, distance_upper_bound=CELL)[0] < CELL if len(Q) else np.zeros(len(G), bool)
+    chain = {"rays": reach(P), "masks": reach(Xw), "planes": reach(Xw[(plane >= 0) & (plane < nk)]), "handed_off": covered}
+    rows = []
+    for i, f in enumerate(faces + [{"key": "-", "name": "not on a GT face"}]):
+        m = fidx == (i if f["key"] != "-" else -1)
+        if not m.any():
+            continue
+        on = m & covered
+        rows.append({"face": f["key"], "name": f["name"], "area_m2": round(m.sum() / per_m2, 2),
+                     "completeness": round(float(on.sum() / m.sum()), 4),
+                     "on_face": round(float((m & on_face).sum() / m.sum()), 4),
+                     "offset_cm": round(float(np.median(q[on]) * 100), 1) if on.sum() > 50 else None,
+                     "in_holes_m2": round(float((m & in_hole).sum() / per_m2), 3),
+                     **{f"chain_{k}": round(float((v & m).sum() / m.sum()), 4) for k, v in chain.items()}})
+    per_wall = []
+    for k, w in enumerate(solids.walls):
+        m = (which == k) & covered
+        top = float(np.percentile(G[m, 2], 99)) if m.sum() > 50 else None
+        per_wall.append({"wall": w["id"], "gt_m2": round(m.sum() / per_m2, 2), "height_m": w["h"],
+                         "gt_top_m": round(top, 3) if top else None,
+                         "height_minus_gt_cm": round((w["h"] - top) * 100, 1) if top else None,
+                         "offset_cm": round(float(np.median(q[m]) * 100), 1) if m.sum() > 50 else None})
+    # support: our faces, sampled, against the GT surface
+    F, fk = solids.face_samples()
+    dw, _ = cKDTree(G).query(F, distance_upper_bound=SUPPORT)
+    supported = dw < SUPPORT
+    da, ia = cKDTree(gs["points"]).query(F[~supported], distance_upper_bound=0.5)
+    near = np.where(da < 0.5, gs["label"][np.minimum(ia, len(gs["label"]) - 1)], "nothing within 0.5 m")
+    why = Counter(near.tolist())
+    sup_wall = [{"wall": w["id"], "supported": round(float(supported[fk == k].mean()), 4) if (fk == k).any() else None}
+                for k, w in enumerate(solids.walls)]
+    return {"gt_wall_m2": round(len(G) / per_m2, 2), "tol_m": TOL,
+            "completeness": round(float(covered.mean()), 4), "on_face": round(float(on_face.mean()), 4), "in_holes_m2": round(float(in_hole.sum() / per_m2), 3),
+            "chain": {k: round(float(v.mean()), 4) for k, v in chain.items()},
+            "median_offset_cm": round(float(np.nanmedian(q[covered]) * 100), 1),
+            "faces": rows, "walls": per_wall,
+            "support": {"step_m": FACE_STEP, "radius_m": SUPPORT, "samples": int(len(F)),
+                        "supported": round(float(supported.mean()), 4), "handed_off_m2": round(len(F) * FACE_STEP ** 2, 2),
+                        "unsupported_nearest_gt": {k: round(v / len(F), 4) for k, v in why.most_common()},
+                        "walls": sup_wall}}
 
 
 def eval_planes(W: dict, faces: list) -> dict:
@@ -246,27 +335,6 @@ def eval_room(C: dict, planes: dict, faces: list) -> dict:
                          "faces": [by[a]["face"], by[b]["face"]]})
     return {"sides": sides, "size": size, "area_m2": round(C["rectangle"]["area_m2"], 3),
             "seen_outside_share": round(C["rectangle"]["seen_outside_share"], 4)}
-
-
-def eval_height(W: dict, C: dict, planes: dict, faces: list) -> dict:
-    fmap = {f["key"]: f for f in faces}
-    P = np.load(RAYS)["P"].astype(np.float64)
-    rows = []
-    for r in W["walls"]:
-        c, n, u = (np.asarray(r[k]) for k in ("point", "normal", "along"))
-        dd = (P[:, :2] - c) @ n; a = (P[:, :2] - c) @ u
-        s = (np.abs(dd) < 0.12) & (a > r["a"][0] + 0.1) & (a < r["a"][1] - 0.1) & (P[:, 2] > 1.8)
-        m = planes["matches"].get(r["id"])
-        top = float(np.percentile(P[s, 2], 99)) if s.sum() > 20 else None
-        gt = fmap[m["face"]]["z"][1] if m else None
-        rows.append({"plane": r["id"], "face": m["face"] if m else None, "seen_top_m": round(top, 3) if top else None,
-                     "gt_top_m": round(gt, 3) if gt else None,
-                     "seen_minus_gt_cm": round((top - gt) * 100, 1) if top and gt else None})
-    H = C["storey"]["height_m"]
-    gts = [r["gt_top_m"] for r in rows if r["gt_top_m"]]
-    return {"walls": rows, "storey_m": H, "storey_kind": C["storey"]["kind"],
-            "storey_minus_gt_cm": [round((H - g) * 100, 1) for g in gts],
-            "mean_abs_storey_error_cm": round(float(np.mean([abs(H - g) * 100 for g in gts])), 1) if gts else None}
 
 
 def eval_openings(H: dict, W: dict, planes: dict, faces: list) -> dict:
@@ -344,8 +412,7 @@ def evaluate(run: str) -> dict:
     except OSError:
         commit = None
     doc = {"run": run, "commit": commit, "frame": Frame.load().doc["scale"],
-           "seg": eval_segmentation(run), "coverage": eval_coverage(run, faces), "planes": planes,
-           "room": eval_room(C, planes, faces), "height": eval_height(W, C, planes, faces),
+           "occupancy": eval_occupancy(run, H, faces), "planes": planes, "room": eval_room(C, planes, faces),
            "openings": eval_openings(H, W, planes, faces), "thickness": eval_thickness(C, gaps, planes)}
     doc["headline"] = headline(doc)
     return doc
@@ -353,18 +420,15 @@ def evaluate(run: str) -> dict:
 
 def headline(doc: dict) -> dict:
     """The few numbers to compare between runs; every one is in the report."""
-    s, p, r, h, o = doc["seg"], doc["planes"], doc["room"], doc["height"], doc["openings"]
-    cov = doc["coverage"]
-    out = {f"seg.{c}.purity": v["mean_purity"] for c, v in s["per_label"].items()}
-    out.update({f"seg.{c}.frame_recall": v["frame_recall"] for c, v in s["per_label"].items()})
-    out.update({"seg.low_purity_masks": len(s["low_purity"]), "seg.masks": s["masks"], "seg.prompt_tokens": s["prompt_tokens"],
-                "coverage.rays": round(float(np.mean([c["rays"] for c in cov])), 4),
-                "coverage.masks": round(float(np.mean([c["masks"] for c in cov])), 4),
-                "coverage.kept": round(float(np.mean([c["kept"] for c in cov])), 4),
-                "planes.faces_with_plane": p["faces_with_plane"], "planes.faces_total": len(p["faces"]),
-                "planes.mean_abs_offset_cm": p["mean_abs_offset_cm"], "planes.kept_on_no_face": len(p["kept_on_no_face"]),
-                "room.area_m2": r["area_m2"], "height.mean_abs_storey_error_cm": h["mean_abs_storey_error_cm"],
-                "openings.gt_found": o["gt_found"], "openings.gt_total": o["gt_total"], "openings.false": o["false"]})
+    o, r, op = doc["occupancy"], doc["room"], doc["openings"]
+    hs = [abs(w["height_minus_gt_cm"]) for w in o["walls"] if w["height_minus_gt_cm"] is not None]
+    out = {"wall.completeness": o["completeness"], "wall.on_face": o["on_face"], "wall.support": o["support"]["supported"],
+           "wall.median_offset_cm": o["median_offset_cm"], "wall.gt_in_holes_m2": o["in_holes_m2"],
+           "wall.mean_abs_height_error_cm": round(float(np.mean(hs)), 1) if hs else None,
+           **{f"chain.{k}": v for k, v in o["chain"].items()},
+           **{f"face.{f['face']}.on_face": f["on_face"] for f in o["faces"] if f["face"] != "-"},
+           "openings.gt_found": op["gt_found"], "openings.gt_total": op["gt_total"], "openings.false": op["false"],
+           "room.area_m2": r["area_m2"]}
     for x in r["size"]:
         out[f"room.size_{x['axis']}_diff_cm"] = x["diff_cm"]
     return out
@@ -372,37 +436,33 @@ def headline(doc: dict) -> dict:
 
 # ---------------------------------------------------------------- report
 def report(doc: dict) -> None:
-    s, cov, p, r, h, o, t = (doc[k] for k in ("seg", "coverage", "planes", "room", "height", "openings", "thickness"))
+    o, p, r, op, t = (doc[k] for k in ("occupancy", "planes", "room", "openings", "thickness"))
     print(f"== {doc['run']}  (commit {doc['commit']}, scale {doc['frame']['source']} {doc['frame']['value']:.4f})")
-    print(f"-- 2D segmentation: {s['masks']} masks in {s['frames']} frames, {s['prompt_tokens'] / 1e6:.2f} M prompt tokens")
-    for c, v in s["per_label"].items():
-        print(f"   {c:6} {v['masks']:3d} masks  purity {v['mean_purity']:.1%} (area-weighted {v['area_weighted_purity']:.1%})  "
-              f"frames with mask {v['frames_with_mask']}/{v['frames_gt']}")
-    print(f"   masks under {LOW_PURITY:.0%}: {len(s['low_purity'])}  "
-          + "; ".join(f"{x['frame']} {x['label']} {x['purity']:.0%} ({x['worst'][0]} {x['worst'][1]:.0%})" for x in s["low_purity"][:6]))
-    if s["missing"]:
-        print("   GT shows it, no mask: " + ", ".join(f"{m['frame']} {m['label']} {m['gt_share']:.0%}" for m in s["missing"]))
-    print("-- coverage of GT wall faces (10 cm cells, 0.1-2.3 m): rays / wall masks / kept planes")
-    for c in cov:
-        print(f"   {c['face']} {c['name']:<14} {c['length_m']:5.2f} m  {c['rays']:4.0%} / {c['masks']:4.0%} / {c['kept']:4.0%}")
-    print(f"-- planes: {p['faces_with_plane']}/{len(p['faces'])} GT faces have a kept plane; mean |offset| {p['mean_abs_offset_cm']} cm; "
-          f"kept planes on no GT face: {p['kept_on_no_face'] or 'none'}")
-    for f in p["faces"]:
-        if f["planes"]:
-            print(f"   {f['face']} {f['name']:<14} {','.join(f['planes']):6} offset {f['offset_cm']:+6.1f} cm  angle {f['angle_deg']:4.1f}  "
-                  f"covers {f['length_covered']:4.0%} of {f['gt_length_m']:.2f} m")
-        else:
-            print(f"   {f['face']} {f['name']:<14} -- no plane" + (f" (rejected: {','.join(f['rejected_on_it'])})" if f["rejected_on_it"] else ""))
-    print("-- room: " + "; ".join(f"{x['axis']} {x['ours_m']:.2f} vs GT {x['gt_m']:.2f} m ({x['diff_cm']:+.0f} cm)" for x in r["size"])
-          + "  | sides inward: " + ", ".join(f"{x['side']} {x['inward_cm']:+.1f}" if x["inward_cm"] is not None else f"{x['side']} -" for x in r["sides"]))
-    print(f"-- height: storey {h['storey_m']:.2f} m ({h['storey_kind']}), mean |storey - GT top| {h['mean_abs_storey_error_cm']} cm")
-    print("   " + ", ".join(f"{w['plane']}->{w['face']} seen {w['seen_top_m']} / GT {w['gt_top_m']}" for w in h["walls"]))
-    print(f"-- openings: GT {o['gt_found']}/{o['gt_total']} found, {o['false']} handed off with no GT")
-    for x in o["handed_off"]:
+    print(f"-- GT wall surface {o['gt_wall_m2']} m2: {o['completeness']:.1%} inside a handed-off wall solid, "
+          f"{o['on_face']:.1%} within {o['tol_m']} m of a room-side face; "
+          f"{o['in_holes_m2']} m2 inside a handed-off opening; median offset {o['median_offset_cm']:+.1f} cm (+ = our face into the room)")
+    c = o["chain"]
+    print(f"   reached by: rays {c['rays']:.0%} -> wall masks {c['masks']:.0%} -> kept planes {c['planes']:.0%} -> handed-off walls {c['handed_off']:.0%}")
+    print("   per GT face (area | rays / masks / planes / in a solid | on our face | offset):")
+    for f in o["faces"]:
+        off = f"{f['offset_cm']:+.1f} cm" if f["offset_cm"] is not None else "-"
+        print(f"   {f['face']} {f['name']:<14} {f['area_m2']:5.2f} m2 | {f['chain_rays']:4.0%} / {f['chain_masks']:4.0%} / "
+              f"{f['chain_planes']:4.0%} / {f['chain_handed_off']:4.0%} | {f['on_face']:4.0%} | {off}")
+    s = o["support"]
+    print(f"-- our faces ({s['handed_off_m2']} m2, every {s['step_m'] * 100:.0f} cm): {s['supported']:.1%} have GT wall within {s['radius_m']} m; "
+          "the rest is nearest to: " + ", ".join(f"{k} {v:.1%}" for k, v in list(s["unsupported_nearest_gt"].items())[:6]))
+    print("   per wall: " + ", ".join(f"{w['wall']} {w['supported']:.0%}" for w in s["walls"]))
+    print("-- per handed-off wall: GT surface on it, GT top vs height_m, offset")
+    for w in o["walls"]:
+        print(f"   {w['wall']:6} {w['gt_m2']:5.2f} m2  GT top {w['gt_top_m']} vs {w['height_m']:.2f} m "
+              f"({w['height_minus_gt_cm']:+.0f} cm)  offset {w['offset_cm']:+.1f} cm" if w["gt_top_m"] else f"   {w['wall']:6} no GT wall on it")
+    print("-- room: " + "; ".join(f"{x['axis']} {x['ours_m']:.2f} vs GT {x['gt_m']:.2f} m ({x['diff_cm']:+.0f} cm)" for x in r["size"]))
+    print(f"-- openings: GT {op['gt_found']}/{op['gt_total']} found, {op['false']} handed off with no GT")
+    for x in op["handed_off"]:
         g = x["gt"]
         print(f"   {x['wall']} {x['width_m']:.2f} x {x['height_m']:.2f} m, z {x['z'][0]:.2f}-{x['z'][1]:.2f}"
               + (f" -> {g['name']}: centre {g['centre_cm']:+.0f}, width {g['width_cm']:+.0f}, bottom {g['bottom_cm']:+.0f}, top {g['top_cm']:+.0f} cm" if g else " -> no GT"))
-    for g in o["gt"]:
+    for g in op["gt"]:
         if not g["found"]:
             print(f"   missed: {g['name']} on {g['face']}")
     print("-- thickness hints: " + "; ".join(f"{x['plane']} {x['kind']} {x['cm']} cm (GT {x['gt_cm']})" for x in t["hints"]))
