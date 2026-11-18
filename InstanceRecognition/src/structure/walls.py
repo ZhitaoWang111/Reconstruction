@@ -185,7 +185,7 @@ def floor_check(xyz, frame, mask, lab, frame_doc: dict) -> dict:
             "masks": int(len(np.unique(mask[lab == 1]))), "frames": int(len(np.unique(frame[lab == 1])))}
 
 
-def walls(run: str, dump: bool = False) -> dict:
+def walls(run: str, dump: bool = False, trace: bool = False) -> dict:
     d = run_dir(run)
     pts = np.load(d / "points.npz")
     xyz, nrm, lab = pts["xyz"].astype(np.float64), pts["normal"].astype(np.float64), pts["label"]
@@ -240,6 +240,8 @@ def walls(run: str, dump: bool = False) -> dict:
         covered[r["idx"]] = True
     extract(np.flatnonzero(horiz & ~covered), local)
     print(f"local planes: {n_mask} from {len(np.unique(Mw[horiz]))} masks, {len(local) - n_mask} from the sweep")
+    for k, r in enumerate(local):
+        r["k"], r["from_sweep"] = k, k >= n_mask
 
     # ---- 3b: wall lines
     reps = []
@@ -264,7 +266,7 @@ def walls(run: str, dump: bool = False) -> dict:
     print(f"wall lines: {len(lines)}")
 
     # ---- 3c: cut each line where the rays see through it
-    pieces, cuts = [], []
+    pieces, cuts, line_trace = [], [], []
     for li, g in enumerate(lines):
         idx = np.unique(np.concatenate([r["idx"] for r in g]))
         if len(idx) * VOXEL ** 2 < MIN_LOCAL:
@@ -280,6 +282,12 @@ def walls(run: str, dump: bool = False) -> dict:
         sup[np.clip(np.floor((al - lo) / CELL).astype(int), 0, len(sup) - 1)] = True
         open_col = (free.sum(1) >= 3) & (hard.sum(1) == 0) & ~sup
         runs, _ = ndimage.label(~open_col)
+        if trace:
+            line_trace.append({"line": li, "locals": [r["k"] for r in g], "c": c.tolist(), "n": n.tolist(), "lo": float(lo),
+                               "hi": float(hi), "cell": CELL, "z_lo": Z_LO,
+                               "code": "".join(np.where(open_col, "O", np.where(sup, "#", np.where(hard.sum(1) > 0, "+",
+                                                         np.where(free.sum(1) > 0, "o", ".")))).tolist()),
+                               "solid": (solid >= MIN_RAYS).astype(int).tolist(), "free": free.astype(int).tolist()})
         if dump:
             code = np.where(open_col, "O", np.where(sup, "#", np.where(hard.sum(1) > 0, "+", np.where(free.sum(1) > 0, "o", "."))))
             print(f"  line {li}: facing {np.degrees(np.arctan2(n[1], n[0])):+.0f} deg {''.join(code)}")
@@ -288,6 +296,8 @@ def walls(run: str, dump: bool = False) -> dict:
             sel = idx[(al >= lo + cols[0] * CELL) & (al < lo + (cols[-1] + 1) * CELL)]
             if len(sel) * VOXEL ** 2 >= MIN_LOCAL:
                 pieces.append({"idx": sel, "line": li})
+            elif trace:
+                line_trace[-1].setdefault("dropped_small", []).append([float(lo + cols[0] * CELL), float(lo + (cols[-1] + 1) * CELL)])
         ol, _ = ndimage.label(open_col)
         for k in range(1, ol.max() + 1):
             cols = np.flatnonzero(ol == k)
@@ -356,6 +366,26 @@ def walls(run: str, dump: bool = False) -> dict:
         print(f"  {r['id']:3} facing {r['heading_deg']:+7.1f} deg  {r['length_m']:.2f} m  {r['area_m2']:.2f} m2  "
               f"{len(r['frames'])} frames  rms {r['rms_cm']:.1f} cm  {r.get('why', '')} {ops}")
 
+    if trace:
+        # each stage as it happened, for pagegen.build_wall_steps; thinned points carry the stage labels
+        local_of = np.full(len(P), -1, np.int32)
+        for r in local:
+            local_of[r["idx"]] = r["k"]
+        line_of_local = {k: li for li, g in enumerate(lines) for k in [r["k"] for r in g]}
+        np.savez_compressed(d / "walls_trace.npz", P=P.astype(np.float32), N=Nw.astype(np.float32), mask=Mw, frame=Fw,
+                            horiz=horiz, local=local_of,
+                            line=np.array([line_of_local.get(int(k), -1) if k >= 0 else -1 for k in local_of], np.int32),
+                            plane=plane_of)
+        (d / "walls_trace.json").write_text(json.dumps({
+            "voxel_m": VOXEL, "params": {"tol_m": TOL, "split_deg": SPLIT_DEG, "drift_m": DRIFT, "facing_deg": FACING_DEG,
+                                         "min_local_m2": MIN_LOCAL, "min_area_m2": MIN_AREA, "min_frames": MIN_FRAMES,
+                                         "cell_m": CELL, "min_rays": MIN_RAYS, "horizontal_deg": HORIZ_DEG},
+            "locals": [{"k": r["k"], "c": r["c"].tolist(), "n": r["n"].tolist(), "rep": r["rep"], "sweep": r["from_sweep"],
+                        "points": int(len(r["idx"])), "mask": int(np.bincount(Mw[r["idx"]]).argmax())} for r in local],
+            "reps_deg": [float(np.degrees(a)) for a in reps], "lines": line_trace,
+            "planes": [{"id": r["id"], "line": r["line"]} for r in kept + rejected]}))
+        print(f"trace -> {d / 'walls_trace.npz'}, {d / 'walls_trace.json'}")
+
     np.savez_compressed(d / "geom.npz", X=X.astype(np.float32), N=N.astype(np.float32), cams=C.astype(np.float32),
                         wall_first=np.flatnonzero(w)[first], wall_plane=plane_of, wall_horizontal=horiz)
     strip = lambda r: {k: v for k, v in r.items() if k != "idx"}
@@ -375,8 +405,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--run", required=True)
     ap.add_argument("--dump", action="store_true", help="print each wall line's ray-test columns")
+    ap.add_argument("--trace", action="store_true", help="also write walls_trace.{npz,json}: every stage, for the step page")
     a = ap.parse_args()
-    walls(a.run, a.dump)
+    walls(a.run, a.dump, a.trace)
 
 
 if __name__ == "__main__":

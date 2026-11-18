@@ -48,6 +48,7 @@ pagegen/build_viewer.py      渲染器 bundle 装配
 pagegen/build_mask_project.py mask 投影检查页
 pagegen/build_walls_handoff.py 墙体交接文件预览页
 pagegen/build_structure_overview.py 结构件识别方案总览页
+pagegen/build_wall_steps.py  墙面提取分步演示页
 tools/structure/gt_eval.py   结构件识别对 ScanNet GT 的评估（基线与对比）
 pagegen/build_point_prompt.py 点选物体感知的逐帧结果页（docs/point-prompt-full100*.html）
 pagegen/build_structure_geom.py 墙体几何工作台页面的数据
@@ -230,6 +231,13 @@ $SAM31_PYTHON -m src.structure.segment.window --run struct_v4_win5 --frames-ever
 
 ```bash
 .venv/bin/python -m pagegen.build_structure_overview --run struct_v4_win5   # → docs/structure-overview.html
+```
+
+墙面提取的分步演示页 `docs/structure-wall-steps.html`：俯视图上一步一步看 `walls.py` 做了什么（精简点 → 每个 mask 里找平面 → 连成墙线 → 射线切开，含每条墙线的射线网格 → 保留 / 丢弃 / 开口），画的是程序跑时记下的中间结果：
+
+```bash
+.venv/bin/python -m src.structure.walls --run struct_v4_win5 --trace   # 额外写 walls_trace.{npz,json}，walls.json 不变
+.venv/bin/python -m pagegen.build_wall_steps --run struct_v4_win5    # → docs/structure-wall-steps.html
 ```
 
 墙体几何的工作台页面 `docs/structure-geom-3d.html`（抬升的点、射线切口、封闭、厚度、GT 对照）的数据也从 `artifacts/structure/` 打包：
