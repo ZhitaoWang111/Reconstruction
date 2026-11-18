@@ -11,10 +11,9 @@ Reads only what `src.structure` and the wall handoff wrote:
 * artifacts/handoff/scene0000_00/walls_harness/walls.json (the handoff: footprints and wall ids,
   so the thickness drawn on the page is the one handed off, corners included)
 
-The GT comparison is display only: the ScanNet wall faces and measured thicknesses are read
-from docs/assets/structure-gt/data.js (built from the annotation by the GT page, in ScanNet's
-axis-aligned frame) and moved into amb3r_floor through the scan frame. Nothing here feeds
-back into the walls.
+The GT comparison is display only and comes from tools.structure.gt_eval: the GT wall points
+(the annotated mesh's `wall` faces sampled by area, what the evaluator measures against), the
+rectangles fitted around each GT face, and the measured thicknesses. Nothing here feeds back.
 
 Points are thinned on a voxel grid per label and quantised to uint16 over the scene bounds.
 """
@@ -29,7 +28,7 @@ import numpy as np
 
 from src import config
 from src.structure.frames import OUT_ROOT, RAYS
-from tools.structure.gt_eval import gt_reference, match_gt   # the GT comparison lives in the evaluator
+from tools.structure.gt_eval import face_of_points, gt_reference, gt_surface, match_gt   # the GT comparison lives in the evaluator
 
 DOCS = config.ROOT / "docs"
 DEFAULT_OUT = DOCS / "assets/structure-geom/data.js"
@@ -37,6 +36,7 @@ GT_DATA = DOCS / "assets/structure-gt/data.js"
 HANDOFF = config.ARTIFACTS_ROOT / "handoff/scene0000_00/walls_harness/walls.json"
 VOXEL = {0: 0.02, 1: 0.03, 2: 0.015, 3: 0.01}        # wall floor door window
 BG_VOXEL = 0.04                                      # the whole scene, every pixel of every frame
+GT_VOXEL = 0.03                                      # GT wall points shown on the page
 SIDE_OF = {0: "W", 1: "S", 2: "E", 3: "N"}
 WHY_ZH = {"support area below the floor": "支持面积不足", "seen in one frame only": "只有一帧支持"}   # the page is in Chinese
 
@@ -124,6 +124,15 @@ def build(run: str, out: Path = DEFAULT_OUT, handoff: Path = HANDOFF) -> dict:
         rec["gt"] = match_gt(r, faces)
         walls.append(rec)
 
+    # ---- GT wall points: the very points tools.structure.gt_eval measures against, thinned for display
+    gs = gt_surface()
+    G = gs["points"][gs["wall"]]
+    gface = face_of_points(G, faces)
+    _, gfirst = np.unique(np.floor(G / GT_VOXEL).astype(np.int64), axis=0, return_index=True)
+    G, gface = G[gfirst], gface[gfirst]
+    glo, ghi = G.min(0), G.max(0)
+    gq = np.round((G - glo) / np.maximum(ghi - glo, 1e-6) * 65535).astype(np.uint16)
+
     # ---- background: the scene rays, in the same floor frame
     z = np.load(RAYS)
     B, Brgb = thin(z["P"].astype(np.float64), z["rgb"], v=BG_VOXEL)
@@ -143,6 +152,10 @@ def build(run: str, out: Path = DEFAULT_OUT, handoff: Path = HANDOFF) -> dict:
            "horizontal": W.get("wall_points_horizontal"), "gt_faces": faces, "gt_gaps": gaps,
            "counts": {str(L): int((CAT == L).sum()) for L in range(4)},
            "closed": closed_with_handoff(closed, handoff) if closed else None,
+           "gt_points": {"n": int(len(G)), "lo": glo.tolist(), "hi": ghi.tolist(), "pos": b64(gq),
+                         "face": b64((gface + 1).astype(np.uint8)), "voxel_m": GT_VOXEL, "per_m2": gs["per_m2"],
+                         "source": "ScanNet annotated mesh, faces labelled wall, sampled by area into amb3r_floor "
+                                   "(tools.structure.gt_eval.gt_surface); face = GT face it lies on, 0 = none"},
            "bg": {"n": int(len(B)), "lo": blo.tolist(), "hi": bhi.tolist(), "pos": b64(bq),
                   "rgb": b64(Brgb.astype(np.uint8)), "voxel_m": BG_VOXEL, "rays": int(len(z["P"])),
                   "frames": int(len(z["cams"]))}}
