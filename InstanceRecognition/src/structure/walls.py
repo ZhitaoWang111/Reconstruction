@@ -199,7 +199,6 @@ def walls(run: str, dump: bool = False) -> dict:
     axis = room_axis(N[w][np.abs(N[w][:, 2]) < np.sin(np.radians(HORIZ_DEG))])
     fz = X[lab == 1]
     floor["area_m2"] = float(len(voxel_thin(fz, axis=axis)[0]) * VOXEL ** 2)
-    floor["extent"] = [np.percentile(fz[:, 0], [0.5, 99.5]).tolist(), np.percentile(fz[:, 1], [0.5, 99.5]).tolist()]
     print(f"floor: {floor['tilt_deg']:.2f} deg off +z, at z = {floor['plane_z_m'] * 100:+.1f} cm, residual median "
           f"{floor['residual_median_cm']:.1f} cm, about {floor['area_m2']:.1f} m2")
 
