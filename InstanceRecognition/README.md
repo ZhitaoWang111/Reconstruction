@@ -47,6 +47,7 @@ pagegen/build_records.py     交互记录页
 pagegen/build_viewer.py      渲染器 bundle 装配
 pagegen/build_mask_project.py mask 投影检查页
 pagegen/build_walls_handoff.py 墙体交接文件预览页
+pagegen/build_structure_overview.py 结构件识别方案总览页
 pagegen/build_point_prompt.py 点选物体感知的逐帧结果页（docs/point-prompt-full100*.html）
 pagegen/build_structure_geom.py 墙体几何工作台页面的数据
 pagegen/build_structure_gt.py 结构件 GT 页面的数据（ScanNet 标注，只用于评估）
@@ -214,6 +215,12 @@ $SAM31_PYTHON -m src.structure.segment.window --run struct_v4_win5 --frames-ever
 ```
 
 模板在 `pagegen/templates/walls_handoff/`，和其他模板一样不进版本库。
+
+方案总览页 `docs/structure-overview.html`：按步骤讲 2D 分割 → 交付坐标系 → 抬升 → 射线 → 墙面 → 封闭 → 交接，每一步的实测结果、哪些值是假定或手调的，和 GT 的对照，最后列出已知薄弱点。数字全部从产物读：
+
+```bash
+.venv/bin/python -m pagegen.build_structure_overview --run struct_v4_win5   # → docs/structure-overview.html
+```
 
 墙体几何的工作台页面 `docs/structure-geom-3d.html`（抬升的点、射线切口、封闭、厚度、GT 对照）的数据也从 `artifacts/structure/` 打包：
 
