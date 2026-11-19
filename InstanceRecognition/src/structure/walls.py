@@ -47,7 +47,10 @@ rng = np.random.default_rng(0)
 VOXEL = 0.03          # m; thinning grid, and the area one thinned point stands for
 TOL = 0.05            # m; RANSAC inlier band within one mask
 SPLIT_DEG = 30.0      # a mask whose normals fall into two directions further apart than this is split
-DRIFT = 0.30          # m; see the docstring
+DRIFT = 0.30          # m; depth tolerance when joining locals into a wall line (see merge_lines)
+DRIFT_FAR = 0.15      # m; the same, for a local that starts more than MERGE_GAP along the wall from the line so far
+MERGE_GAP = 1.0       # m; along-wall gap beyond which there is no evidence the two are one wall
+MERGE = "median"      # "median": compare with the line's median depth; "chain": with the previous local (old rule)
 FACING_DEG = 12.0
 CELL = 0.10           # m; grid on the wall plane for the ray test
 MIN_RAYS = 5          # rays in a cell before it counts
@@ -185,6 +188,46 @@ def floor_check(xyz, frame, mask, lab, frame_doc: dict) -> dict:
             "masks": int(len(np.unique(mask[lab == 1]))), "frames": int(len(np.unique(frame[lab == 1])))}
 
 
+def merge_lines(local: list, reps: list) -> list:
+    """Join local planes facing the same way into wall lines.
+
+    One wall seen in different frames sits at depths that disagree by up to ~25 cm, and two
+    walls 20-30 cm apart look the same from outside, so depth alone cannot separate the two
+    cases. Along the wall it separates them: pieces of one wall overlap along it, two walls
+    stand beside each other with a gap. So
+
+    * a local is compared with the *median* depth of the line so far, not with the previous
+      local, so a run of small steps cannot walk across the room (the rule this replaced);
+    * when the local starts more than MERGE_GAP along the wall from the line so far - nothing
+      between them, so nothing shows they are one wall - the tolerance tightens to DRIFT_FAR.
+
+    `local` entries need "c" (a point on the plane), "n" (its normal) and "a" (the extent
+    along the wall, measured from c).
+    """
+    lines = []
+    for rep in range(len(reps)):
+        g = sorted((r for r in local if r["rep"] == rep), key=lambda r: float(r["c"] @ np.array([np.cos(reps[rep]), np.sin(reps[rep])])))
+        n0 = np.array([np.cos(reps[rep]), np.sin(reps[rep])])
+        u0 = np.array([-n0[1], n0[0]])
+        cur = [g[0]]
+        for r in g[1:]:
+            depth, med = float(r["c"] @ n0), float(np.median([x["c"] @ n0 for x in cur]))
+            if MERGE == "chain":                      # the rule this replaced; kept for comparison
+                join = depth - float(cur[-1]["c"] @ n0) <= DRIFT
+            else:
+                lo = min(float(x["c"] @ u0) + x["a"][0] for x in cur)
+                hi = max(float(x["c"] @ u0) + x["a"][1] for x in cur)
+                gap = max(float(r["c"] @ u0) + r["a"][0] - hi, lo - (float(r["c"] @ u0) + r["a"][1]))
+                join = abs(depth - med) <= (DRIFT if gap <= MERGE_GAP else DRIFT_FAR)
+            if join:
+                cur.append(r)
+            else:
+                lines.append(cur)
+                cur = [r]
+        lines.append(cur)
+    return lines
+
+
 def walls(run: str, dump: bool = False, trace: bool = False) -> dict:
     d = run_dir(run)
     pts = np.load(d / "points.npz")
@@ -220,7 +263,9 @@ def walls(run: str, dump: bool = False, trace: bool = False) -> dict:
             if inl is None or inl.sum() * VOXEL ** 2 < MIN_LOCAL:
                 break
             c2, n2, keep = robust_vertical(P, Nw, cur[inl])
-            out.append({"c": c2, "n": n2, "idx": keep})
+            u2 = np.array([-n2[1], n2[0]])
+            al2 = (P[keep, :2] - c2) @ u2
+            out.append({"c": c2, "n": n2, "idx": keep, "a": [float(al2.min()), float(al2.max())]})
             used[pos[inl]] = True
 
     local = []
@@ -251,18 +296,7 @@ def walls(run: str, dump: bool = False, trace: bool = False) -> dict:
         if hit is None:
             reps.append(ang); hit = len(reps) - 1
         r["rep"] = hit
-    lines = []
-    for rep in range(len(reps)):
-        g = [r for r in local if r["rep"] == rep]
-        n0 = np.array([np.cos(reps[rep]), np.sin(reps[rep])])
-        g.sort(key=lambda r: float(r["c"] @ n0))
-        cur = [g[0]]
-        for r0, r1 in zip(g, g[1:]):
-            if float(r1["c"] @ n0) - float(r0["c"] @ n0) <= DRIFT:
-                cur.append(r1)
-            else:
-                lines.append(cur); cur = [r1]
-        lines.append(cur)
+    lines = merge_lines(local, reps)
     print(f"wall lines: {len(lines)}")
 
     # ---- 3c: cut each line where the rays see through it
@@ -377,10 +411,11 @@ def walls(run: str, dump: bool = False, trace: bool = False) -> dict:
                             line=np.array([line_of_local.get(int(k), -1) if k >= 0 else -1 for k in local_of], np.int32),
                             plane=plane_of)
         (d / "walls_trace.json").write_text(json.dumps({
-            "voxel_m": VOXEL, "params": {"tol_m": TOL, "split_deg": SPLIT_DEG, "drift_m": DRIFT, "facing_deg": FACING_DEG,
+            "voxel_m": VOXEL, "merge": {"rule": MERGE, "drift_m": DRIFT, "drift_far_m": DRIFT_FAR, "gap_m": MERGE_GAP},
+            "params": {"tol_m": TOL, "split_deg": SPLIT_DEG, "drift_m": DRIFT, "facing_deg": FACING_DEG,
                                          "min_local_m2": MIN_LOCAL, "min_area_m2": MIN_AREA, "min_frames": MIN_FRAMES,
                                          "cell_m": CELL, "min_rays": MIN_RAYS, "horizontal_deg": HORIZ_DEG},
-            "locals": [{"k": r["k"], "c": r["c"].tolist(), "n": r["n"].tolist(), "rep": r["rep"], "sweep": r["from_sweep"],
+            "locals": [{"k": r["k"], "c": r["c"].tolist(), "n": r["n"].tolist(), "a": r["a"], "rep": r["rep"], "sweep": r["from_sweep"],
                         "points": int(len(r["idx"])), "mask": int(np.bincount(Mw[r["idx"]]).argmax())} for r in local],
             "reps_deg": [float(np.degrees(a)) for a in reps], "lines": line_trace,
             "planes": [{"id": r["id"], "line": r["line"]} for r in kept + rejected]}))
@@ -391,7 +426,7 @@ def walls(run: str, dump: bool = False, trace: bool = False) -> dict:
     strip = lambda r: {k: v for k, v in r.items() if k != "idx"}
     doc = {"run": run,
            "params": {"voxel_m": VOXEL, "voxel_axis_deg": float(np.degrees(axis)), "tol_m": TOL, "split_deg": SPLIT_DEG, "drift_m": DRIFT, "facing_deg": FACING_DEG,
-                      "cell_m": CELL, "min_rays": MIN_RAYS, "min_local_m2": MIN_LOCAL, "min_area_m2": MIN_AREA,
+                      "merge": MERGE, "drift_far_m": DRIFT_FAR, "merge_gap_m": MERGE_GAP, "cell_m": CELL, "min_rays": MIN_RAYS, "min_local_m2": MIN_LOCAL, "min_area_m2": MIN_AREA,
                       "min_frames": MIN_FRAMES, "min_opening_m2": MIN_OPENING, "horizontal_deg": HORIZ_DEG},
            "floor": floor, "walls": [strip(r) for r in kept], "rejected": [strip(r) for r in rejected], "cuts": cuts,
            "scene_rays": int(len(rays.P)), "scene_frames": int(rays.frames), "lines": len(lines),

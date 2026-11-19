@@ -33,7 +33,19 @@ def b64(a: np.ndarray) -> str:
     return base64.b64encode(np.ascontiguousarray(a).tobytes()).decode()
 
 
-def build(run: str, out: Path = OUT) -> None:
+def line_records(t: dict, rot, R) -> list:
+    out = []
+    for l in t["lines"]:
+        c, n = np.asarray(l["c"]), np.asarray(l["n"]); u = np.array([-n[1], n[0]])
+        out.append({**l, "p0": rot(c + l["lo"] * u).tolist(), "p1": rot(c + l["hi"] * u).tolist(),
+                    "n_room": (R @ n).tolist(), "c_room": rot(c).tolist(),
+                    "dropped_small": [[rot(c + a * u).tolist(), rot(c + b * u).tolist()] for a, b in l.get("dropped_small", [])]})
+    return out
+
+
+def build(run: str, out: Path = OUT, before: Path | None = None) -> None:
+    """`before`: a run directory holding an earlier walls_trace.{npz,json} of the same points, shown
+    beside the current wall lines in step 3."""
     d = OUT_ROOT / run
     t = json.loads((d / "walls_trace.json").read_text())
     z = np.load(d / "walls_trace.npz")
@@ -46,12 +58,14 @@ def build(run: str, out: Path = OUT) -> None:
     P = rot(z["P"])
     lo, hi = P.min(0) - 0.3, P.max(0) + 0.3
     q = np.round((P - lo) / (hi - lo) * 65535).astype("<u2")
-    lines = []
-    for l in t["lines"]:
-        c, n = np.asarray(l["c"]), np.asarray(l["n"]); u = np.array([-n[1], n[0]])
-        lines.append({**l, "p0": rot(c + l["lo"] * u).tolist(), "p1": rot(c + l["hi"] * u).tolist(),
-                      "n_room": (R @ n).tolist(), "c_room": rot(c).tolist(),
-                      "dropped_small": [[rot(c + a * u).tolist(), rot(c + b * u).tolist()] for a, b in l.get("dropped_small", [])]})
+    lines = line_records(t, rot, R)
+    prev = None
+    if before is not None and (before / "walls_trace.json").is_file():
+        tb = json.loads((before / "walls_trace.json").read_text()); zb = np.load(before / "walls_trace.npz")
+        if not np.array_equal(zb["P"], z["P"]) or not np.array_equal(zb["local"], z["local"]):
+            raise SystemExit(f"{before} traced other points or other local planes; the comparison would be meaningless")
+        prev = {"lines": line_records(tb, rot, R), "line": b64(zb["line"].astype("<i2")),
+                "merge": tb.get("merge", {"rule": "chain", "drift_m": tb["params"]["drift_m"]})}
     planes = []
     for r in W["walls"] + W["rejected"]:
         c, u = np.asarray(r["point"]), np.asarray(r["along"])
@@ -73,7 +87,7 @@ def build(run: str, out: Path = OUT) -> None:
             "horiz": b64(z["horiz"].astype(np.uint8)), "local": b64(z["local"].astype("<i2")),
             "line": b64(z["line"].astype("<i2")), "plane": b64(z["plane"].astype("<i2")), "mask": b64(z["mask"].astype("<u2")),
             "voxel_m": t["voxel_m"], "params": t["params"], "locals": locs, "lines": lines, "planes": planes,
-            "reps_deg": t["reps_deg"], "axis_deg": C["axis_deg"],
+            "reps_deg": t["reps_deg"], "axis_deg": C["axis_deg"], "prev": prev, "merge": t.get("merge"),
             "counts": {"wall_points": W["wall_points"], "thinned": W["wall_points_thinned"],
                        "horizontal": W["wall_points_horizontal"], "unassigned": W["wall_points_unassigned"],
                        "wall_masks": sum(1 for m in masks if m["label"] == "wall")}}
@@ -124,6 +138,13 @@ const n = D.n, q = new Uint16Array(bytes(D.pos).buffer), P = new Float32Array(n 
 for (let i = 0; i < n * 2; i++) { const k = i % 2; P[i] = D.lo[k] + q[i] / 65535 * (D.hi[k] - D.lo[k]); }
 const H = bytes(D.horiz), LOC = new Int16Array(bytes(D.local).buffer), LIN = new Int16Array(bytes(D.line).buffer), PL = new Int16Array(bytes(D.plane).buffer);
 const NK = D.planes.filter((p) => p.kept).length;
+const PREV = D.prev, LINB = PREV ? new Int16Array(bytes(PREV.line).buffer) : null;
+let showPrev = false;          // step 3: the wall lines of the earlier rule
+const LINES = () => (showPrev && PREV ? PREV.lines : D.lines), LOFP = () => (showPrev && PREV ? LINB : LIN);
+// lines whose set of local planes differs between the two rules
+const key = (l) => l.locals.slice().sort((a, b) => a - b).join(",");
+const CHANGED_NOW = PREV ? new Set(D.lines.map((l, i) => [key(l), i]).filter(([k]) => !PREV.lines.some((q) => key(q) === k)).map(([, i]) => i)) : new Set();
+const CHANGED_PREV = PREV ? new Set(PREV.lines.map((l, i) => [key(l), i]).filter(([k]) => !D.lines.some((q) => key(q) === k)).map(([, i]) => i)) : new Set();
 // 12 distinguishable hues, assigned in fixed order; a colour names an identity on this step only
 const PAL = ["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#6250d6","#e34948","#0e9fb0","#a2620f","#7c8e00","#b04ac0"];
 const col = (i) => PAL[((i % PAL.length) + PAL.length) % PAL.length];
@@ -141,8 +162,8 @@ const STEPS = [
    <p>结果：${D.locals.length} 块小墙面，其中 ${D.locals.filter((l)=>l.sweep).length} 块来自扫尾。每块一种颜色（颜色循环使用，只区分相邻的块）；浅灰是没进任何一块的点。悬停看它来自哪个 mask。</p>`,
    lg:[["#d6dade","没进任何小墙面的点"],["#16191d","线段：小墙面的位置和长度，短刻度指向它朝的方向"]] },
  { key:"lines", t:"③ 连成墙线", h:`<h3>③ 把小墙面连成墙线</h3>
-   <p>同一面墙会被不同 mask、不同帧拍成好几块。先按朝向分组（相差 ${pr.facing_deg}° 以内算一组，共 ${D.reps_deg.length} 组），组里按前后位置排好，相邻两块前后差不超过 ${pr.drift_m*100} cm 就连起来——<b>只看前后，不看左右</b>，沿墙隔多远都会连上。</p>
-   <p>结果：${D.lines.length} 条墙线，每条一种颜色，细线是这条墙线的走向和长度。注意那几条横穿房间的长线：几块朝向相同、恰好共线但不相连的墙点被连在了一起，下一步要把它们切开。</p>`,
+   <p>同一面墙会被不同 mask、不同帧拍成好几块。先按朝向分组（相差 ${pr.facing_deg}° 以内算一组，共 ${D.reps_deg.length} 组），组里按前后位置排好，一块一块和<b>整条线目前的中位深度</b>比：差不超过 ${pr.drift_m*100} cm 就连上；如果这一块在沿墙方向离线上已有的部分超过 ${(D.merge||{}).gap_m||1} m，收紧到 ${((D.merge||{}).drift_far_m||0.15)*100} cm。</p>
+   <p>结果（现在的规则）：${D.lines.length} 条墙线，每条一种颜色，细线是这条墙线的走向和长度。注意那几条横穿房间的长线：几块朝向相同、恰好共线但不相连的墙点被连在了一起，下一步要把它们切开。</p>`,
    lg:[["#d6dade","不属于任何墙线的点"]] },
  { key:"cut", t:"④ 用射线切开", h:"", lg:[] },
  { key:"keep", t:"⑤ 保留、丢弃、开口", h:`<h3>⑤ 留下够格的，找墙上的洞</h3>
@@ -182,8 +203,10 @@ function draw() {
     D.locals.forEach((l) => { seg(l.p0, l.p1, "#16191d", hover && hover.kind === "local" && hover.i === l.k ? 3 : 1.2, l.sweep ? [4, 3] : null); });
   }
   if (k === "lines") {
-    dots((i) => !H[i] ? null : LIN[i] < 0 ? "#d6dade" : col(LIN[i]));
-    D.lines.forEach((l, i) => { seg(l.p0, l.p1, col(i), hover && hover.kind === "line" && hover.i === i ? 4 : 2); tick(l.p0, l.p1, l.n_room, col(i)); });
+    const L = LINES(), LP = LOFP(), ch = showPrev ? CHANGED_PREV : CHANGED_NOW;
+    dots((i) => !H[i] ? null : LP[i] < 0 ? "#d6dade" : col(LP[i]));
+    L.forEach((l, i) => { seg(l.p0, l.p1, col(i), hover && hover.kind === "line" && hover.i === i ? 4 : 2); tick(l.p0, l.p1, l.n_room, col(i));
+      if (ch.has(i)) { seg(l.p0, l.p1, "#16191d", 7, [2, 6]); label([(l.p0[0] + l.p1[0]) / 2 - l.n_room[0] * 0.45, (l.p0[1] + l.p1[1]) / 2 - l.n_room[1] * 0.45], showPrev ? "改进前" : "改进后", "#16191d"); } });
   }
   if (k === "cut") {
     dots((i) => !H[i] ? null : LIN[i] === selLine ? col(selLine) : "#e6e8eb");
@@ -225,7 +248,18 @@ function gridCanvas(l) {
 function side() {
   const s = STEPS[step];
   if (s.key !== "cut") {
-    $("side").innerHTML = s.h + `<div class="lg">${s.lg.map(([c2, t]) => `<div><span class="chip" style="background:${c2}"></span>${t}</div>`).join("")}</div>`;
+    let extra = "";
+    if (s.key === "lines" && PREV) {
+      const nl = LINES().length;
+      extra = `<h3 style="margin-top:14px">改进前后</h3>
+       <div class="ln"><button data-p="0" class="${showPrev ? "" : "on"}">改进后（现在）</button><button data-p="1" class="${showPrev ? "on" : ""}">改进前</button></div>
+       <p><b>改进前</b>：组里按前后排好，和<b>前一块</b>前后差 ≤ ${f1(PREV.merge.drift_m * 100)} cm 就连上——小步可以一路串过去。<br>
+       <b>改进后</b>：和<b>整条线的中位深度</b>比（≤ ${f1(pr.drift_m * 100)} cm）；新的一块在沿墙方向离这条线超过 ${f1((D.merge || {}).gap_m || 1)} m 时，收紧到 ${f1(((D.merge || {}).drift_far_m || 0.15) * 100)} cm。</p>
+       <p>现在显示 ${nl} 条墙线。两种规则下分组不同的墙线用黑色虚线标出（${showPrev ? CHANGED_PREV.size : CHANGED_NOW.size} 条）；其余墙线两种规则完全一样。</p>`;
+    }
+    $("side").innerHTML = s.h + extra + `<div class="lg">${s.lg.map(([c2, t]) => `<div><span class="chip" style="background:${c2}"></span>${t}</div>`).join("")}</div>`;
+    const pb = $("side").querySelector(".ln[data-x]") || $("side").querySelector(".ln");
+    if (pb && s.key === "lines") pb.addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (b) { showPrev = b.dataset.p === "1"; render(); } });
     return;
   }
   const l = D.lines[selLine], cuts = (l.code.match(/O+/g) || []).length;
@@ -252,14 +286,15 @@ function nearest(x, y) {
     return Math.hypot(x - a[0] - t*ux, y - a[1] - t*uy); };
   const consider = (kind, i, a, b) => { const d = dseg(a, b); if (d < tol && (!best || d < best.d)) best = { kind, i, d }; };
   if (k === "local") D.locals.forEach((l) => consider("local", l.k, l.p0, l.p1));
-  if (k === "lines" || k === "cut") D.lines.forEach((l, i) => consider("line", i, l.p0, l.p1));
+  if (k === "lines") LINES().forEach((l, i) => consider("line", i, l.p0, l.p1));
+  if (k === "cut") D.lines.forEach((l, i) => consider("line", i, l.p0, l.p1));
   if (k === "keep") D.planes.forEach((p, i) => consider("plane", i, p.p0, p.p1));
   return best;
 }
 function tipText(h) {
   if (!h) return "";
   if (h.kind === "local") { const l = D.locals[h.i]; return `小墙面 #${l.k}${l.sweep ? "（扫尾找到的）" : ""}<br>来自帧 ${l.frame} 的 mask：${l.where}<br>${l.points} 个点 ≈ ${f2(l.points * D.voxel_m * D.voxel_m)} m²，并入墙线 ${l.line}`; }
-  if (h.kind === "line") { const l = D.lines[h.i]; return `墙线 ${h.i}：${l.locals.length} 块小墙面，长 ${f2(l.hi - l.lo)} m${l.code.includes("O") ? "，有切口（点 ④ 看）" : ""}`; }
+  if (h.kind === "line") { const l = (STEPS[step].key === "lines" ? LINES() : D.lines)[h.i]; return `墙线 ${h.i}：${l.locals.length} 块小墙面，长 ${f2(l.hi - l.lo)} m${l.code.includes("O") ? "，有切口（点 ④ 看）" : ""}`; }
   if (h.kind === "plane") { const p = D.planes[h.i]; return `${p.id}${p.kept ? "（保留）" : "（丢弃：" + p.why + "）"}<br>长 ${f2(p.length_m)} m，支持 ${f2(p.area_m2)} m²，${p.frames} 帧${p.openings.length ? "<br>开口 " + p.openings.map((o) => f2(o.w) + " × " + f2(o.h) + " m").join("、") : ""}`; }
 }
 let drag = null;
@@ -278,7 +313,7 @@ cv.addEventListener("wheel", (e) => { e.preventDefault(); const r = cv.getBoundi
   V.k *= f; V.ox = wx - (wx - V.ox) / f; V.oy = wy - (wy - V.oy) / f; draw(); }, { passive: false });
 cv.addEventListener("dblclick", () => { fit(); draw(); });
 window.addEventListener("resize", draw);
-const hs = new URLSearchParams(location.hash.slice(1)); if (hs.has("step")) step = Math.max(0, Math.min(4, +hs.get("step") - 1)); if (hs.has("line")) selLine = +hs.get("line");
+const hs = new URLSearchParams(location.hash.slice(1)); if (hs.has("step")) step = Math.max(0, Math.min(4, +hs.get("step") - 1)); if (hs.has("line")) selLine = +hs.get("line"); if (hs.get("before") === "1") showPrev = true;
 fit(); render();
 })();
 </script></body></html>
@@ -289,8 +324,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--run", default="struct_v4_win5")
     ap.add_argument("--out", type=Path, default=OUT)
+    ap.add_argument("--before", type=Path, default=None,
+                    help="run dir with an earlier walls_trace to compare wall lines against (default <run>/before_merge if present)")
     a = ap.parse_args()
-    build(a.run, a.out)
+    before = a.before or (OUT_ROOT / a.run / "before_merge")
+    build(a.run, a.out, before if before.is_dir() else None)
 
 
 if __name__ == "__main__":
