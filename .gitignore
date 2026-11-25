@@ -1,3 +1,8 @@
+# ─────────────────────────────────────────────────────────────────────
+# 全仓通用：本地状态、缓存、虚拟环境、凭据、二进制与媒体
+# 模块专有规则见各模块小节；模块自带的 .gitignore 优先级更高。
+# ─────────────────────────────────────────────────────────────────────
+
 # Local agent state, environments and caches
 .omx/
 .pytest_cache/
@@ -29,28 +34,6 @@ node_modules/
 **/onnx_models/
 **/outputs/
 **/inputs/
-/InstanceRecognition/runtime/
-/InstanceRecognition/offline/data.js
-/Video2PointCloud/data/
-/Video2PointCloud/output/*
-!/Video2PointCloud/output/README.md
-!/Video2PointCloud/output/reports/
-/ScanNet/assets/
-/docs/assets/*
-# Keep viewer source; generated scene data and recorded API payloads stay local.
-!/docs/assets/global-object-bboxes/
-/docs/assets/global-object-bboxes/*
-!/docs/assets/global-object-bboxes/build_bboxes.py
-!/docs/assets/global-object-bboxes/style.css
-!/docs/assets/global-object-bboxes/viewer.js
-!/docs/assets/harness-records/
-/docs/assets/harness-records/*
-!/docs/assets/harness-records/build_records.py
-!/docs/assets/harness-records/page.js
-!/docs/assets/harness-tools/
-/docs/assets/harness-tools/*
-!/docs/assets/harness-tools/page.css
-/tmp/
 
 # Binary model / geometry / dataset payloads, including future additions
 *.pt
@@ -91,3 +74,73 @@ node_modules/
 *.avi
 *.pdf
 *.log
+
+
+# ─────────────────────────────────────────────────────────────────────
+# InstanceRecognition
+# 另见 InstanceRecognition/.gitignore：artifacts/ site/ pagegen/templates/ tmp/ .venv/
+# ─────────────────────────────────────────────────────────────────────
+/InstanceRecognition/runtime/*
+!/InstanceRecognition/runtime/offline/
+/InstanceRecognition/runtime/offline/data.js
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Video2PointCloud
+# 三方仓已统一到根 Submodule/（amb3r / depth-anything-3 / map-anything /
+# pytorch3d / utils3d），本目录只留集成代码。
+# ─────────────────────────────────────────────────────────────────────
+/Video2PointCloud/data/
+/Video2PointCloud/output/*
+!/Video2PointCloud/output/README.md
+!/Video2PointCloud/output/reports/
+
+
+# ─────────────────────────────────────────────────────────────────────
+# ObjectGeneration
+# 进库：src/ tests/ scripts/ pagegen/ configs/ docs/*.md docs/**/*.json
+#       根级 README.md、constraints-sam3d.txt、third_party_patches/*.patch
+# 不进库：运行产物、虚拟环境、三方 checkout、渲染出的 HTML 页面
+# ─────────────────────────────────────────────────────────────────────
+/ObjectGeneration/output/
+/ObjectGeneration/site/
+/ObjectGeneration/tmp/
+/ObjectGeneration/.venv-*/
+# 页面由 pagegen 重建，本机留档即可；docs/ 下的 .md 和 .json 仍然跟踪
+/ObjectGeneration/docs/**/*.html
+# /ObjectGeneration/ThirdParty/ 已废弃：三方仓统一到根 Submodule/，规则一并删除
+
+
+# ─────────────────────────────────────────────────────────────────────
+# SceneAssembly
+# runs/ 由 SceneAssembly/.gitignore 挡住；src/inputs/ 是 M0 源码，
+# 在模块自己的 .gitignore 里解封了根规则 **/inputs/。
+# ─────────────────────────────────────────────────────────────────────
+
+
+# ─────────────────────────────────────────────────────────────────────
+# ScanNet
+# ─────────────────────────────────────────────────────────────────────
+/ScanNet/assets/
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 共享文档与页面
+# ─────────────────────────────────────────────────────────────────────
+/docs/assets/*
+# Keep viewer source; generated scene data and recorded API payloads stay local.
+!/docs/assets/global-object-bboxes/
+/docs/assets/global-object-bboxes/*
+!/docs/assets/global-object-bboxes/build_bboxes.py
+!/docs/assets/global-object-bboxes/style.css
+!/docs/assets/global-object-bboxes/viewer.js
+!/docs/assets/harness-tools/
+/docs/assets/harness-tools/*
+!/docs/assets/harness-tools/page.css
+
+# Shared experiment navigation source (not recorded run data)
+!/docs/assets/experiment-navigation.js
+!/docs/assets/experiment-navigation.css
+
+# Repo-level scratch space
+/tmp/

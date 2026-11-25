@@ -14,3 +14,6 @@ pagegen/templates/
 
 # Local Python environment.
 .venv/
+
+# Scratch experiments (point-prompt trials etc.); never source.
+tmp/
