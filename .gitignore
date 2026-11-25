@@ -83,6 +83,10 @@ node_modules/
 /InstanceRecognition/runtime/*
 !/InstanceRecognition/runtime/offline/
 /InstanceRecognition/runtime/offline/data.js
+# Page data is rebuilt by pagegen; the generator and its templates are tracked
+/InstanceRecognition/docs/assets/**/data.js
+# Session transcript exports are not source
+/InstanceRecognition/*session-is-being-continued*.txt
 
 
 # ─────────────────────────────────────────────────────────────────────
