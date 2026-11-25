@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>以一个批次为例的复盘 · 场景组装</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --model:#7c3aed; --model-soft:#f3eefe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr); max-width:1180px; margin:0 auto; padding:0 28px 120px}
+  @media (min-width:1080px){
+    .wrap{grid-template-columns:230px minmax(0,1fr); gap:56px; padding-left:36px; padding-right:36px}
+    .rail{position:sticky; top:0; align-self:start; max-height:100vh; overflow:auto; padding:44px 0}
+  }
+  .rail{display:none}
+  @media (min-width:1080px){ .rail{display:block} }
+  .rail-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px}
+  .rail a{display:block; padding:7px 12px; margin:1px 0; border-radius:6px; color:var(--ink-2); text-decoration:none; font-size:13.5px; border-left:2px solid transparent}
+  .rail a:hover{background:var(--line-2); color:var(--ink)}
+  .rail a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+  .rail a .n{font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:7px}
+  .rail a.on .n{color:var(--accent)}
+
+  header.top{padding:56px 0 34px; border-bottom:1px solid var(--line); margin-bottom:8px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+  h1{margin:0 0 14px; font-size:clamp(28px,3.6vw,40px); line-height:1.2; letter-spacing:-.022em; font-weight:700}
+  .lede{margin:0; max-width:64ch; color:var(--ink-2); font-size:16.5px}
+  .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+
+  section{padding-top:56px; scroll-margin-top:24px}
+  h2{margin:0 0 6px; font-size:23px; letter-spacing:-.014em; font-weight:700; display:flex; align-items:baseline; gap:12px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; letter-spacing:.04em}
+  .sub{margin:0 0 22px; color:var(--ink-3); font-size:14px; font-family:var(--mono)}
+  h3{margin:34px 0 10px; font-size:16.5px; font-weight:650; letter-spacing:-.006em}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  ul,ol{margin:0 0 14px; padding-left:22px; line-height:1.8}
+  li{margin-bottom:4px}
+  code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.6px; line-height:1.65; white-space:pre-wrap}
+  pre .c{color:#7d8894} pre .k{color:#7dd3fc} pre .s{color:#a5d6a7}
+
+  .flow{display:grid; gap:0; margin:26px 0 8px}
+  .step{display:grid; grid-template-columns:34px minmax(0,1fr); gap:16px; align-items:start}
+  .step .dot{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:13px; font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .step .dot.m{background:var(--model-soft); color:var(--model); border-color:#ddd0fb}
+  .step .dot.w{background:var(--warn-soft); color:var(--warn); border-color:#f2ddb4}
+  .step .dot.e{background:var(--stop-soft); color:var(--stop); border-color:#f3c9c9}
+  .step .body{padding:5px 0 26px; border-bottom:1px dashed var(--line)}
+  .step:last-child .body{border-bottom:none}
+  .step .name{font-weight:650; font-size:15.5px; margin-bottom:3px}
+  .step .io2{font-family:var(--mono); font-size:12.3px; color:var(--ink-3); line-height:1.7}
+  .step .io2 em{font-style:normal; color:var(--ink-2)}
+
+  .marks{display:grid; gap:10px; margin:16px 0}
+  .mark{display:grid; grid-template-columns:74px minmax(0,1fr); gap:14px; padding:12px 15px; border-radius:8px; font-size:14.5px; line-height:1.65}
+  .mark .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding-top:2px}
+  .mark.a{background:var(--accent-soft); border:1px solid #bfe3dd} .mark.a .who{color:var(--accent)}
+  .mark.m{background:var(--model-soft); border:1px solid #ddd0fb} .mark.m .who{color:var(--model)}
+  .mark.w{background:var(--warn-soft); border:1px solid #f2ddb4} .mark.w .who{color:var(--warn)}
+  .mark.e{background:var(--stop-soft); border:1px solid #f3c9c9} .mark.e .who{color:var(--stop)}
+
+  .note{background:var(--accent-soft); border:1px solid #bfe3dd; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+  .warn{background:var(--warn-soft); border:1px solid #f2ddb4; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; white-space:nowrap}
+  td code{font-size:12.6px}
+  td.n,th.n{text-align:right; font-family:var(--mono); font-size:13px}
+  tbody tr:hover{background:#f7f9fa}
+  tr.best td{background:#ecfbf0} tr.worst td{background:#fdeeee}
+
+  figure{margin:16px 0 22px} figure img{width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:8px; background:#fff}
+  figcaption{font-size:13.5px; color:var(--ink-3); margin-top:8px; line-height:1.65}
+  .two{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px}
+  @media (max-width:760px){ .two{grid-template-columns:1fr} }
+
+  .chain{display:flex; flex-direction:column; align-items:center; margin:26px 0 24px}
+  .node{width:min(100%,560px); border:2px solid var(--line); border-radius:12px; background:var(--card); padding:14px 18px; text-align:center}
+  .node .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-bottom:5px}
+  .node .t{font-weight:650; font-size:15px; line-height:1.45}
+  .node .d{font-size:13px; color:var(--ink-2); margin-top:6px; line-height:1.65}
+  .node .d code{font-size:11.8px}
+  .node .d ul{margin:8px 0 0; padding-left:22px; text-align:left}
+  .node .d pre{text-align:left; margin:8px 0 2px; font-size:11.6px; padding:10px 12px}
+  .node img{width:100%; border-radius:6px; margin-top:10px; border:1px solid var(--line)}
+  .node.b{background:#eef4ff; border-color:#3b82f6} .node.b .k{color:#2563eb}
+  .node.g{background:#ecfbf0; border-color:#22a552} .node.g .k{color:#15803d}
+  .node.y{background:#fefbe8; border-color:#eab308} .node.y .k{color:#a16207}
+  .node.r{background:#fdeeee; border-color:#dc2626} .node.r .k{color:#b91c1c}
+  .node.p{background:#f4f0fd; border-color:#7c3aed} .node.p .k{color:#6d28d9}
+  .node.wide{width:min(100%,880px); text-align:left}
+  .node.wide .k,.node.wide .t{text-align:center}
+  .arrow{width:2px; height:28px; background:#9aa4b2; position:relative}
+  .arrow::after{content:""; position:absolute; left:50%; bottom:-2px; transform:translateX(-50%); border-left:6px solid transparent; border-right:6px solid transparent; border-top:9px solid #9aa4b2}
+  .legend{display:flex; flex-wrap:wrap; gap:10px; margin:6px 0 4px; font-size:13px; color:var(--ink-2)}
+  .legend span{display:inline-flex; align-items:center; gap:6px}
+  .legend i{width:14px; height:14px; border-radius:4px; border:2px solid; display:inline-block}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+
+  .stats{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0 22px}
+  @media (max-width:760px){ .stats{grid-template-columns:1fr} }
+  .stat{border:1px solid var(--line); border-radius:10px; background:var(--card); padding:14px 16px}
+  .stat .v{font-family:var(--mono); font-size:26px; font-weight:700; color:var(--accent); line-height:1.2}
+  .stat .l{font-size:13.5px; color:var(--ink-2); margin-top:6px; line-height:1.6}
+  .two figure{margin-top:0}
+  .loopband{width:min(100%,880px); border:1px dashed #b6c0cc; border-radius:10px; background:#fff; padding:8px 11px 6px; margin:0 0 6px}
+  .loopband .lh{font-size:13px; font-weight:650; display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; margin-bottom:6px}
+  .loopband .lh b{font-size:10.5px; letter-spacing:.08em; color:var(--ink-3)}
+  .loopband .lh span{margin-left:auto; font-family:var(--mono); font-size:11px; font-weight:400; color:var(--ink-3)}
+  .loopband .lg{display:grid; gap:6px; grid-template-columns:repeat(4,minmax(0,1fr))}
+  .loopband .lg.n5{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .loopband .ph{border-radius:7px; padding:5px 8px; border:1px solid var(--line); text-align:left; min-width:0}
+  .loopband .ph.off{background:#f3f5f7; color:#7d8793; border-style:dashed}
+  .loopband .pn{font-family:var(--mono); font-size:10.5px; font-weight:700; letter-spacing:.04em}
+  .loopband .pn i{font-style:normal; font-weight:400; margin-left:3px}
+  .loopband .pt{font-size:12px; line-height:1.5; margin-top:2px; overflow-wrap:anywhere}
+  .loopband .ph:not(.off) .pt{color:var(--ink-2)}
+  .loopband .ph.reason{background:#fefbe8; border-color:#eab308} .loopband .ph.reason .pn{color:#a16207}
+  .loopband .ph.act{background:#ecfbf0; border-color:#22a552} .loopband .ph.act .pn{color:#15803d}
+  .loopband .ph.verify{background:#fdeeee; border-color:#dc2626} .loopband .ph.verify .pn{color:#b91c1c}
+  .loopband .ph.observe{background:#eef4ff; border-color:#3b82f6} .loopband .ph.observe .pn{color:#2563eb}
+  .loopband .ln{font-size:11.5px; color:var(--ink-3); margin-top:4px}
+  .sec .sh em{font-style:normal; text-transform:none; letter-spacing:0; border-radius:4px; padding:1px 6px; margin-right:6px; color:#fff}
+  .sh em.reason{background:#a16207} .sh em.act{background:#15803d} .sh em.verify{background:#b91c1c} .sh em.observe{background:#2563eb}
+  @media (max-width:760px){ .loopband .lg,.loopband .lg.n5{grid-template-columns:1fr} }
+  .turn{padding:12px 16px}
+  .turn .t{margin-bottom:2px}
+  .meta2{font-family:var(--mono); font-size:11px; color:var(--ink-3); text-align:center; margin-bottom:6px}
+  .sec{border-radius:8px; padding:8px 11px; margin-top:8px; text-align:left; background:rgba(255,255,255,.75); border:1px solid var(--line)}
+  .sec .sh{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; font-weight:700; color:var(--ink-3); margin-bottom:5px; text-transform:uppercase}
+  .sec.m .sh{color:#a16207} .sec.h .sh{color:#15803d} .sec.r .sh{color:#2563eb}
+  .bi{display:grid; grid-template-columns:72px minmax(0,1fr); column-gap:10px; margin:3px 0 5px; font-size:13.3px; line-height:1.55}
+  .bi .bl{grid-row:span 2; font-family:var(--mono); font-size:10.5px; color:var(--ink-3); padding-top:2px}
+  .bi .en{color:var(--ink); font-family:var(--mono); font-size:12.4px}
+  .bi .zh{color:var(--ink-2)}
+  .none{font-size:12.5px; color:var(--ink-3); margin:2px 0 4px}
+  pre.call,pre.ret{margin:6px 0 4px; font-size:11.6px; padding:9px 11px; line-height:1.55; white-space:pre-wrap; word-break:break-word}
+  pre.ret{background:#16233a}
+  .hd{font-size:13px; line-height:1.65; color:var(--ink-2)}
+  .metrics{margin-top:6px; font-size:12px; color:var(--ink-3); display:flex; flex-wrap:wrap; gap:4px 6px; align-items:center}
+  .metrics .mt{font-family:var(--mono); font-size:11.3px; background:#fff; border:1px solid var(--line); border-radius:4px; padding:0 6px; color:var(--ink)}
+  .metrics .mt i{font-style:normal; color:var(--ink-3); margin-right:5px; font-family:-apple-system,"PingFang SC",sans-serif}
+  .zh2{font-size:13px; color:var(--ink-2); line-height:1.65}
+  .sec.r img{margin-top:8px}
+  .remark{margin-top:8px; border-radius:6px; padding:7px 11px; font-size:13px; line-height:1.6; text-align:left}
+  .remark.bad{background:var(--stop-soft); border:1px solid #f3c9c9; color:#7f1d1d}
+  .remark.ok{background:var(--accent-soft); border:1px solid #bfe3dd; color:#134e4a}
+  .legend2{display:grid; gap:6px; margin:10px 0 12px; font-size:13.5px; color:var(--ink-2); border-left:3px solid var(--line); padding-left:12px}
+  h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
+  .omap{display:grid; grid-template-columns:1fr 1.3fr 1.2fr .9fr; gap:8px; margin:14px 0 6px}
+  @media (max-width:760px){ .omap{grid-template-columns:1fr} }
+  .og{border-radius:9px; padding:8px 10px; border:1px solid var(--line)}
+  .og .ogt{font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; font-weight:700; margin-bottom:5px}
+  .og .oc{font-size:13px; background:#fff; border:1px solid var(--line); border-radius:5px; padding:2px 8px; margin:3px 0}
+  .og.sys{background:#f3f5f7} .og.sys .ogt{color:var(--ink-3)}
+  .og.txt{background:#fefbe8; border-color:#eab308} .og.txt .ogt{color:#a16207}
+  .og.img{background:#eef4ff; border-color:#3b82f6} .og.img .ogt{color:#2563eb}
+  .og.end{background:#ecfbf0; border-color:#22a552} .og.end .ogt{color:#15803d}
+  details.ofold{border:1px solid var(--line); border-radius:9px; background:var(--card); margin:8px 0}
+  details.ofold>summary{cursor:pointer; list-style:none; padding:10px 14px; display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px}
+  details.ofold>summary::-webkit-details-marker{display:none}
+  details.ofold>summary::before{content:"▸"; color:var(--ink-3)}
+  details.ofold[open]>summary::before{content:"▾"}
+  details.ofold[open]>summary{border-bottom:1px solid var(--line-2)}
+  details.ofold .ot{font-weight:650; font-size:15px}
+  details.ofold .om{font-size:12.5px; color:var(--ink-3)}
+  details.ofold .ob{padding:10px 14px 4px}
+  details.sub2{border-left:3px solid var(--line); margin:8px 0; padding-left:10px}
+  details.sub2>summary{cursor:pointer; font-family:var(--mono); font-size:12.5px; color:var(--ink-2); padding:3px 0}
+  pre.otext{font-size:11.8px; line-height:1.55; white-space:pre-wrap; word-break:break-word; margin:6px 0 8px}
+  table.otab{font-size:13px; margin:6px 0 10px} table.otab .en{font-family:var(--mono); font-size:11.6px; color:var(--ink-2)}
+  table.otab .zh{font-size:13px; color:var(--ink); margin-top:3px}
+  table.otab.io{table-layout:fixed; font-size:12.6px}
+  table.otab.io td{line-height:1.6; overflow-wrap:anywhere} table.otab.io td code{font-size:11px}
+  table.otab.io td:first-child code{font-size:11.5px; font-weight:700; color:var(--accent); white-space:nowrap}
+  table.otab.io .iou{font-size:11.5px; color:var(--ink-3); margin-top:4px}
+  table.otab.io .iok{margin-bottom:4px} table.otab.io .iok b{display:inline-block; min-width:30px; font-size:11px; color:var(--ink-3); font-weight:650; margin-right:4px}
+  table.otab.io tbody tr:nth-child(even){background:#fafbfc}
+  table.otab.io ul.iol2,table.otab.io ol.iol2{margin:0; padding-left:16px} table.otab.io ul.iol2 ul{margin:2px 0 2px; padding-left:14px}
+  table.otab.io .iol2 li{margin:0 0 3px} table.otab.io .iop{margin:4px 0 0; font-size:12px; color:var(--ink-3)}
+  table.otab.io .iok>b{display:block; margin-bottom:1px}
+  h4.oh4{margin:16px 0 4px; font-size:14px}
+  .ocards{display:grid; gap:8px; margin:8px 0}
+  .ocard .och{font-size:13px; margin-bottom:-2px} .ocard .och i{display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:6px; vertical-align:-1px}
+  .ocard pre.otext{margin-top:4px}
+  .small{font-size:13px; color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="rail" id="rail">
+  <div class="rail-title">场景组装 · 批 3 复盘</div>
+  <a href="#overview"><span class="n">00</span>总览</a>
+  <a href="#batch"><span class="n">01</span>这一批</a>
+  <a href="#start"><span class="n">02</span>起点</a>
+  <a href="#opening"><span class="n">03</span>开局消息</a>
+  <a href="#walk"><span class="n">04</span>31 轮完整流程</a>
+  <a href="#end"><span class="n">05</span>批末检查</a>
+  <a href="#cost"><span class="n">06</span>轮数与花费</a>
+  <a href="#eval"><span class="n">07</span>评估</a>
+  <a href="#helmet"><span class="n">08</span>obj_0061 拆解</a>
+  <a href="#findings"><span class="n">09</span>发现的问题</a>
+  <a href="#files"><span class="n">10</span>文件与命令</a>
+</nav>
+
+<main>
+
+<header class="top">
+  <div class="eyebrow">SceneAssembly · 复盘 · assembly-batch3-20261123</div>
+  <h1>以一个批次为例的复盘</h1>
+  <p class="lede">
+    新链路（M0–M9）的第一次真实运行：批 3，床、两个床上物件、靠枕、吊柜。
+    下面从起点、开局消息，到 31 轮里每一次工具调用和 harness 的返回，再到留出帧上的分数，全部取自这次运行的记录。
+    设计本身见 <a href="scene-assembly-design.html">场景组装 harness 设计框架</a>。
+  </p>
+  <div class="meta">
+    <span class="tag">运行 <b>runs/assembly-batch3-20261123</b></span>
+    <span class="tag">批 <b>3 / 11</b></span>
+    <span class="tag">模型 <b>gpt-6-astra · effort high</b></span>
+    <span class="tag">轮数 <b>31</b></span>
+    <span class="tag">花费 <b>$3.7</b></span>
+    <span class="tag">耗时 <b>12 分钟</b></span>
+    <span class="tag">留出帧 IoU <b>0.568</b></span>
+    <span class="tag">运行日期 <b>2026-11-23</b></span>
+  </div>
+</header>
+
+
+<!-- ============ 00 ============ -->
+<section id="overview">
+  <h2><span class="no">00</span>总览</h2>
+  <p class="sub">一句话：流程全部按设计走通，几何干净；分数上 4 个物体不差于 B1，obj_0061 掉到 0.126</p>
+
+  <div class="stats">
+    <div class="stat"><div class="v">5 / 5</div><div class="l">个物体 done；0 次自动撤回；批末检查重开吊柜一次，修好后通过</div></div>
+    <div class="stat"><div class="v">0</div><div class="l">最终状态里没声明支撑的接触、穿墙、出房间都是 0；每次 finish 和批末 15 s 物理都没有倒下或掉落</div></div>
+    <div class="stat"><div class="v">0.568</div><div class="l">5 个物体留出帧 IoU 平均。同一组物体上：起点 0.583、B1 0.652、B0 0.509。不算 obj_0061 时 0.679 对 B1 0.650</div></div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">按设计工作的</div><div>开局材料一次给齐，agent 第 1 轮就排好顺序；床上三件声明支撑在床上，z 由 harness 落；自动选墙在墙角按歧义打回；批末绝对阈值查出起点带来的穿墙，agent 用两段墙的墙角贴墙修好。</div></div>
+    <div class="mark e"><div class="who">问题</div><div>obj_0061：180° 翻转是对的，但又按照片挪离扫描位置约 0.15 m，再落到偏低的床资产表面，IoU 从起点 0.452 掉到 0.126。另有两处实现与说明不一致：set_pose 不报"没变差的旧问题"；debug 页 D09 写的"缓存读取仍是 0"在这次运行里不成立。见 <a href="#findings">09</a>。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 01 ============ -->
+<section id="batch">
+  <h2><span class="no">01</span>这一批</h2>
+  <p class="sub">M6 切批：首个关键帧 45–58 的 5 个物体 · 共享 4 张帧</p>
+
+  <table>
+    <thead><tr><th>物体</th><th>标签（实物）</th><th>资产尺寸 长×宽×高 (m)</th><th>关键帧</th><th>首个关键帧</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td><code>obj_0037</code></td><td>bed</td><td>2.33 × 2.78 × 0.78</td><td>63、86、45</td><td>45</td><td>床上三件的支撑物</td></tr>
+      <tr><td><code>obj_0061</code></td><td>object（头盔）</td><td>0.23 × 0.30 × 0.12</td><td>53、60、317</td><td>53</td><td>SAM3D 判为倒置，起点已翻正，标"朝向未确认"</td></tr>
+      <tr><td><code>obj_0062</code></td><td>object（包）</td><td>0.43 × 0.55 × 0.19</td><td>81、53、58</td><td>53</td><td></td></tr>
+      <tr><td><code>obj_0016</code></td><td>pillow（靠枕）</td><td>1.04 × 0.57 × 0.38</td><td>81、86、55</td><td>55</td><td>资产躺着生成，朝上轴 −Y</td></tr>
+      <tr><td><code>obj_0041</code></td><td>cabinet（吊柜）</td><td>0.92 × 0.37 × 0.86</td><td>97、58、77</td><td>58</td><td>挂墙，在 int_2 和 ext_S_1 的墙角</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:14px;color:var(--ink-2)">共享帧 45、53、55、58，其中 58 也是批 4 的帧。之前没有跑过任何批，开局时场景里只有墙和地板。</p>
+</section>
+
+
+<!-- ============ 02 ============ -->
+<section id="start">
+  <h2><span class="no">02</span>起点</h2>
+  <p class="sub">M3 · SAM3D 朝向 + 一次有界配准 · z 取扫描底面 · 不声明支撑</p>
+
+  <table>
+    <thead><tr><th>物体</th><th>x, y</th><th class="n">yaw</th><th>up</th><th class="n">底面 z</th><th class="n">穿墙</th><th class="n">出房间</th><th class="n">点云覆盖 / 溢出</th></tr></thead>
+    <tbody>
+      <tr><td>床 0037</td><td>4.65, 2.15</td><td class="n">−163.0</td><td>+Z</td><td class="n">0.106</td><td class="n"><b>0.248</b></td><td class="n"><b>0.260</b></td><td class="n">0.30 / 0.94</td></tr>
+      <tr><td>obj_0061</td><td>3.99, 2.59</td><td class="n">60.7</td><td>+Z（翻正）</td><td class="n">0.826</td><td class="n">0</td><td class="n">0</td><td class="n">0.96 / 0.00</td></tr>
+      <tr><td>包 0062</td><td>4.31, 2.22</td><td class="n">18.3</td><td>+Z</td><td class="n">0.792</td><td class="n">0</td><td class="n">0</td><td class="n">0.68 / 0.58</td></tr>
+      <tr><td>靠枕 0016</td><td>4.87, 1.30</td><td class="n">13.5</td><td>−Y</td><td class="n">0.821</td><td class="n">0</td><td class="n">0</td><td class="n">0.53 / 0.75</td></tr>
+      <tr><td>吊柜 0041</td><td>6.00, 1.70</td><td class="n">−67.0</td><td>+Z</td><td class="n">1.490</td><td class="n"><b>0.169</b></td><td class="n"><b>0.176</b></td><td class="n">0.68 / 0.80</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:14px;color:var(--ink-2)">单位 m。床和吊柜起点就嵌在墙里：资产占地比扫描大，按扫描中心放就越过了墙面。"不比改动前差"不会因此撤回，但批末的绝对阈值一定会查出来。</p>
+
+  <div class="two">
+    <figure><img src="assets/assembly-batch3/s01_bed_start.jpg" alt="床起点">
+      <figcaption>床的起点（begin 返回的拼接图，帧 45）。右边的床明显比照片宽，底在 0.106 m 悬空。</figcaption></figure>
+    <figure><img src="assets/assembly-batch3/s16_cabinet_start.jpg" alt="吊柜起点">
+      <figcaption>吊柜的起点（帧 58）。外观和位置都接近照片；它这时已经有 0.17 m 嵌在 ext_S_1 里，图上看不出。</figcaption></figure>
+  </div>
+</section>
+
+
+<!-- ============ 03 ============ -->
+<section id="opening">
+  <h2><span class="no">03</span>开局消息</h2>
+  <p class="sub">M6 BatchSession.open + M5 batch_opening + M7 opening · batch_03/llm/001_request.json · 第 1 轮输入 11,281 token</p>
+
+  <p>第一次请求里模型收到三样东西：<b>系统提示词</b>（每轮都带）、<b>10 个工具定义</b>（每轮都带）、<b>一条开局用户消息</b>。
+    开局用户消息由 <code>src/agent/loop.py</code> 的 <code>opening()</code> 按固定顺序拼成：一段文字（4 类信息）、10 张图（3 类）、最后一句指令。
+    下面按模型读到的顺序排列，每一块点开看原文。开局里没有拼接图：模型第一次看到拼接图是轮 2 <code>begin</code> 的返回。</p>
+
+  <div class="omap">
+    <div class="og sys"><div class="ogt">每轮都带</div><div class="oc">系统提示词</div><div class="oc">10 个工具定义</div></div>
+    <div class="og txt"><div class="ogt">开局消息 · 文字</div><div class="oc">① 批信息</div><div class="oc">② 物体文字卡 ×5</div><div class="oc">③ 已放物体清单</div><div class="oc">④ 墙段表</div></div>
+    <div class="og img"><div class="ogt">开局消息 · 图</div><div class="oc">⑤ 平面图 ×1</div><div class="oc">⑥ 带框关键帧 ×4</div><div class="oc">⑦ 四面图 ×5</div></div>
+    <div class="og end"><div class="ogt">结尾</div><div class="oc">⑧ Start with set_order.</div></div>
+  </div>
+  <p class="small">第 1 轮输入 11,281 token 是以上全部之和，网关没有分项计量。每张 1296 × 968 的图约 1.6k token（D09 探测），所以 4 张关键帧大约占一半以上。</p>
+
+  <h3>每轮都带</h3>
+<details class="ofold "><summary><span class="ot">系统提示词</span><span class="om">instructions · 3,411 字符 · 英文 · <code>src/agent/tools.py</code> INSTRUCTIONS</span></summary><div class="ob"><p class="small">floor_z 和层高在发送前填入（0.054、2.55）。共 7 段：任务、坐标与单位、位姿、起点、看到的图、检查、工作顺序。</p><pre class="otext">You assemble a 3-D copy of a scanned room from generated furniture assets, so that it matches the photos.
+You work one batch of objects at a time; this conversation is one batch.
+
+Frame and units. Scan frame, metres, +Z up. The floor's top is at z = 0.054; the room is 2.55 m high.
+
+A pose:
+- x, y: where the object's centre goes.
+- up: which of the asset's own axes points to the sky. The four-side view shows the asset already turned this
+  way, with its axes drawn; a wrong up shows as an object lying on its side or upside down.
+- scale: three factors on the upright asset's own length (x), width (y) and height (z), applied before the turn.
+  Generated assets usually get the height right and the footprint wrong.
+- yaw_deg: turn about the vertical, counter-clockwise from +X. Then tilt_deg / tilt_toward_deg if it leans (rare).
+- You never give z. It follows from the support: floor (stands on the floor), object (rests on another object,
+  give `on`; for a lower shelf give a rough surface_z), wall (hangs, give its bottom height). Add `against`
+  to push it flush with a wall: ["auto"] for the nearest wall, or the wall id(s) from the plan view. Only
+  the distance to the wall changes; your position along the wall is kept.
+- A support must already be in the scene (processed, or in this batch). If it belongs to a later batch, bring it in.
+
+Where things start. Each object starts at its scan position with SAM3D's orientation and scale 1; its height is
+the bottom of its scan points and no support is declared. When the card says the orientation is NOT confirmed,
+SAM3D had the object upside down: check which side faces where against the four-side view and the photos.
+The first time you move an object you declare its support.
+
+What you see.
+- Key frames: the batch's photos, with this batch's objects boxed in colour; the legend names them.
+- Four-side views: each asset alone from +X, +Y, -X, -Y.
+- Plan view: the walls with their ids, and where each key frame's camera stands and looks.
+- Stitched images: the photo on the left, a render from the same camera on the right. The render shows the
+  object you are working on and the objects already processed, nothing else; walls and floor are there.
+  Compare them: position, size, which side faces the camera, what it stands on.
+
+Checks. Every change is checked right away. Order of importance: physically right (no penetration, not in a
+wall, inside the room) &gt; supports right (rests on what you declared, against the wall you named) &gt; looks like
+the photos &gt; overlaps the scan points. A change that makes a physical or support problem worse is undone
+automatically and you are told why; a problem that was already there and did not get worse is reported but kept.
+Three automatic undos in a row mark the object failed. Scale far from 1 and a poorer fit to the scan are only reported.
+When the batch ends, a stricter check uses absolute limits: anything still penetrating, in a wall or out of the
+room is reopened once; if it is still wrong after that it is marked failed. So deal with problems the starting
+pose brought, too.
+
+Work. First set_order (supports before what rests on them). Then for each object: begin, compare, set_pose until
+it matches, finish. Use view for another key frame, check_scene to see the whole picture, give_up when the asset
+cannot be made to match. When every object is done or failed, end_batch. Keep reasons short.</pre></div></details>
+<details class="ofold "><summary><span class="ot">10 个工具定义</span><span class="om">tools · 全部 strict · tool_choice auto · 不并行</span></summary><div class="ob"><table class="otab"><thead><tr><th>工具</th><th>说明（原文 + 中文）</th><th>参数</th></tr></thead><tbody><tr><td><code>set_order</code></td><td><div class="en">Set the order you will process this batch's objects in. Required before begin. Later calls may only reorder objects not processed yet.</div><div class="zh">设定你处理本批物体的顺序。begin 之前必须调用。之后再调用时，只能重排还没处理的物体。</div></td><td><code>order, reason</code></td></tr><tr><td><code>begin</code></td><td><div class="en">Start working on an object. It enters the scene at its current pose; you get its stitched image.</div><div class="zh">开始处理一个物体。它按当前位姿进入场景；你会收到它的拼接图。</div></td><td><code>object</code></td></tr><tr><td><code>set_pose</code></td><td><div class="en">Move an object. Takes effect at once, then is checked: if it made anything worse (a new penetration, into a wall, out of the room, off its support) it is undone automatically and you are told why. Objects resting on it move with it. Answers with the check result and a stitched image.</div><div class="zh">移动一个物体。立即生效，然后检查：如果让任何一项变差（新的穿插、进墙、出房间、离开支撑），会自动撤回并告诉你原因。放在它上面的物体跟着它走。返回检查结果和一张拼接图。</div></td><td><code>object, x, y, yaw_deg, up, scale, tilt_deg, tilt_toward_deg, support, reason</code></td></tr><tr><td><code>undo</code></td><td><div class="en">Take back this object's last change (what rests on it follows it back).</div><div class="zh">撤回这个物体的上一次改动（放在它上面的物体跟着回去）。</div></td><td><code>object, reason</code></td></tr><tr><td><code>view</code></td><td><div class="en">A stitched image of an object from another of this batch's key frames.</div><div class="zh">从本批另一张关键帧看一个物体的拼接图。</div></td><td><code>object, frame</code></td></tr><tr><td><code>check_scene</code></td><td><div class="en">Report every current problem in the scene (contacts, walls, room, supports) without changing anything.</div><div class="zh">报告场景当前的全部问题（接触、墙、房间、支撑），不改任何东西。</div></td><td><code>—</code></td></tr><tr><td><code>finish</code></td><td><div class="en">Mark an object done. A 5-second gravity run checks it and what rests on it; if it falls over or drops, its last change is undone and it stays open.</div><div class="zh">把一个物体标为完成。用 5 秒重力仿真检查它和它上面的物体；如果倒下或掉落，撤回它的上一次改动，物体保持打开。</div></td><td><code>object, note</code></td></tr><tr><td><code>give_up</code></td><td><div class="en">Mark an object failed (e.g. the asset does not match the photo). It stays in the scene at its last pose.</div><div class="zh">把一个物体标为失败（例如资产和照片对不上）。它按最后的位姿留在场景里。</div></td><td><code>object, problem</code></td></tr><tr><td><code>bring_in</code></td><td><div class="en">Bring an object from another batch into this one: an earlier one to fix it, or a later one that something here rests on. At most 3 per batch. Its card, four-side view and a frame come with it.</div><div class="zh">把另一批的物体拉进本批：更早批的拿来修正，或者本批有东西放在它上面的更晚批物体。每批最多 3 个。会附带它的文字卡、四面图和一张帧。</div></td><td><code>object, reason</code></td></tr><tr><td><code>end_batch</code></td><td><div class="en">End the batch when every object is done or failed. A whole-batch check runs (contacts, walls, room, 15 s of gravity); objects with a problem are reopened once and you continue with them.</div><div class="zh">所有物体都完成或失败后结束本批。会跑一次全批检查（接触、墙、房间、15 秒重力）；有问题的物体重开一次，你继续处理它们。</div></td><td><code>summary</code></td></tr></tbody></table><h4 class="oh4">每个工具的输入与输出</h4><p class="small">按 <code>src/agent/loop.py</code> 的 Tools 和它调用的 M2 / M4 / M6 代码整理。"输出"是作为 function_call_output 交回模型的内容：一段 JSON 文字，有的再附一张图。任何工具在规则不允许时都返回 <code>{"ok": false, "rejected": 原因}</code>，状态不变。</p><table class="otab io"><colgroup><col style="width:13%"><col style="width:31%"><col style="width:24%"><col style="width:32%"></colgroup><thead><tr><th>工具</th><th>输入（模型给）</th><th>harness 做什么</th><th>输出（交回模型）</th></tr></thead><tbody><tr><td><code>set_order</code><div class="iou">批 3：轮 1</div></td><td><code>order</code>：本批物体编号的列表；<code>reason</code>：理由</td><td>M6：核对列表恰好是本批物体；已处理的物体不能挪位置。只记顺序，不动位姿、不写版本</td><td><div class="iok"><b>成功</b><code>{"ok": true, "order": [...]}</code></div><div class="iok"><b>失败</b>列表和本批物体对不上、或挪了已处理的物体 → <code>{"ok": false, "rejected": 原因}</code></div><div class="iok"><b>附图</b>无</div></td></tr><tr><td><code>begin</code><div class="iou">批 3：轮 2、6、10、17、21</div></td><td><code>object</code>：物体编号（必须在本批，或已被拉进来）</td><td>M6：没定顺序会拒绝；物体从 untouched 改为 working 并进入场景（参与渲染和接触检查），写一个版本。M5 出拼接图</td><td><div class="iok"><b>成功</b><code>pose</code>（当前位姿）、<code>support</code>（起点是 height 类型）、<code>bottom_z</code>、<code>image</code>（"key frame N"）</div><div class="iok"><b>失败</b>没定顺序、物体不在本批 → <code>rejected</code></div><div class="iok"><b>附图</b>拼接图：这个物体的首个关键帧</div></td></tr><tr><td><code>set_pose</code><div class="iou">批 3：轮 3、7、8、11、13–15、18、19、22–24、28</div></td><td><ul class="iol2"><li><code>object</code>：要改的物体编号（必须已 begin）</li><li><code>x</code>, <code>y</code>：物体中心的水平位置（米，扫描坐标系）；贴墙时沿墙方向的位置保留，离墙距离由 harness 推</li><li><code>yaw_deg</code>：绕竖直轴转多少度，从 +X 起逆时针</li><li><code>up</code>：资产自己的哪根轴朝天，±X / ±Y / ±Z 之一，看四面图判断</li><li><code>scale</code>：三个系数，分别乘在摆正后资产自己的长（x）、宽（y）、高（z）上</li><li><code>tilt_deg</code>, <code>tilt_toward_deg</code>：倾斜多少度、朝哪个水平方向倒；不倾斜给 0</li><li><code>support</code>：支撑，决定 z：<ul><li><code>kind</code>：floor（立在地上）/ object（放在别的物体上）/ wall（挂墙）</li><li><code>on</code>：kind=object 时，放在哪个物体上</li><li><code>surface_z</code>：kind=object 时，支撑面的大致高度（多层家具用）；null 表示从当前底面往下找</li><li><code>height</code>：kind=wall 时，底面离地多高</li><li><code>against</code>：贴墙。["auto"] = 最近的墙；或 1–2 个墙段 id（两个只用于墙角）；null = 不贴墙</li></ul></li><li><code>reason</code>：一句理由</li></ul><p class="iop">不给 z：z 由 support 决定。</p></td><td><ol class="iol2"><li><b>M2 求位姿</b>：按 support 落 z（floor 到地板顶面；object 在支撑物视觉网格上找朝上的面；wall 按 height），有 against 就沿墙法向推到贴住。做不到就打回，状态不变</li><li><b>M2 带动</b>：放在它上面的物体跟着走、重新落 z；整个改动全成功或全不变</li><li><b>M2 写版本</b>：写 <code>states/vNNNN.json</code>；done 的物体回到 working</li><li><b>M5 出图</b>：在首个关键帧上出拼接图</li><li><b>M4 检查</b>：改动前后各测一次（接触由 M1 Isaac 报告），穿插、穿墙、出房间、支撑这些硬性项变差 → 自动撤回；点云、缩放只报告</li></ol></td><td><div class="iok"><b>成功</b><ul class="iol2"><li><code>verdict</code>：keep（保留）或 undo（已自动撤回）</li><li><code>issues</code>：只列<b>变差</b>的项，每项有检查名、级别（report / stop）、改动前后的数值；起点就有、没变差的问题不列</li><li><code>moved</code>：这次位置变了的物体，包括被带动的；每个带底面高度，贴墙的带 <code>walls</code>（贴哪面、推了多远）</li><li><code>now</code>：当前位姿、支撑、底面高度、状态</li><li>撤回时另有 <code>undo_streak</code>（连续撤回次数），第 3 次加 <code>failed</code>（物体标为失败）</li></ul></div><div class="iok"><b>失败</b><ul class="iol2"><li>打回：<code>{"ok": false, "rejected": 原因}</code>，状态不变、不检查、无图</li><li>原因：范围内找不到支撑面；支撑物不在场；支撑成环；auto 贴墙时最近的墙太远或两面墙分不清；两面墙不成墙角；挡住门洞；挂墙超过层高；物体没 begin</li></ul></div><div class="iok"><b>附图</b><ul class="iol2"><li>保留：拼接图（首个关键帧）</li><li>自动撤回：被拒的那个位姿的拼接图，标 REFUSED</li><li>打回：无图</li></ul></div></td></tr><tr><td><code>undo</code><div class="iou">批 3：没用过</div></td><td><code>object</code>；<code>reason</code></td><td>M2：撤回这个物体的上一次改动；放在它上面的物体跟着回去，保留它们自己后来的改动；写版本。不做 M4 检查</td><td><div class="iok"><b>成功</b><code>back_to_version</code>、<code>moved</code>（跟着回去的物体）</div><div class="iok"><b>失败</b>没有可撤的改动、上面的物体跟不回去 → <code>rejected</code></div><div class="iok"><b>附图</b>拼接图：撤回后的位姿</div></td></tr><tr><td><code>view</code><div class="iou">批 3：轮 4、12</div></td><td><code>object</code>；<code>frame</code>：本批共享帧之一</td><td>M6 核对帧在本批；M5 + M1 出这一帧的拼接图。不改状态</td><td><div class="iok"><b>成功</b><code>{"ok": true, "object", "frame"}</code></div><div class="iok"><b>失败</b>帧不在本批 → <code>rejected</code></div><div class="iok"><b>附图</b>拼接图：指定的帧</div></td></tr><tr><td><code>check_scene</code><div class="iou">批 3：轮 27、29</div></td><td>无参数</td><td>M4 measure_now：测全场景当前状态；不比较、不撤回、不改状态</td><td><div class="iok"><b>成功</b><code>contacts_not_declared_as_support</code>、<code>in_wall_m</code>、<code>outside_room_m</code>、<code>support_gap_m</code>、<code>wall_gap_m</code>：只列超过报告阈值的物体和数值</div><div class="iok"><b>失败</b>—</div><div class="iok"><b>附图</b>无</div></td></tr><tr><td><code>finish</code><div class="iou">批 3：轮 5、9、16、20、25、30</div></td><td><code>object</code>；<code>note</code></td><td>M4 + M1：这个物体和它上面的物体 5 s 重力仿真（其余临时固定，static 资产不仿真）。没倒没掉 → M6 标 done，写版本</td><td><div class="iok"><b>成功</b><code>physics</code>（每个可动物体的 dz、dxy、倾角、是否静止、级别）、<code>fixed</code>、<code>remaining</code>（本批还没完成的物体）</div><div class="iok"><b>失败</b>倒下或掉落 → <code>{"ok": false, "physics", "undone", "note"}</code>：撤回上一次改动，物体保持 working</div><div class="iok"><b>附图</b>只在物理没过时：撤回后的拼接图</div></td></tr><tr><td><code>give_up</code><div class="iou">批 3：没用过</div></td><td><code>object</code>；<code>problem</code>：为什么放弃</td><td>标为 failed，写版本；按最后的位姿留在场景里，参与渲染和检查，导出时标出</td><td><div class="iok"><b>成功</b><code>{"ok": true, "remaining"}</code></div><div class="iok"><b>失败</b>物体不在本批 → <code>rejected</code></div><div class="iok"><b>附图</b>无</div></td></tr><tr><td><code>bring_in</code><div class="iou">批 3：没用过</div></td><td><code>object</code>：别批的物体编号；<code>reason</code></td><td>M6：每批最多 3 个。加入本批；更晚批的从原批移除；已 done / failed 的改回 working。若本批共享帧都看不见它，把它的首个关键帧加进共享帧。重画带框关键帧</td><td><div class="iok"><b>成功</b><code>frames</code>（本批共享帧）、<code>added_frame</code>、<code>card</code>（文字卡）</div><div class="iok"><b>失败</b>已在本批、编号不存在、超过 3 个 → <code>rejected</code></div><div class="iok"><b>附图</b>四面图；若加了帧，再附这张带框关键帧</div></td></tr><tr><td><code>end_batch</code><div class="iou">批 3：轮 26（被拒）、31（通过）</div></td><td><code>summary</code>：本批总结</td><td>M6：要求本批全部 done 或 failed。绝对阈值查接触、穿墙、出房间 + 15 s 物理。有问题的 done 物体重开（每个最多 1 次），第二次仍不过标 failed。通过则对话结束、写断点</td><td><div class="iok"><b>成功</b><code>{"ok": true, "failed": [...], "summary"}</code></div><div class="iok"><b>失败</b>有物体被重开 → <code>{"ok": false, "reopened", "problems", "note"}</code>；还有没完成的物体 → <code>rejected</code></div><div class="iok"><b>附图</b>无</div></td></tr></tbody></table><details class="sub2"><summary>set_pose 的完整参数 schema</summary><pre class="otext">{
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "object": {
+   "type": "string",
+   "description": "object id, e.g. obj_0037"
+  },
+  "x": {
+   "type": "number",
+   "description": "object centre, m (scan frame)"
+  },
+  "y": {
+   "type": "number",
+   "description": "object centre, m (scan frame)"
+  },
+  "yaw_deg": {
+   "type": "number",
+   "description": "turn about vertical, counter-clockwise from +X"
+  },
+  "up": {
+   "type": "string",
+   "enum": [
+    "+X",
+    "-X",
+    "+Y",
+    "-Y",
+    "+Z",
+    "-Z"
+   ],
+   "description": "which of the asset's own axes points to the sky (see the four-side view)"
+  },
+  "scale": {
+   "type": "array",
+   "items": {
+    "type": "number"
+   },
+   "minItems": 3,
+   "maxItems": 3,
+   "description": "factors on the upright asset's own length (x), width (y), height (z)"
+  },
+  "tilt_deg": {
+   "type": "number",
+   "description": "0 unless the object leans; tips its top over by this much"
+  },
+  "tilt_toward_deg": {
+   "type": "number",
+   "description": "horizontal direction the top leans toward (same convention as yaw)"
+  },
+  "support": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "kind": {
+     "type": "string",
+     "enum": [
+      "floor",
+      "object",
+      "wall"
+     ],
+     "description": "floor: stands on the floor. object: rests on another object (give on). wall: hangs on a wall (give height)."
+    },
+    "on": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "kind=object: the id of the object it rests on"
+    },
+    "surface_z": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "kind=object: rough height (m) of the surface it rests on, e.g. a lower shelf; null = from where its bottom is now"
+    },
+    "height": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "kind=wall: height of its bottom above the floor (m)"
+    },
+    "against": {
+     "type": [
+      "array",
+      "null"
+     ],
+     "items": {
+      "type": "string"
+     },
+     "description": "pushed flush against a wall: [\"auto\"] for the nearest wall, or one or two wall ids from the plan view (two only in a corner). null = not against a wall"
+    }
+   },
+   "required": [
+    "kind",
+    "on",
+    "surface_z",
+    "height",
+    "against"
+   ]
+  },
+  "reason": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "object",
+  "x",
+  "y",
+  "yaw_deg",
+  "up",
+  "scale",
+  "tilt_deg",
+  "tilt_toward_deg",
+  "support",
+  "reason"
+ ]
+}</pre></details></div></details>
+
+  <h3>开局用户消息 · 文字</h3>
+<details class="ofold "><summary><span class="ot">① 批信息</span><span class="om">批号、本批物体、共享关键帧</span></summary><div class="ob"><pre class="otext">Batch 3: objects ['obj_0037', 'obj_0061', 'obj_0062', 'obj_0016', 'obj_0041']; shared key frames [45, 53, 55, 58].</pre><p class="small">物体顺序是 M6 切批时的顺序（首个关键帧序号，同帧按编号），不是处理顺序；处理顺序由模型在轮 1 自己定。</p></div></details>
+<details class="ofold "><summary><span class="ot">② 物体文字卡 ×5</span><span class="om">每个物体：标签、框的颜色、资产尺寸、关键帧、起点位姿、当前支撑和底面</span></summary><div class="ob"><table class="otab"><thead><tr><th>行</th><th>含义</th><th>来源</th></tr></thead><tbody><tr><td><code>obj_… label colour</code></td><td>编号、标签；颜色和带框关键帧里的框一致</td><td>M0 交接 · M5</td></tr><tr><td><code>asset size (upright, m)</code></td><td>按起点朝上轴摆正后的资产长、宽、高</td><td>M0 资产</td></tr><tr><td><code>key frames</code></td><td>这个物体的全部关键帧（首个 = 序号最小）</td><td>M0 场景交接</td></tr><tr><td><code>start</code></td><td>起点位姿；"未声明支撑，高度取自扫描底面"</td><td>M3</td></tr><tr><td><code>orientation NOT confirmed</code></td><td>只在 SAM3D 判为倒置的物体上出现</td><td>M3</td></tr><tr><td><code>now</code></td><td>当前状态、支撑（起点专用的 height 类型）、底面高度</td><td>M2</td></tr></tbody></table><p class="small">"未声明支撑，高度取自扫描底面"一句是中文，其余是英文，给模型的就是这样混着的。</p><div class="ocards"><div class="ocard"><div class="och"><i style="background:#e6194b"></i><b>obj_0037</b> 床</div><pre class="otext">obj_0037  bed  colour #e6194b
+  asset size (upright, m): [2.326, 2.779, 0.78]   key frames: [63, 86, 45]
+  start: x 4.65, y 2.15, yaw -163, up +Z  — 未声明支撑，高度取自扫描底面
+  now: untouched, support {'kind': 'height', 'height': 0.0517}, bottom z 0.106</pre><div class="small">起点底面 0.106 比地面高 5 cm；资产占地比扫描大，起点穿墙 0.248 m。</div></div><div class="ocard"><div class="och"><i style="background:#3cb44b"></i><b>obj_0061</b> 头盔</div><pre class="otext">obj_0061  object (generic label)  colour #3cb44b
+  asset size (upright, m): [0.225, 0.301, 0.12]   key frames: [53, 60, 317]
+  start: x 3.99, y 2.59, yaw 61, up +Z  — 未声明支撑，高度取自扫描底面
+  orientation NOT confirmed: SAM3D had it upside down; check the facing against the four-side view
+  now: untouched, support {'kind': 'height', 'height': 0.7718}, bottom z 0.826</pre><div class="small">唯一一张带 "orientation NOT confirmed" 的卡：SAM3D 把它判为倒置，M3 已翻正，朝向要 agent 自己定。</div></div><div class="ocard"><div class="och"><i style="background:#ffc819"></i><b>obj_0062</b> 包</div><pre class="otext">obj_0062  object (generic label)  colour #ffc819
+  asset size (upright, m): [0.432, 0.548, 0.193]   key frames: [81, 53, 58]
+  start: x 4.31, y 2.22, yaw 18, up +Z  — 未声明支撑，高度取自扫描底面
+  now: untouched, support {'kind': 'height', 'height': 0.7377}, bottom z 0.792</pre></div><div class="ocard"><div class="och"><i style="background:#0082c8"></i><b>obj_0016</b> 靠枕</div><pre class="otext">obj_0016  pillow  colour #0082c8
+  asset size (upright, m): [1.04, 0.57, 0.376]   key frames: [81, 86, 55]
+  start: x 4.87, y 1.30, yaw 14, up -Y  — 未声明支撑，高度取自扫描底面
+  now: untouched, support {'kind': 'height', 'height': 0.7673}, bottom z 0.821</pre><div class="small">资产躺着生成，朝上轴 −Y；四面图按 −Y 朝上摆正。</div></div><div class="ocard"><div class="och"><i style="background:#f58230"></i><b>obj_0041</b> 吊柜</div><pre class="otext">obj_0041  cabinet  colour #f58230
+  asset size (upright, m): [0.919, 0.368, 0.861]   key frames: [97, 58, 77]
+  start: x 6.00, y 1.70, yaw -67, up +Z  — 未声明支撑，高度取自扫描底面
+  now: untouched, support {'kind': 'height', 'height': 1.436}, bottom z 1.49</pre><div class="small">起点底面 1.49 m，挂在墙角；起点穿墙 0.169 m。</div></div></div></div></details>
+<details class="ofold "><summary><span class="ot">③ 已放物体清单</span><span class="om">之前批已处理的物体（只有文字，不附旧图）</span></summary><div class="ob"><pre class="otext">Already placed by earlier batches (rendered when in view; not yours to move unless you bring one in):
+(none yet)</pre><p class="small">批 3 是单独跑的，之前没有跑过任何批，所以是空的。按正式流程从批 1 开始跑时，这里会列出批 1、2 放好的物体（例如批 2 的床头柜 0049、纸巾盒 0048），它们也会出现在拼接图里。</p></div></details>
+<details class="ofold "><summary><span class="ot">④ 墙段表</span><span class="om">9 段墙的 id、长度、内外、洞口 · id 用在 <code>against</code> 里</span></summary><div class="ob"><table class="otab"><thead><tr><th>id</th><th class="n">长度 (m)</th><th>类型</th><th>洞口（沿墙位置）</th></tr></thead><tbody><tr><td><code>ext_W</code></td><td class="n">6.95</td><td>外墙</td><td>—</td></tr><tr><td><code>ext_S_1</code></td><td class="n">4.59</td><td>外墙</td><td>—</td></tr><tr><td><code>ext_S_2</code></td><td class="n">2.13</td><td>外墙</td><td>—</td></tr><tr><td><code>ext_E_1</code></td><td class="n">1.96</td><td>外墙</td><td>—</td></tr><tr><td><code>ext_E_2</code></td><td class="n">4.99</td><td>外墙</td><td>—</td></tr><tr><td><code>ext_N</code></td><td class="n">6.73</td><td>外墙</td><td>—</td></tr><tr><td><code>int_1</code></td><td class="n">1.73</td><td>内墙</td><td>0.22–0.93 m</td></tr><tr><td><code>int_2</code></td><td class="n">1.32</td><td>内墙</td><td>—</td></tr><tr><td><code>int_3</code></td><td class="n">0.82</td><td>内墙</td><td>—</td></tr></tbody></table><details class="sub2"><summary>原文</summary><pre class="otext">Walls (ids used in the plan view and in `against`):
+[{"id": "ext_W", "length_m": 6.95, "role": "exterior", "openings": []}, {"id": "ext_S_1", "length_m": 4.59, "role": "exterior", "openings": []}, {"id": "ext_S_2", "length_m": 2.13, "role": "exterior", "openings": []}, {"id": "ext_E_1", "length_m": 1.96, "role": "exterior", "openings": []}, {"id": "ext_E_2", "length_m": 4.99, "role": "exterior", "openings": []}, {"id": "ext_N", "length_m": 6.73, "role": "exterior", "openings": []}, {"id": "int_1", "length_m": 1.73, "role": "interior", "openings": [[0.22, 0.93]]}, {"id": "int_2", "length_m": 1.32, "role": "interior", "openings": []}, {"id": "int_3", "length_m": 0.82, "role": "interior", "openings": []}]</pre></details><p class="small">来自墙体交接 structure.json。吊柜后来贴的是 int_2 和 ext_S_1。</p></div></details>
+
+  <h3>开局用户消息 · 图</h3>
+  <p class="small">文字最后一句："Images follow: the plan view, the boxed key frames, then one four-side view per object." 之后每张图前有一行标签（如 "Key frame 45:"），图都以 detail high 发送。</p>
+<details class="ofold "><summary><span class="ot">⑤ 平面图 ×1</span><span class="om">标签 "Plan view:" · 887 × 934 · observe/plan.py（M5 目录，M7 开局时调用）</span></summary><div class="ob"><figure><img src="assets/assembly-batch3/open_plan.jpg" alt="平面图" loading="lazy"><figcaption>墙段和 id、洞口（int_1 上的白色缺口）、本批 4 台相机的位置和视野扇形。不画物体（用户：画上去太乱）。吊柜在 int_2 和 ext_S_1 的墙角。</figcaption></figure></div></details>
+<details class="ofold "><summary><span class="ot">⑥ 带框关键帧 ×4</span><span class="om">标签 "Key frame 45:" 等 · 原尺寸 1296 × 968 · M5 boxed_frame</span></summary><div class="ob"><p class="small">本批共享帧原图，本批物体用不同颜色框出并标编号，图例放在遮挡最少的角。框由扫描点投影得到：用传感器深度去掉被挡住的点（容差 10 cm），取 2%–98% 分位；看得见的点少于 30 个时退回物体自己的 mask。4 张帧上共 17 个框。</p><details class="sub2" open><summary>Key frame 45</summary><figure><img src="assets/assembly-batch3/open_kf45.jpg" alt="帧 45" loading="lazy"><figcaption>床的首个关键帧。床脚下的地毯不在任何交接里（见 debug 页 D13）。</figcaption></figure></details><details class="sub2"><summary>Key frame 53</summary><figure><img src="assets/assembly-batch3/open_kf53.jpg" alt="帧 53" loading="lazy"><figcaption>头盔、包的首个关键帧。吊柜在这张帧里看不见，图例注明 "not visible here"。</figcaption></figure></details><details class="sub2"><summary>Key frame 55</summary><figure><img src="assets/assembly-batch3/open_kf55.jpg" alt="帧 55" loading="lazy"><figcaption>靠枕的首个关键帧。</figcaption></figure></details><details class="sub2"><summary>Key frame 58</summary><figure><img src="assets/assembly-batch3/open_kf58.jpg" alt="帧 58" loading="lazy"><figcaption>吊柜的首个关键帧，也是批 4 的帧。</figcaption></figure></details></div></details>
+<details class="ofold "><summary><span class="ot">⑦ 四面图 ×5</span><span class="om">标签 "Four-side view of obj_…:" · 4 × 210 px · M5 four_sides</span></summary><div class="ob"><p class="small">资产单独从 +X、+Y、−X、−Y 看，按起点的朝上轴摆正，画出资产自己的坐标轴。这是判断"哪面是正面"唯一和场景无关的证据。</p><details class="sub2"><summary>Four-side view of obj_0037 · 床</summary><figure><img src="assets/assembly-batch3/open_fs0037.jpg" alt="obj_0037" loading="lazy"></figure></details><details class="sub2" open><summary>Four-side view of obj_0061 · 头盔</summary><figure><img src="assets/assembly-batch3/open_fs0061.jpg" alt="obj_0061" loading="lazy"><figcaption>轮 18 模型据此判断"通风壳朝相机"，把 yaw 转了 180°。</figcaption></figure></details><details class="sub2"><summary>Four-side view of obj_0062 · 包</summary><figure><img src="assets/assembly-batch3/open_fs0062.jpg" alt="obj_0062" loading="lazy"></figure></details><details class="sub2"><summary>Four-side view of obj_0016 · 靠枕</summary><figure><img src="assets/assembly-batch3/open_fs0016.jpg" alt="obj_0016" loading="lazy"><figcaption>按起点的 −Y 朝上摆正：坐垫朝下、靠背立着。</figcaption></figure></details><details class="sub2"><summary>Four-side view of obj_0041 · 吊柜</summary><figure><img src="assets/assembly-batch3/open_fs0041.jpg" alt="obj_0041" loading="lazy"></figure></details></div></details>
+
+  <h3>结尾</h3>
+<details class="ofold "><summary><span class="ot">⑧ 最后一句指令</span><span class="om">"Start with set_order."</span></summary><div class="ob"><pre class="otext">Start with set_order.</pre><p class="small">模型在轮 1 照做：调 set_order，没有先看别的。</p></div></details>
+</section>
+
+
+<!-- ============ 04 ============ -->
+<section id="walk">
+  <h2><span class="no">04</span>31 轮完整流程</h2>
+  <p class="sub">batch_03/calls.jsonl · verify/verify.jsonl · 每轮一次工具调用 · 版本 v0052 → v0076</p>
+  <p>
+    设计里一批的循环是 <b>Observe → Reason → Act → Verify</b>，Verify 的结果再成为下一轮的 Observe。
+    每个节点上方的"对应流程"写明这一轮走了哪几段、由哪个模块完成，按代码里真实的执行顺序从左到右排；灰色虚线的段这一轮没有发生。
+  </p>
+  <ul>
+    <li><b>Observe</b>：这一轮新增的输入，也就是上一轮的工具返回。更早的材料（含开局消息）一直留在对话历史里，不重复列。</li>
+    <li><b>Reason</b>：模型这一轮的回复。能看到的只有推理摘要标题和工具参数，内部推理看不到。</li>
+    <li><b>Act</b>：harness 改状态。<b>Verify</b>：M4 的检查，接触和重力仿真由 M1 的 Isaac 服务跑。</li>
+    <li><b>finish</b> 和 <b>end_batch</b> 是先 Verify、通过与否定了之后才改状态，所以这两类的顺序是 Verify → Act。</li>
+    <li>设计框架页把 set_order、begin 画在 Reason 框里（由模型发起）；这里把其中 harness 改状态的部分单列为 Act。</li>
+  </ul>
+  <p>节点内部仍按三段写，小标题前标了对应的流程：</p>
+  <div class="legend2">
+    <div><b>模型 → 工具调用</b>：模型这一轮返回的推理摘要（只有一行标题）、它写在参数里的 reason / note / summary（英文原文 + 中文），以及完整的工具参数。
+      这次运行中模型<b>从未输出过普通文字</b>，所有表达都在工具参数里。</div>
+    <div><b>harness 做了什么</b>：哪个模块、按什么规则处理了这次调用；set_pose 附上改动后 M4 的测量值。</div>
+    <div><b>工具返回 → 模型</b>：返回给模型的原文（JSON），中文解释在下面；有图的轮次附上模型收到的那张拼接图（左：关键帧照片，右：Isaac 同相机渲染）。</div>
+  </div>
+  <div class="legend">
+    <span><i style="background:#eef4ff;border-color:#3b82f6"></i>set_order</span>
+    <span><i style="background:#ecfbf0;border-color:#22a552"></i>begin / view / check_scene（只读或进场）</span>
+    <span><i style="background:#fefbe8;border-color:#eab308"></i>set_pose 保留</span>
+    <span><i style="background:#fdeeee;border-color:#dc2626"></i>打回 / 批末被拒</span>
+    <span><i style="background:#f4f0fd;border-color:#7c3aed"></i>finish / end_batch 通过</span>
+  </div>
+
+  <h3>开局（第 1 轮之前，Observe）</h3>
+  <div class="chain">
+    <div class="loopband"><div class="lh"><b>对应流程</b>第一次 Observe · 模型还没有开始判断<span>Observe</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">M6 open 写入起点，M5 生成文字卡、带框关键帧、四面图、平面图，M7 拼成第一条用户消息</div></div><div class="ph off"><div class="pn">Reason <i>判断</i></div><div class="pt">还没开始</div></div><div class="ph off"><div class="pn">Act <i>执行</i></div><div class="pt">还没开始</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">还没开始</div></div></div><div class="ln">↳ 进入轮 1 的 Observe</div></div>
+    <div class="node b wide">
+      <div class="k">M6 BatchSession.open + M7 opening</div>
+      <div class="t">系统提示词 + 10 个工具定义 + 一条用户消息（文字 + 10 张图）</div>
+      <div class="d"><ul>
+        <li>harness：52 个物体按 M3 起点写入状态（v0001–v0052），本批 5 个保持 untouched（不渲染、不参与碰撞）；之前没有跑过别的批，场景里只有墙和地板。</li>
+        <li>用户消息：批号、物体、共享帧 45 / 53 / 55 / 58；5 张文字卡；已放物体 "(none yet)"；9 段墙的表；然后是平面图、4 张带框关键帧、5 张四面图（见 03）。最后一句 <code>Start with set_order.</code></li>
+        <li>第 1 轮请求的输入 11,281 token，此后每轮把上一轮的调用和返回（含图）追加进历史，不改写。</li>
+      </ul></div>
+    </div>
+  </div>
+  <h3>开局之后<span class="h">排顺序</span></h3>
+  <div class="chain">
+    <div class="loopband"><div class="lh"><b>对应流程</b>定顺序 · 批会话的第一步<span>Observe → Reason → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">开局消息：文字卡、墙段表、平面图、带框关键帧、四面图（M5 / M7）</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_order</code>（无推理摘要）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 set_order：核对是本批 5 个物体，记下顺序；不动位姿，不写版本</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 2 的 Observe</div></div>
+    <div class="node b wide turn"><div class="k">轮 1 · <code>set_order</code></div><div class="t">定处理顺序</div><div class="meta2">输入 11,281 token · 输出 59 · $0.116 · 12.4 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><div class="bi"><div class="bl">reason</div><div class="en">Place bed before its pillow, bag and helmet; cabinet mounts independently.</div><div class="zh">先放床，再放它上面的靠枕、包和头盔；吊柜单独挂墙，和它们无关。</div></div><pre class="call">set_order({
+  "order": ["obj_0037", "obj_0016", "obj_0062", "obj_0061", "obj_0041"],
+  "reason": "Place bed before its pillow, bag and helmet; cabinet mounts independently."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M6</b> BatchSession.set_order：检查顺序恰好是本批 5 个物体，记下顺序。之后只能改还没处理的部分。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{"ok": true, "order": ["obj_0037", "obj_0016", "obj_0062", "obj_0061", "obj_0041"]}</pre><div class="zh2">顺序已接受。</div></div></div>
+  </div>
+  <h3>床 obj_0037<span class="h">轮 2–5</span></h3>
+  <div class="chain">
+    <div class="loopband"><div class="lh"><b>对应流程</b>开始一个物体 · 为下一次循环取观测<span>Observe → Reason → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 1 返回：顺序已接受</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>begin</code>（无推理摘要）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 start：状态改为 working，物体按起点进场 → v0053；M5 出首个关键帧拼接图</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 3 的 Observe</div></div>
+    <div class="node g wide turn"><div class="k">轮 2 · <code>begin</code></div><div class="t">开始处理 obj_0037</div><div class="meta2">输入 11,390 token · 输出 20 · $0.115 · 11.5 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><pre class="call">begin({"object": "obj_0037"})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M6</b> start：床状态 untouched → working，从这一刻起进入场景（参与渲染和接触检查）。<b>M5</b> after_change：在床的首个关键帧 45 上出拼接图（右边只有床、墙、地板）。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00001_obj_0037_0045.png</div><pre class="ret">{
+  "ok": true,
+  "object": "obj_0037",
+  "pose": {"x": 4.6453, "y": 2.1489, "yaw_deg": -162.9499, "up": "+Z", "scale": [1.0, 1.0, 1.0], "tilt_deg": 0.0, "tilt_toward_deg": 0.0},
+  "support": {"kind": "height", "height": 0.0517},
+  "bottom_z": 0.106,
+  "image": "key frame 45"
+}</pre><div class="zh2">床的当前位姿就是起点：yaw −162.9，缩放 1，支撑类型 height（起点专用：高度取自扫描底面，未声明支撑），底面 0.106。附帧 45 的拼接图。</div><img src="assets/assembly-batch3/t01.jpg" alt="turn 2" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 2 返回：起点位姿 + 帧 45 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Shrinking the bed）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：落到地板 → v0054</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，没有变差的项；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 4 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 3 · <code>set_pose</code></div><div class="t">改 obj_0037 的位姿 → keep</div><div class="meta2">输入 12,385 token · 输出 198 · $0.134 · 17.8 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Shrinking the bed</div><div class="zh">缩小床</div></div><div class="bi"><div class="bl">reason</div><div class="en">Reduce oversized footprint to match bed edges and place base on floor.</div><div class="zh">缩小过大的占地，让床沿和照片对齐，底面放到地上。</div></div><pre class="call">set_pose({
+  "object": "obj_0037",
+  "x": 4.6453,
+  "y": 2.1489,
+  "yaw_deg": -163,
+  "up": "+Z",
+  "scale": [0.65, 0.76, 1],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"kind": "floor"},
+  "reason": "Reduce oversized footprint to match bed edges and place base on floor."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b> Resolver：support floor → 底面落到地板顶面 0.054；没有别的物体在它上面，不带动。<b>M5</b> 出拼接图。<b>M4</b> review：改动前后各测一次，逐项比较 → 没有变差的硬性项 → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>无</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0001</span><span class="mt"><i>支撑面积比</i>0.947</span><span class="mt"><i>贴墙间隙</i>—</span><span class="mt"><i>点云 覆盖/溢出</i>0.717 / 0.697</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00002_obj_0037_0045.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [],
+  "moved": [{"object": "obj_0037", "because": "this change", "bottom_z": 0.054}],
+  "now": {"pose": {"x": 4.6453, "y": 2.1489, "yaw_deg": -163, "up": "+Z", "scale": [0.65, 0.76, 1.0], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "floor"}, "bottom_z": 0.054, "status": "working"}
+}</pre><div class="zh2">保留。没有问题。床的底面落到 0.054；当前支撑 floor，状态 working。</div><img src="assets/assembly-batch3/t02.jpg" alt="turn 3" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>只补一次观测<span>Observe → Reason → Observe</span></div><div class="lg n5"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 3 返回：keep、无报告 + 帧 45 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>view</code>（无推理摘要）</div></div><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">M6 check_view 放行，M5 + M1 出帧 55 拼接图；状态不变</div></div><div class="ph off"><div class="pn">Act <i>执行</i></div><div class="pt">这一轮没有</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 5 的 Observe</div></div>
+    <div class="node g wide turn"><div class="k">轮 4 · <code>view</code></div><div class="t">换帧 55 看 obj_0037</div><div class="meta2">输入 13,569 token · 输出 24 · $0.039 · 12.5 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><pre class="call">view({"frame": 55, "object": "obj_0037"})</pre></div><div class="sec h"><div class="sh"><em class="observe">Observe</em>harness 做了什么</div><div class="hd"><b>M6</b> check_view：55 是本批共享帧，允许。<b>M5</b> 在帧 55 上出床的拼接图。不改状态。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00003_obj_0037_0055.png</div><pre class="ret">{"ok": true, "object": "obj_0037", "frame": 55}</pre><div class="zh2">附帧 55 的拼接图。</div><img src="assets/assembly-batch3/t03.jpg" alt="turn 4" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>收尾一个物体 · 先 Verify 后 Act<span>Observe → Reason → Verify → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 4 返回：帧 55 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>finish</code>（推理摘要：Checking head edge alignment）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：5 s 重力，没倒、没掉</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 finish：状态改为 done → v0055</div></div></div><div class="ln">↳ 返回值进入轮 6 的 Observe</div></div>
+    <div class="node p wide turn"><div class="k">轮 5 · <code>finish</code></div><div class="t">完成 obj_0037</div><div class="meta2">输入 14,460 token · 输出 60 · $0.148 · 19.3 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Checking head edge alignment</div><div class="zh">检查床头边是否对齐</div></div><div class="bi"><div class="bl">note</div><div class="en">Bed footprint aligned with photographed sides; floor support checked.</div><div class="zh">床的占地已和照片里的床边对齐；地面支撑已检查。</div></div><pre class="call">finish({
+  "note": "Bed footprint aligned with photographed sides; floor support checked.",
+  "object": "obj_0037"
+})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M4</b> review_physics：床可动，5 s 重力（Isaac settle）。没倒、没掉 → <b>M6</b> finish：状态 → done。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{
+  "ok": true,
+  "physics": [{"object": "obj_0037", "dz": -0.005, "dxy": 0.0, "tilt_deg": 0.07, "settled": true, "level": "ok", "note": ""}],
+  "fixed": [],
+  "remaining": ["obj_0016", "obj_0062", "obj_0061", "obj_0041"]
+}</pre><div class="zh2">完成。物理：下沉 0.005 m，水平 0，倾斜 0.07°，已静止，正常。剩下 4 个物体。</div></div></div>
+  </div>
+  <h3>靠枕 obj_0016<span class="h">轮 6–9</span></h3>
+  <div class="chain">
+    <div class="loopband"><div class="lh"><b>对应流程</b>开始一个物体 · 为下一次循环取观测<span>Observe → Reason → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 5 返回：物理结果、剩 4 个，无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>begin</code>（无推理摘要）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 start：状态改为 working，物体按起点进场 → v0056；M5 出首个关键帧拼接图</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 7 的 Observe</div></div>
+    <div class="node g wide turn"><div class="k">轮 6 · <code>begin</code></div><div class="t">开始处理 obj_0016</div><div class="meta2">输入 14,623 token · 输出 20 · $0.147 · 18.1 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><pre class="call">begin({"object": "obj_0016"})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M6</b> start：靠枕进场。<b>M5</b> 首个关键帧 55 的拼接图，右边是已完成的床 + 靠枕。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00004_obj_0016_0055.png</div><pre class="ret">{
+  "ok": true,
+  "object": "obj_0016",
+  "pose": {"x": 4.8708, "y": 1.3005, "yaw_deg": 13.5058, "up": "-Y", "scale": [1.0, 1.0, 1.0], "tilt_deg": 0.0, "tilt_toward_deg": 0.0},
+  "support": {"kind": "height", "height": 0.7673},
+  "bottom_z": 0.821,
+  "image": "key frame 55"
+}</pre><div class="zh2">靠枕的起点：朝上轴 −Y（资产躺着生成），yaw 13.5，底面 0.821，未声明支撑。附帧 55 的拼接图。</div><img src="assets/assembly-batch3/t04.jpg" alt="turn 6" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 6 返回：起点位姿 + 帧 55 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Tuning upright scale）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：落到 obj_0037 上 → v0057</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，没有变差的项；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 8 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 7 · <code>set_pose</code></div><div class="t">改 obj_0016 的位姿 → keep</div><div class="meta2">输入 15,618 token · 输出 178 · $0.034 · 20.4 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Tuning upright scale</div><div class="zh">调整立起来之后的缩放</div></div><div class="bi"><div class="bl">reason</div><div class="en">Match smaller backrest silhouette and rest it on the mattress.</div><div class="zh">按照片里较小的靠背轮廓缩放，放在床垫上。</div></div><pre class="call">set_pose({
+  "object": "obj_0016",
+  "x": 4.8708,
+  "y": 1.3005,
+  "yaw_deg": 13.5,
+  "up": "-Y",
+  "scale": [0.9, 1, 0.72],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"kind": "object", "on": "obj_0037"},
+  "reason": "Match smaller backrest silhouette and rest it on the mattress."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b> Resolver：support object on obj_0037，不给 surface_z → 从靠枕当前底面上方 0.05 m 往下 0.30 m，在床的视觉网格上找朝上的面 → 落到 0.825。<b>M4</b>：新出现的接触对 (obj_0016, obj_0037) 是声明的支撑，不算穿插 → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0002</span><span class="mt"><i>支撑面积比</i>0.703</span><span class="mt"><i>贴墙间隙</i>—</span><span class="mt"><i>点云 覆盖/溢出</i>0.509 / 0.655</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00005_obj_0016_0055.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [],
+  "moved": [{"object": "obj_0016", "because": "this change", "bottom_z": 0.8254}],
+  "now": {"pose": {"x": 4.8708, "y": 1.3005, "yaw_deg": 13.5, "up": "-Y", "scale": [0.9, 1.0, 0.72], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "object", "on": "obj_0037"}, "bottom_z": 0.825, "status": "working"}
+}</pre><div class="zh2">保留，没有问题。落到 0.8254。</div><img src="assets/assembly-batch3/t05.jpg" alt="turn 7" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 7 返回：keep、无报告 + 帧 55 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Lowering the camera view）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：落到 obj_0037 上 → v0058</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，报告 cloud（软项，不撤回）；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 9 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 8 · <code>set_pose</code></div><div class="t">改 obj_0016 的位姿 → keep</div><div class="meta2">输入 16,794 token · 输出 143 · $0.063 · 23.3 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Lowering the camera view</div><div class="zh">（摘要标题原文如此，与这一步的动作不对应）</div></div><div class="bi"><div class="bl">reason</div><div class="en">Shift backrest slightly forward and left to match the photo.</div><div class="zh">把靠背往前、往左挪一点，对齐照片。</div></div><pre class="call">set_pose({
+  "object": "obj_0016",
+  "x": 4.79,
+  "y": 1.42,
+  "yaw_deg": 13.5,
+  "up": "-Y",
+  "scale": [0.9, 1, 0.68],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"kind": "object", "on": "obj_0037"},
+  "reason": "Shift backrest slightly forward and left to match the photo."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b> 重新落 z → 0.817。<b>M4</b>：点云覆盖 0.509 → 0.297、溢出 0.655 → 0.806，超过 0.05 → 报告（软项，不撤回）→ keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0048</span><span class="mt"><i>支撑面积比</i>0.898</span><span class="mt"><i>贴墙间隙</i>—</span><span class="mt"><i>点云 覆盖/溢出</i>0.297 / 0.806</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00006_obj_0016_0055.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [{"check": "cloud", "level": "report", "value": {"cover": 0.297, "spill": 0.806}, "before": {"cover": 0.509, "spill": 0.655}, "note": "fits the scan worse than before"}],
+  "moved": [{"object": "obj_0016", "because": "this change", "bottom_z": 0.817}],
+  "now": {"pose": {"x": 4.79, "y": 1.42, "yaw_deg": 13.5, "up": "-Y", "scale": [0.9, 1.0, 0.68], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "object", "on": "obj_0037"}, "bottom_z": 0.817, "status": "working"}
+}</pre><div class="zh2">保留。报告一项：和扫描的吻合变差（覆盖 0.509 → 0.297，溢出 0.655 → 0.806）。落到 0.817。</div><img src="assets/assembly-batch3/t06.jpg" alt="turn 8" loading="lazy"></div><div class="remark ok">点云变差，但留出帧 IoU 从起点 0.509 升到最终 0.627。点云单独不能当判据。</div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>收尾一个物体 · 先 Verify 后 Act<span>Observe → Reason → Verify → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 8 返回：keep、1 条报告 + 帧 55 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>finish</code>（无推理摘要）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：5 s 重力，没倒、没掉</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 finish：状态改为 done → v0059</div></div></div><div class="ln">↳ 返回值进入轮 10 的 Observe</div></div>
+    <div class="node p wide turn"><div class="k">轮 9 · <code>finish</code></div><div class="t">完成 obj_0016</div><div class="meta2">输入 17,993 token · 输出 35 · $0.082 · 17.1 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><div class="bi"><div class="bl">note</div><div class="en">Upright backrest matched to photo and supported on bed.</div><div class="zh">立着的靠背已对齐照片，支撑在床上。</div></div><pre class="call">finish({"note": "Upright backrest matched to photo and supported on bed.", "object": "obj_0016"})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M4</b> 5 s 物理：靠枕可动，床临时固定。没倒、没掉 → done。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{
+  "ok": true,
+  "physics": [{"object": "obj_0016", "dz": -0.0024, "dxy": 0.0121, "tilt_deg": 2.63, "settled": true, "level": "ok", "note": ""}],
+  "fixed": [],
+  "remaining": ["obj_0062", "obj_0061", "obj_0041"]
+}</pre><div class="zh2">完成。物理：下沉 0.002 m，水平 0.012 m，倾斜 2.63°，静止。剩 3 个。</div></div></div>
+  </div>
+  <h3>包 obj_0062<span class="h">轮 10–16</span></h3>
+  <div class="chain">
+    <div class="loopband"><div class="lh"><b>对应流程</b>开始一个物体 · 为下一次循环取观测<span>Observe → Reason → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 9 返回：物理结果、剩 3 个，无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>begin</code>（无推理摘要）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 start：状态改为 working，物体按起点进场 → v0060；M5 出首个关键帧拼接图</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 11 的 Observe</div></div>
+    <div class="node g wide turn"><div class="k">轮 10 · <code>begin</code></div><div class="t">开始处理 obj_0062</div><div class="meta2">输入 18,127 token · 输出 20 · $0.182 · 15.4 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><pre class="call">begin({"object": "obj_0062"})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M6</b> start：包进场。<b>M5</b> 首个关键帧 53 的拼接图。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00007_obj_0062_0053.png</div><pre class="ret">{
+  "ok": true,
+  "object": "obj_0062",
+  "pose": {"x": 4.311, "y": 2.2247, "yaw_deg": 18.3481, "up": "+Z", "scale": [1.0, 1.0, 1.0], "tilt_deg": 0.0, "tilt_toward_deg": 0.0},
+  "support": {"kind": "height", "height": 0.7377},
+  "bottom_z": 0.792,
+  "image": "key frame 53"
+}</pre><div class="zh2">包的起点：yaw 18.3，底面 0.792。附帧 53 的拼接图。</div><img src="assets/assembly-batch3/t07.jpg" alt="turn 10" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 10 返回：起点位姿 + 帧 53 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Considering bag rotation）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：落到 obj_0037 上 → v0061</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，没有变差的项；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 12 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 11 · <code>set_pose</code></div><div class="t">改 obj_0062 的位姿 → keep</div><div class="meta2">输入 19,121 token · 输出 158 · $0.047 · 21.4 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Considering bag rotation</div><div class="zh">考虑包的转向</div></div><div class="bi"><div class="bl">reason</div><div class="en">Lay bag across bed, with its long side matching photo, supported by mattress.</div><div class="zh">把包横放在床上，长边方向和照片一致，支撑在床垫上。</div></div><pre class="call">set_pose({
+  "object": "obj_0062",
+  "x": 4.311,
+  "y": 2.2247,
+  "yaw_deg": 108,
+  "up": "+Z",
+  "scale": [1, 1, 1],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"kind": "object", "on": "obj_0037"},
+  "reason": "Lay bag across bed, with its long side matching photo, supported by mattress."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b> 落到床面 0.793。<b>M4</b>：(obj_0037, obj_0062) 是声明的支撑 → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037、obj_0037×obj_0062</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0015</span><span class="mt"><i>支撑面积比</i>0.853</span><span class="mt"><i>贴墙间隙</i>—</span><span class="mt"><i>点云 覆盖/溢出</i>0.695 / 0.508</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00008_obj_0062_0053.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [],
+  "moved": [{"object": "obj_0062", "because": "this change", "bottom_z": 0.7934}],
+  "now": {"pose": {"x": 4.311, "y": 2.2247, "yaw_deg": 108, "up": "+Z", "scale": [1.0, 1.0, 1.0], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "object", "on": "obj_0037"}, "bottom_z": 0.793, "status": "working"}
+}</pre><div class="zh2">保留，没有问题。落到 0.7934。</div><img src="assets/assembly-batch3/t08.jpg" alt="turn 11" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>只补一次观测<span>Observe → Reason → Observe</span></div><div class="lg n5"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 11 返回：keep、无报告 + 帧 53 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>view</code>（无推理摘要）</div></div><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">M6 check_view 放行，M5 + M1 出帧 58 拼接图；状态不变</div></div><div class="ph off"><div class="pn">Act <i>执行</i></div><div class="pt">这一轮没有</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 13 的 Observe</div></div>
+    <div class="node g wide turn"><div class="k">轮 12 · <code>view</code></div><div class="t">换帧 58 看 obj_0062</div><div class="meta2">输入 20,274 token · 输出 24 · $0.204 · 18.2 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><pre class="call">view({"frame": 58, "object": "obj_0062"})</pre></div><div class="sec h"><div class="sh"><em class="observe">Observe</em>harness 做了什么</div><div class="hd"><b>M5</b> 帧 58 上出包的拼接图，不改状态。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00009_obj_0062_0058.png</div><pre class="ret">{"ok": true, "object": "obj_0062", "frame": 58}</pre><div class="zh2">附帧 58 的拼接图。</div><img src="assets/assembly-batch3/t09.jpg" alt="turn 12" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 12 返回：帧 58 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Adjusting bag render）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：落到 obj_0037 上 → v0062</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，报告 cloud（软项，不撤回）；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 14 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 13 · <code>set_pose</code></div><div class="t">改 obj_0062 的位姿 → keep</div><div class="meta2">输入 21,165 token · 输出 268 · $0.083 · 27.8 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Adjusting bag render</div><div class="zh">调整包的渲染</div></div><div class="bi"><div class="bl">reason</div><div class="en">Refine bag size and placement against second view.</div><div class="zh">对照第二个视角微调包的大小和位置。</div></div><pre class="call">set_pose({
+  "object": "obj_0062",
+  "x": 4.39,
+  "y": 2.17,
+  "yaw_deg": 108,
+  "up": "+Z",
+  "scale": [0.92, 0.92, 0.9],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"kind": "object", "on": "obj_0037"},
+  "reason": "Refine bag size and placement against second view."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b> 落 z 0.796。<b>M4</b>：点云覆盖 0.695 → 0.594，报告 → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037、obj_0037×obj_0062</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0008</span><span class="mt"><i>支撑面积比</i>0.812</span><span class="mt"><i>贴墙间隙</i>—</span><span class="mt"><i>点云 覆盖/溢出</i>0.594 / 0.593</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00010_obj_0062_0053.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [{"check": "cloud", "level": "report", "value": {"cover": 0.594, "spill": 0.593}, "before": {"cover": 0.695, "spill": 0.508}, "note": "fits the scan worse than before"}],
+  "moved": [{"object": "obj_0062", "because": "this change", "bottom_z": 0.7964}],
+  "now": {"pose": {"x": 4.39, "y": 2.17, "yaw_deg": 108, "up": "+Z", "scale": [0.92, 0.92, 0.9], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "object", "on": "obj_0037"}, "bottom_z": 0.796, "status": "working"}
+}</pre><div class="zh2">保留。报告：吻合变差（覆盖 0.695 → 0.594，溢出 0.508 → 0.593）。落到 0.7964。</div><img src="assets/assembly-batch3/t10.jpg" alt="turn 13" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 13 返回：keep、1 条报告 + 帧 53 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Readjusting camera position）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：落到 obj_0037 上 → v0063</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，没有变差的项；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 15 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 14 · <code>set_pose</code></div><div class="t">改 obj_0062 的位姿 → keep</div><div class="meta2">输入 22,488 token · 输出 150 · $0.132 · 24.9 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Readjusting camera position</div><div class="zh">（摘要标题原文如此，与这一步的动作不对应）</div></div><div class="bi"><div class="bl">reason</div><div class="en">Center bag on photographed mattress location.</div><div class="zh">把包移到照片里床垫上对应的位置。</div></div><pre class="call">set_pose({
+  "object": "obj_0062",
+  "x": 4.21,
+  "y": 2.14,
+  "yaw_deg": 108,
+  "up": "+Z",
+  "scale": [0.92, 1, 0.9],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"kind": "object", "on": "obj_0037"},
+  "reason": "Center bag on photographed mattress location."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b> 落 z 0.784。<b>M4</b>：没有变差的项 → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037、obj_0037×obj_0062</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0001</span><span class="mt"><i>支撑面积比</i>0.83</span><span class="mt"><i>贴墙间隙</i>—</span><span class="mt"><i>点云 覆盖/溢出</i>0.589 / 0.622</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00011_obj_0062_0053.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [],
+  "moved": [{"object": "obj_0062", "because": "this change", "bottom_z": 0.7844}],
+  "now": {"pose": {"x": 4.21, "y": 2.14, "yaw_deg": 108, "up": "+Z", "scale": [0.92, 1.0, 0.9], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "object", "on": "obj_0037"}, "bottom_z": 0.784, "status": "working"}
+}</pre><div class="zh2">保留，没有问题。落到 0.7844。</div><img src="assets/assembly-batch3/t11.jpg" alt="turn 14" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 14 返回：keep、无报告 + 帧 53 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Fixing midpoint placement）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：落到 obj_0037 上 → v0064</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，没有变差的项；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 16 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 15 · <code>set_pose</code></div><div class="t">改 obj_0062 的位姿 → keep</div><div class="meta2">输入 23,632 token · 输出 130 · $0.243 · 23.5 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Fixing midpoint placement</div><div class="zh">修正中心位置</div></div><div class="bi"><div class="bl">reason</div><div class="en">Final bag alignment.</div><div class="zh">最后一次对齐包。</div></div><pre class="call">set_pose({
+  "object": "obj_0062",
+  "x": 4.27,
+  "y": 2.12,
+  "yaw_deg": 108,
+  "up": "+Z",
+  "scale": [0.92, 1, 0.9],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"kind": "object", "on": "obj_0037"},
+  "reason": "Final bag alignment."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b> 落 z 0.788。<b>M4</b> → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037、obj_0037×obj_0062</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0001</span><span class="mt"><i>支撑面积比</i>0.856</span><span class="mt"><i>贴墙间隙</i>—</span><span class="mt"><i>点云 覆盖/溢出</i>0.716 / 0.426</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00012_obj_0062_0053.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [],
+  "moved": [{"object": "obj_0062", "because": "this change", "bottom_z": 0.7879}],
+  "now": {"pose": {"x": 4.27, "y": 2.12, "yaw_deg": 108, "up": "+Z", "scale": [0.92, 1.0, 0.9], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "object", "on": "obj_0037"}, "bottom_z": 0.788, "status": "working"}
+}</pre><div class="zh2">保留，没有问题。落到 0.7879。</div><img src="assets/assembly-batch3/t12.jpg" alt="turn 15" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>收尾一个物体 · 先 Verify 后 Act<span>Observe → Reason → Verify → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 15 返回：keep、无报告 + 帧 53 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>finish</code>（无推理摘要）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：5 s 重力，没倒、没掉</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 finish：状态改为 done → v0065</div></div></div><div class="ln">↳ 返回值进入轮 17 的 Observe</div></div>
+    <div class="node p wide turn"><div class="k">轮 16 · <code>finish</code></div><div class="t">完成 obj_0062</div><div class="meta2">输入 24,756 token · 输出 33 · $0.151 · 22.0 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><div class="bi"><div class="bl">note</div><div class="en">Bag rests across mattress; asset approximates photographed bag.</div><div class="zh">包横放在床垫上；资产和照片里的包大致相符。</div></div><pre class="call">finish({"note": "Bag rests across mattress; asset approximates photographed bag.", "object": "obj_0062"})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M4</b> 5 s 物理：包可动。没倒、没掉 → done。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{
+  "ok": true,
+  "physics": [{"object": "obj_0062", "dz": -0.0124, "dxy": 0.0016, "tilt_deg": 5.34, "settled": true, "level": "ok", "note": ""}],
+  "fixed": [],
+  "remaining": ["obj_0061", "obj_0041"]
+}</pre><div class="zh2">完成。物理：下沉 0.012 m，倾斜 5.34°，静止。剩 2 个。</div></div></div>
+  </div>
+  <h3>头盔 obj_0061<span class="h">轮 17–20</span></h3>
+  <div class="chain">
+    <div class="loopband"><div class="lh"><b>对应流程</b>开始一个物体 · 为下一次循环取观测<span>Observe → Reason → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 16 返回：物理结果、剩 2 个，无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>begin</code>（无推理摘要）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 start：状态改为 working，物体按起点进场 → v0066；M5 出首个关键帧拼接图</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 18 的 Observe</div></div>
+    <div class="node g wide turn"><div class="k">轮 17 · <code>begin</code></div><div class="t">开始处理 obj_0061</div><div class="meta2">输入 24,882 token · 输出 20 · $0.059 · 20.3 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><pre class="call">begin({"object": "obj_0061"})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M6</b> start：头盔进场。<b>M5</b> 首个关键帧 53 的拼接图。文字卡里它标着 "orientation NOT confirmed"（M3 把 SAM3D 的 −Z 翻成了 +Z）。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00013_obj_0061_0053.png</div><pre class="ret">{
+  "ok": true,
+  "object": "obj_0061",
+  "pose": {"x": 3.99, "y": 2.5905, "yaw_deg": 60.6597, "up": "+Z", "scale": [1.0, 1.0, 1.0], "tilt_deg": 0.0, "tilt_toward_deg": 0.0},
+  "support": {"kind": "height", "height": 0.7718},
+  "bottom_z": 0.826,
+  "image": "key frame 53"
+}</pre><div class="zh2">头盔的起点：yaw 60.7，底面 0.826，未声明支撑。附帧 53 的拼接图。</div><img src="assets/assembly-batch3/t13.jpg" alt="turn 17" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 17 返回：起点位姿 + 帧 53 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Rotating camera to shell）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：落到 obj_0037 上 → v0067</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，报告 cloud（软项，不撤回）；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 19 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 18 · <code>set_pose</code></div><div class="t">改 obj_0061 的位姿 → keep</div><div class="meta2">输入 25,876 token · 输出 138 · $0.046 · 30.9 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Rotating camera to shell</div><div class="zh">把壳的一面转向相机</div></div><div class="bi"><div class="bl">reason</div><div class="en">Keep helmet opening upward, turn vented shell toward camera, and rest on bed.</div><div class="zh">头盔开口保持朝上，把带通风孔的外壳转向相机，放在床上。</div></div><pre class="call">set_pose({
+  "object": "obj_0061",
+  "x": 3.99,
+  "y": 2.5905,
+  "yaw_deg": 241,
+  "up": "+Z",
+  "scale": [1, 1, 1],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"kind": "object", "on": "obj_0037"},
+  "reason": "Keep helmet opening upward, turn vented shell toward camera, and rest on bed."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b> 位置不变，yaw 转 180°，落到床的视觉网格 0.7715（扫描底面 0.826）。<b>M4</b>：点云覆盖 0.956 → 0.593，报告 → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037、obj_0037×obj_0062</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0004</span><span class="mt"><i>支撑面积比</i>0.78</span><span class="mt"><i>贴墙间隙</i>—</span><span class="mt"><i>点云 覆盖/溢出</i>0.593 / 0.106</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00014_obj_0061_0053.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [{"check": "cloud", "level": "report", "value": {"cover": 0.593, "spill": 0.106}, "before": {"cover": 0.956, "spill": 0.003}, "note": "fits the scan worse than before"}],
+  "moved": [{"object": "obj_0061", "because": "this change", "bottom_z": 0.7715}],
+  "now": {"pose": {"x": 3.99, "y": 2.5905, "yaw_deg": 241, "up": "+Z", "scale": [1.0, 1.0, 1.0], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "object", "on": "obj_0037"}, "bottom_z": 0.771, "status": "working"}
+}</pre><div class="zh2">保留。报告：吻合变差（覆盖 0.956 → 0.593，溢出 0.003 → 0.106）。落到 0.7715。</div><img src="assets/assembly-batch3/t14.jpg" alt="turn 18" loading="lazy"></div><div class="remark ok">转向是对的：只转 180°、其余不动，留出帧 IoU 0.452 → 0.647（见 08）。但落到床资产表面，比扫描底面低 5.5 cm。</div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 18 返回：keep、1 条报告 + 帧 53 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Shifting helmet upward）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：落到 obj_0037 上 → v0068</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，报告 cloud（软项，不撤回）；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 20 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 19 · <code>set_pose</code></div><div class="t">改 obj_0061 的位姿 → keep</div><div class="meta2">输入 27,070 token · 输出 152 · $0.159 · 27.8 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Shifting helmet upward</div><div class="zh">把头盔往上（床头方向）挪</div></div><div class="bi"><div class="bl">reason</div><div class="en">Move helmet slightly toward head of bed to align with photo.</div><div class="zh">把头盔往床头方向挪一点，对齐照片。</div></div><pre class="call">set_pose({
+  "object": "obj_0061",
+  "x": 4.1,
+  "y": 2.48,
+  "yaw_deg": 241,
+  "up": "+Z",
+  "scale": [1, 1, 1],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"kind": "object", "on": "obj_0037"},
+  "reason": "Move helmet slightly toward head of bed to align with photo."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b> 落 z 0.774。<b>M4</b>：点云覆盖 0.593 → 0.425、溢出 0.106 → 0.489，报告 → keep。点云是软项，按设计不撤回。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037、obj_0037×obj_0062</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0</span><span class="mt"><i>支撑面积比</i>0.879</span><span class="mt"><i>贴墙间隙</i>—</span><span class="mt"><i>点云 覆盖/溢出</i>0.425 / 0.489</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00015_obj_0061_0053.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [{"check": "cloud", "level": "report", "value": {"cover": 0.425, "spill": 0.489}, "before": {"cover": 0.593, "spill": 0.106}, "note": "fits the scan worse than before"}],
+  "moved": [{"object": "obj_0061", "because": "this change", "bottom_z": 0.774}],
+  "now": {"pose": {"x": 4.1, "y": 2.48, "yaw_deg": 241, "up": "+Z", "scale": [1.0, 1.0, 1.0], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "object", "on": "obj_0037"}, "bottom_z": 0.774, "status": "working"}
+}</pre><div class="zh2">保留。报告：吻合变差（覆盖 0.593 → 0.425，溢出 0.106 → 0.489）。落到 0.774。</div><img src="assets/assembly-batch3/t15.jpg" alt="turn 19" loading="lazy"></div><div class="remark bad">这一步把头盔挪离扫描中心 0.156 m（资产只有 0.12 m 高、0.30 m 长），IoU 的收益全部丢掉。点云第二次报变差，但只是报告项。</div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>收尾一个物体 · 先 Verify 后 Act<span>Observe → Reason → Verify → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 19 返回：keep、1 条报告 + 帧 53 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>finish</code>（无推理摘要）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：5 s 重力，没倒、没掉</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 finish：状态改为 done → v0069</div></div></div><div class="ln">↳ 返回值进入轮 21 的 Observe</div></div>
+    <div class="node p wide turn"><div class="k">轮 20 · <code>finish</code></div><div class="t">完成 obj_0061</div><div class="meta2">输入 28,276 token · 输出 35 · $0.112 · 23.3 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><div class="bi"><div class="bl">note</div><div class="en">Helmet opening faces upward and shell faces camera; supported by mattress.</div><div class="zh">头盔开口朝上，外壳朝相机；支撑在床垫上。</div></div><pre class="call">finish({
+  "note": "Helmet opening faces upward and shell faces camera; supported by mattress.",
+  "object": "obj_0061"
+})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M4</b> 5 s 物理：头盔下沉 0.024 m，没倒、没掉 → done。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{
+  "ok": true,
+  "physics": [{"object": "obj_0061", "dz": -0.0237, "dxy": 0.0001, "tilt_deg": 2.19, "settled": true, "level": "ok", "note": ""}],
+  "fixed": [],
+  "remaining": ["obj_0041"]
+}</pre><div class="zh2">完成。物理：下沉 0.024 m，倾斜 2.19°，静止。剩 1 个。</div></div></div>
+  </div>
+  <h3>吊柜 obj_0041<span class="h">轮 21–25</span></h3>
+  <div class="chain">
+    <div class="loopband"><div class="lh"><b>对应流程</b>开始一个物体 · 为下一次循环取观测<span>Observe → Reason → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 20 返回：物理结果、剩 1 个，无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>begin</code>（无推理摘要）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 start：状态改为 working，物体按起点进场 → v0070；M5 出首个关键帧拼接图</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 22 的 Observe</div></div>
+    <div class="node g wide turn"><div class="k">轮 21 · <code>begin</code></div><div class="t">开始处理 obj_0041</div><div class="meta2">输入 28,398 token · 输出 20 · $0.042 · 24.1 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><pre class="call">begin({"object": "obj_0041"})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M6</b> start：吊柜进场。<b>M5</b> 首个关键帧 58 的拼接图。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00016_obj_0041_0058.png</div><pre class="ret">{
+  "ok": true,
+  "object": "obj_0041",
+  "pose": {"x": 6.005, "y": 1.7, "yaw_deg": -66.9815, "up": "+Z", "scale": [1.0, 1.0, 1.0], "tilt_deg": 0.0, "tilt_toward_deg": 0.0},
+  "support": {"kind": "height", "height": 1.436},
+  "bottom_z": 1.49,
+  "image": "key frame 58"
+}</pre><div class="zh2">吊柜的起点：yaw −67.0，底面 1.49，未声明支撑。附帧 58 的拼接图。</div><img src="assets/assembly-batch3/t16.jpg" alt="turn 21" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>循环停在 Act：打回<span>Observe → Reason → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 21 返回：起点位姿 + 帧 58 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Checking the nearest wall）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2 push_to_walls：两面墙分不清，Rejected；状态不变，不写版本</div></div><div class="ph off"><div class="pn">Verify <i>检查</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 23 的 Observe</div></div>
+    <div class="node r wide turn"><div class="k">轮 22 · <code>set_pose</code></div><div class="t">改 obj_0041 的位姿 → 打回</div><div class="meta2">输入 29,390 token · 输出 216 · $0.102 · 27.4 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Checking the nearest wall</div><div class="zh">查看最近的墙</div></div><div class="bi"><div class="bl">reason</div><div class="en">Mount upper cabinet flush to nearest wall at photographed height.</div><div class="zh">把吊柜按照片里的高度贴到最近的墙上。</div></div><pre class="call">set_pose({
+  "object": "obj_0041",
+  "x": 6.005,
+  "y": 1.7,
+  "yaw_deg": -72,
+  "up": "+Z",
+  "scale": [1, 1, 1],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"against": ["auto"], "height": 1.46, "kind": "wall"},
+  "reason": "Mount upper cabinet flush to nearest wall at photographed height."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M2</b> Resolver.push_to_walls：auto → 找最近的墙面。int_2 0.02 m、ext_S_1 0.17 m，第二近只比最近的远 0.15 m → 判为墙角，<b>打回</b>（Rejected），状态不变，不出图、不检查。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{
+  "ok": false,
+  "rejected": "obj_0041 is near two walls (int_2 0.02 m, ext_S_1 0.17 m); name the wall(s) it is against in `against`"
+}</pre><div class="zh2">打回：obj_0041 靠近两面墙（int_2 0.02 m、ext_S_1 0.17 m）；请在 against 里写明贴哪面（哪两面）墙。</div></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 22 返回：打回原因，无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Checking cabinet mounting）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：按离地高度挂墙、贴 int_2 → v0071</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，没有变差的项；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 24 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 23 · <code>set_pose</code></div><div class="t">改 obj_0041 的位姿 → keep</div><div class="meta2">输入 29,668 token · 输出 157 · $0.304 · 30.1 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Checking cabinet mounting</div><div class="zh">检查吊柜的安装</div></div><div class="bi"><div class="bl">reason</div><div class="en">Mount cabinet on side partition with doors facing bed.</div><div class="zh">把吊柜挂在侧面的隔墙上，柜门朝床。</div></div><pre class="call">set_pose({
+  "object": "obj_0041",
+  "x": 6.005,
+  "y": 1.7,
+  "yaw_deg": -72,
+  "up": "+Z",
+  "scale": [1, 1, 1],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"against": ["int_2"], "height": 1.46, "kind": "wall"},
+  "reason": "Mount cabinet on side partition with doors facing bed."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b>：沿 int_2 法向推 0.024 m 贴住，沿墙位置不动；底面 = 地板 + 1.46 = 1.514。<b>M4</b>：穿墙 0.164、出房间 0.168，和起点 0.169 / 0.176 相比<b>没有变差</b> → 不报告 → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037、obj_0037×obj_0062</span><span class="mt"><i>穿墙</i>0.1639</span><span class="mt"><i>出房间</i>0.168</span><span class="mt"><i>支撑间隙</i>0.0</span><span class="mt"><i>支撑面积比</i>1.0</span><span class="mt"><i>贴墙间隙</i>0.0</span><span class="mt"><i>点云 覆盖/溢出</i>0.837 / 0.712</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00017_obj_0041_0058.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [],
+  "moved": [{"object": "obj_0041", "because": "this change", "bottom_z": 1.514, "walls": [{"wall": "int_2", "face": "front", "push_m": 0.0241}]}],
+  "now": {"pose": {"x": 6.0278, "y": 1.7079, "yaw_deg": -72, "up": "+Z", "scale": [1.0, 1.0, 1.0], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "wall", "height": 1.46, "against": ["int_2"]}, "bottom_z": 1.514, "status": "working"}
+}</pre><div class="zh2">保留，没有问题。底面 1.514；贴到 int_2 正面，推了 0.024 m；位置变为 (6.0278, 1.7079)。</div><img src="assets/assembly-batch3/t17.jpg" alt="turn 23" loading="lazy"></div><div class="remark bad">这时吊柜仍嵌在 ext_S_1 里 0.164 m。提示词写的是 "a problem that was already there and did not get worse is reported but kept"，但返回的 issues 是空的：代码只返回变差的项（见 05、09）。</div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 23 返回：keep、无报告 + 帧 58 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Adjusting photo support）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：按离地高度挂墙、贴 int_2 → v0072</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，报告 cloud（软项，不撤回）；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 25 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 24 · <code>set_pose</code></div><div class="t">改 obj_0041 的位姿 → keep</div><div class="meta2">输入 30,857 token · 输出 152 · $0.215 · 26.1 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Adjusting photo support</div><div class="zh">按照片调整支撑</div></div><div class="bi"><div class="bl">reason</div><div class="en">Lower cabinet slightly and match crown height to photo.</div><div class="zh">把吊柜降低一点，让顶部线脚的高度和照片一致。</div></div><pre class="call">set_pose({
+  "object": "obj_0041",
+  "x": 6.0278,
+  "y": 1.7079,
+  "yaw_deg": -72,
+  "up": "+Z",
+  "scale": [1, 1, 0.95],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"against": ["int_2"], "height": 1.4, "kind": "wall"},
+  "reason": "Lower cabinet slightly and match crown height to photo."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b>：仍贴 int_2（推 0），底面 1.454。<b>M4</b>：穿墙、出房间仍是 0.164 / 0.168，没变差不报；点云报告 → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037、obj_0037×obj_0062</span><span class="mt"><i>穿墙</i>0.1639</span><span class="mt"><i>出房间</i>0.168</span><span class="mt"><i>支撑间隙</i>0.0</span><span class="mt"><i>支撑面积比</i>1.0</span><span class="mt"><i>贴墙间隙</i>0.0</span><span class="mt"><i>点云 覆盖/溢出</i>0.772 / 0.734</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00018_obj_0041_0058.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [{"check": "cloud", "level": "report", "value": {"cover": 0.772, "spill": 0.734}, "before": {"cover": 0.837, "spill": 0.712}, "note": "fits the scan worse than before"}],
+  "moved": [{"object": "obj_0041", "because": "this change", "bottom_z": 1.454, "walls": [{"wall": "int_2", "face": "front", "push_m": 0.0}]}],
+  "now": {"pose": {"x": 6.0278, "y": 1.7079, "yaw_deg": -72, "up": "+Z", "scale": [1.0, 1.0, 0.95], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "wall", "height": 1.4, "against": ["int_2"]}, "bottom_z": 1.454, "status": "working"}
+}</pre><div class="zh2">保留。报告：吻合变差（覆盖 0.837 → 0.772）。底面 1.454；仍贴 int_2，推 0。</div><img src="assets/assembly-batch3/t18.jpg" alt="turn 24" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>收尾一个物体 · 先 Verify 后 Act<span>Observe → Reason → Verify → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 24 返回：keep、1 条报告 + 帧 58 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>finish</code>（无推理摘要）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：固定资产列在 fixed，测不出位移</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 finish：状态改为 done → v0073</div></div></div><div class="ln">↳ 返回值进入轮 26 的 Observe</div></div>
+    <div class="node p wide turn"><div class="k">轮 25 · <code>finish</code></div><div class="t">完成 obj_0041</div><div class="meta2">输入 32,101 token · 输出 38 · $0.048 · 23.1 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><div class="bi"><div class="bl">note</div><div class="en">Cabinet mounted flush to int_2; crown and bottom aligned with photograph.</div><div class="zh">吊柜贴在 int_2 上；顶部和底部都和照片对齐。</div></div><pre class="call">finish({
+  "note": "Cabinet mounted flush to int_2; crown and bottom aligned with photograph.",
+  "object": "obj_0041"
+})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M4</b> 物理：吊柜是 static 资产，列在 fixed 里，不仿真 → done。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{"ok": true, "physics": [], "fixed": ["obj_0041"], "remaining": []}</pre><div class="zh2">完成。没有物理结果：它是固定资产（fixed）。剩 0 个。</div></div></div>
+  </div>
+  <h3>批末检查与重开<span class="h">轮 26–31</span></h3>
+  <div class="chain">
+    <div class="loopband"><div class="lh"><b>对应流程</b>批末检查 · 不通过，回到循环<span>Observe → Reason → Verify → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 25 返回：固定资产，无物理数值、剩 0 个，无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>end_batch</code>（无推理摘要）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M6 end：绝对阈值（穿墙、出房间不过）+ 15 s 物理（通过）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6：吊柜 done → working，重开第 1 次 → v0074</div></div></div><div class="ln">↳ 返回值进入轮 27 的 Observe</div></div>
+    <div class="node r wide turn"><div class="k">轮 26 · <code>end_batch</code></div><div class="t">结束本批 → 被拒，重开</div><div class="meta2">输入 32,172 token · 输出 44 · $0.058 · 25.1 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><div class="bi"><div class="bl">summary</div><div class="en">Placed bed on floor, pillow/bag/helmet on mattress, and cabinet on partition wall; adjusted sizes and facings to photos.</div><div class="zh">床放在地上，靠枕、包、头盔放在床垫上，吊柜挂在隔墙上；尺寸和朝向都按照片调过。</div></div><pre class="call">end_batch({
+  "summary": "Placed bed on floor, pillow/bag/helmet on mattress, and cabinet on partition wall; adjusted sizes and facings to photos."
+})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M6</b> BatchSession.end：绝对阈值。吊柜穿墙 0.164 &gt; 0.02、出房间 0.168 &gt; 0.05 → 重开（第 1 次，上限 1）。另跑 15 s 物理（床和床上三件可动），没问题。吊柜状态 done → working。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{
+  "ok": false,
+  "reopened": ["obj_0041"],
+  "problems": {"obj_0041": ["wall_pen", "outside"]},
+  "note": "these objects are open again; fix them and finish them, then end_batch"
+}</pre><div class="zh2"><b>未通过</b>：obj_0041 被重开，问题是穿墙和出房间。"这些物体重新打开了，修好并 finish 后再 end_batch。"</div></div><div class="remark ok">批末的绝对阈值兜住了逐次检查放过的问题。</div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>只补一次检查（只读）<span>Observe → Reason → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 26 返回：被重开的物体和原因，无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>check_scene</code>（无推理摘要）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1 measure_now：测全场景当前问题，不比较、不撤回</div></div><div class="ph off"><div class="pn">Act <i>执行</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 28 的 Observe</div></div>
+    <div class="node g wide turn"><div class="k">轮 27 · <code>check_scene</code></div><div class="t">查看全场景问题</div><div class="meta2">输入 32,280 token · 输出 22 · $0.102 · 23.8 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><pre class="call">check_scene({})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M4</b> measure_now：全场景当前问题，只读。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{
+  "contacts_not_declared_as_support": [],
+  "in_wall_m": {"obj_0041": 0.164},
+  "outside_room_m": {"obj_0041": 0.168},
+  "support_gap_m": {},
+  "wall_gap_m": {}
+}</pre><div class="zh2">没声明支撑的接触：无；穿墙：obj_0041 0.164 m；出房间：obj_0041 0.168 m；支撑间隙、贴墙间隙：无。</div></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>一次完整循环<span>Observe → Reason → Act → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 27 返回：全场景问题清单（有问题），无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>set_pose</code>（推理摘要：Planning cabinet corner push）</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M2：按离地高度挂墙、贴 int_2 + ext_S_1 → v0075</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：改动前后各测一次 → keep，报告 cloud（软项，不撤回）；M5 出拼接图</div></div></div><div class="ln">↳ 返回值进入轮 29 的 Observe</div></div>
+    <div class="node y wide turn"><div class="k">轮 28 · <code>set_pose</code></div><div class="t">改 obj_0041 的位姿 → keep</div><div class="meta2">输入 32,367 token · 输出 135 · $0.063 · 47.7 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="bi"><div class="bl">推理摘要</div><div class="en">Planning cabinet corner push</div><div class="zh">规划把吊柜推进墙角</div></div><div class="bi"><div class="bl">reason</div><div class="en">Clear perpendicular exterior wall by seating cabinet inside corner.</div><div class="zh">把吊柜放进墙角，让它离开与隔墙垂直的那面外墙。</div></div><pre class="call">set_pose({
+  "object": "obj_0041",
+  "x": 6.0278,
+  "y": 1.7079,
+  "yaw_deg": -72,
+  "up": "+Z",
+  "scale": [1, 1, 0.95],
+  "tilt_deg": 0,
+  "tilt_toward_deg": 0,
+  "support": {"against": ["int_2", "ext_S_1"], "height": 1.4, "kind": "wall"},
+  "reason": "Clear perpendicular exterior wall by seating cabinet inside corner."
+})</pre></div><div class="sec h"><div class="sh"><em class="act">Act</em><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M2</b>：两面墙夹角在 75–105° 内，分别沿 int_2、ext_S_1 法向推：int_2 推 0，ext_S_1 推 −0.168（往房间里退）。<b>M4</b>：穿墙 0.164 → 0、出房间 0.168 → 0；点云报告 → keep。<div class="metrics">改动后的测量（M4，verify.jsonl）：<span class="mt"><i>接触对</i>obj_0016×obj_0037、obj_0037×obj_0062</span><span class="mt"><i>穿墙</i>0.0</span><span class="mt"><i>出房间</i>0.0</span><span class="mt"><i>支撑间隙</i>0.0</span><span class="mt"><i>支撑面积比</i>1.0</span><span class="mt"><i>贴墙间隙</i>0.0</span><span class="mt"><i>点云 覆盖/溢出</i>0.601 / 0.847</span></div></div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output） + 拼接图 00019_obj_0041_0058.png</div><pre class="ret">{
+  "verdict": "keep",
+  "issues": [{"check": "cloud", "level": "report", "value": {"cover": 0.601, "spill": 0.847}, "before": {"cover": 0.772, "spill": 0.734}, "note": "fits the scan worse than before"}],
+  "moved": [{"object": "obj_0041", "because": "this change", "bottom_z": 1.454, "walls": [{"wall": "int_2", "face": "front", "push_m": 0.0}, {"wall": "ext_S_1", "face": "front", "push_m": -0.168}]}],
+  "now": {"pose": {"x": 5.9729, "y": 1.8667, "yaw_deg": -72, "up": "+Z", "scale": [1.0, 1.0, 0.95], "tilt_deg": 0, "tilt_toward_deg": 0}, "support": {"kind": "wall", "height": 1.4, "against": ["int_2", "ext_S_1"]}, "bottom_z": 1.454, "status": "working"}
+}</pre><div class="zh2">保留。报告：吻合变差（覆盖 0.772 → 0.601，溢出 0.734 → 0.847）。贴 int_2 推 0、贴 ext_S_1 推 −0.168 m；位置变为 (5.9729, 1.8667)。</div><img src="assets/assembly-batch3/t19.jpg" alt="turn 28" loading="lazy"></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>只补一次检查（只读）<span>Observe → Reason → Verify</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 28 返回：keep、1 条报告 + 帧 58 拼接图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>check_scene</code>（无推理摘要）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1 measure_now：测全场景当前问题，不比较、不撤回</div></div><div class="ph off"><div class="pn">Act <i>执行</i></div><div class="pt">这一轮没有</div></div></div><div class="ln">↳ 返回值进入轮 30 的 Observe</div></div>
+    <div class="node g wide turn"><div class="k">轮 29 · <code>check_scene</code></div><div class="t">查看全场景问题</div><div class="meta2">输入 33,624 token · 输出 14 · $0.337 · 25.4 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><pre class="call">check_scene({})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em>harness 做了什么</div><div class="hd"><b>M4</b> measure_now：全部为空。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{
+  "contacts_not_declared_as_support": [],
+  "in_wall_m": {},
+  "outside_room_m": {},
+  "support_gap_m": {},
+  "wall_gap_m": {}
+}</pre><div class="zh2">全部为空：没有任何问题。</div></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>收尾一个物体 · 先 Verify 后 Act<span>Observe → Reason → Verify → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 29 返回：全场景问题清单（全部为空），无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>finish</code>（无推理摘要）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M4 + M1：固定资产列在 fixed，测不出位移</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 finish：状态改为 done → v0076</div></div></div><div class="ln">↳ 返回值进入轮 31 的 Observe</div></div>
+    <div class="node p wide turn"><div class="k">轮 30 · <code>finish</code></div><div class="t">完成 obj_0041</div><div class="meta2">输入 33,683 token · 输出 33 · $0.084 · 24.7 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><div class="bi"><div class="bl">note</div><div class="en">Corrected corner penetration; all scene checks now clear.</div><div class="zh">已修正墙角处的穿墙；场景检查现在全部通过。</div></div><pre class="call">finish({"note": "Corrected corner penetration; all scene checks now clear.", "object": "obj_0041"})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M4</b> 物理：static，跳过 → done。</div></div><div class="sec r"><div class="sh"><em class="observe">下一轮 Observe</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{"ok": true, "physics": [], "fixed": ["obj_0041"], "remaining": []}</pre><div class="zh2">完成。固定资产，不跑物理。</div></div></div>
+    <div class="arrow"></div>
+    <div class="loopband"><div class="lh"><b>对应流程</b>批末检查 · 通过<span>Observe → Reason → Verify → Act</span></div><div class="lg n4"><div class="ph observe"><div class="pn">Observe <i>观测</i></div><div class="pt">轮 30 返回：固定资产，无物理数值、剩 0 个，无图</div></div><div class="ph reason"><div class="pn">Reason <i>判断</i></div><div class="pt">M7：调 <code>end_batch</code>（无推理摘要）</div></div><div class="ph verify"><div class="pn">Verify <i>检查</i></div><div class="pt">M6 end：绝对阈值 + 15 s 物理，全部通过</div></div><div class="ph act"><div class="pn">Act <i>执行</i></div><div class="pt">M6 close：断点 v0076 写入 checkpoints.json</div></div></div><div class="ln">↳ 本批对话结束</div></div>
+    <div class="node p wide turn"><div class="k">轮 31 · <code>end_batch</code></div><div class="t">结束本批 → 通过</div><div class="meta2">输入 33,749 token · 输出 40 · $0.053 · 20.1 s</div><div class="sec m"><div class="sh"><em class="reason">Reason</em>模型 → 工具调用</div><div class="none">这一轮没有推理摘要，也没有文字输出。</div><div class="bi"><div class="bl">summary</div><div class="en">All five objects placed with declared supports. Cabinet corrected to clear both corner walls; scene checks report no remaining problems.</div><div class="zh">五个物体都已放好并声明了支撑。吊柜已修正，不再穿进墙角的两面墙；场景检查没有剩余问题。</div></div><pre class="call">end_batch({
+  "summary": "All five objects placed with declared supports. Cabinet corrected to clear both corner walls; scene checks report no remaining problems."
+})</pre></div><div class="sec h"><div class="sh"><em class="verify">Verify</em><em class="act">Act</em>harness 做了什么</div><div class="hd"><b>M6</b> end：绝对阈值全部通过；15 s 物理没问题 → <b>close</b>：断点版本 76 写入 checkpoints.json。对话结束。</div></div><div class="sec r"><div class="sh"><em class="observe">结束</em>工具返回 → 模型（function_call_output）</div><pre class="ret">{
+  "ok": true,
+  "failed": [],
+  "summary": "All five objects placed with declared supports. Cabinet corrected to clear both corner walls; scene checks report no remaining problems."
+}</pre><div class="zh2">通过。没有失败的物体。</div></div></div>
+  </div>
+
+  <table>
+    <thead><tr><th>工具</th><th class="n">次数</th><th>工具</th><th class="n">次数</th></tr></thead>
+    <tbody>
+      <tr><td>set_pose</td><td class="n">13（12 次保留、1 次打回、0 次自动撤回）</td><td>check_scene</td><td class="n">2</td></tr>
+      <tr><td>finish</td><td class="n">6</td><td>end_batch</td><td class="n">2</td></tr>
+      <tr><td>begin</td><td class="n">5</td><td>set_order</td><td class="n">1</td></tr>
+      <tr><td>view</td><td class="n">2</td><td>undo · give_up · bring_in</td><td class="n">0</td></tr>
+    </tbody>
+  </table>
+  <div class="marks">
+    <div class="mark w"><div class="who">翻译说明</div><div>英文是记录原文；中文是我的翻译。推理摘要是网关返回的一行标题，有两处（轮 8、轮 14）和这一轮的动作对不上，照原文保留。返回的 JSON 内容是原文，只重新排了行；工具参数为了好读调整了字段顺序，并省略了 support 里为 null 的字段；中文解释里的数字有取整，以 JSON 为准。</div></div>
+  </div>
+</section>
+
+<!-- ============ 05 ============ -->
+<section id="end">
+  <h2><span class="no">05</span>批末检查</h2>
+  <p class="sub">绝对阈值兜住了"不比改动前差"放过的问题</p>
+
+  <table>
+    <thead><tr><th>吊柜 0041</th><th class="n">穿墙 (m)</th><th class="n">出房间 (m)</th><th>每次改动的结论</th></tr></thead>
+    <tbody>
+      <tr><td>起点 v0052</td><td class="n">0.169</td><td class="n">0.176</td><td>—</td></tr>
+      <tr><td>贴 int_2 · v0071</td><td class="n">0.164</td><td class="n">0.168</td><td>keep，issues 为空（没变差）</td></tr>
+      <tr><td>降高度 · v0072</td><td class="n">0.164</td><td class="n">0.168</td><td>keep，只报点云</td></tr>
+      <tr><td>批末 end_batch</td><td class="n">0.164 &gt; 0.02</td><td class="n">0.168 &gt; 0.05</td><td>重开</td></tr>
+      <tr><td>墙角 · v0075</td><td class="n">0</td><td class="n">0</td><td>keep</td></tr>
+    </tbody>
+  </table>
+  <div class="marks">
+    <div class="mark a"><div class="who">起作用了</div><div>"不比改动前差"让起点带来的问题不至于把每次改动都撤掉；批末的绝对阈值再兜一次，这次查出了吊柜，agent 用两段墙修好。</div></div>
+    <div class="mark w"><div class="who">可以更早</div><div>提示词说"已有、没变差的问题会报告并保留"，实际 set_pose 的返回只含变差的项。若每次都附上这个物体当前仍有的问题，agent 在轮 23 就能看到 0.164 m 的穿墙，不用等到批末。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 06 ============ -->
+<section id="cost">
+  <h2><span class="no">06</span>轮数与花费</h2>
+  <p class="sub">batch_03/summary.json · llm/*_response.json</p>
+
+  <table>
+    <thead><tr><th>项</th><th>值</th></tr></thead>
+    <tbody>
+      <tr><td>轮数 / 用时</td><td>31 轮 / 719 s；每轮 11–48 s，主要是模型响应时间</td></tr>
+      <tr><td>输入 token</td><td>73.2 万（第 1 轮 1.13 万，第 31 轮 3.37 万，随历史线性增长）</td></tr>
+      <tr><td>缓存</td><td>31 轮里 21 轮命中，缓存读 41.7 万 token，占输入的 57%</td></tr>
+      <tr><td>输出 token</td><td>2,736（推理 token 很少，每轮几十个）</td></tr>
+      <tr><td>花费</td><td>$3.70（输入 $10、缓存读 $1、输出 $50 每百万）</td></tr>
+      <tr><td>按物体</td><td>床 4 轮、靠枕 4、包 7、头盔 4、吊柜 9（含重开后的 4 轮）；set_order 和两次 end_batch 3 轮</td></tr>
+      <tr><td>Isaac</td><td>19 张拼接图；物理 8 次：finish 的 5 s 仿真每次 0.11–0.14 s，批末 15 s 仿真每次 0.35 s</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:14px;color:var(--ink-2)">按每批 $3.7 线性粗估，整场景 11 批约 $40，在默认上限 $150 以内；后面的批场景里物体更多，单批可能更贵。</p>
+</section>
+
+
+<!-- ============ 07 ============ -->
+<section id="eval">
+  <h2><span class="no">07</span>评估</h2>
+  <p class="sub">M9 · 每个物体 16 张留出帧 · 同一组物体上比较</p>
+
+  <table>
+    <thead><tr><th>物体</th><th class="n">最终</th><th class="n">起点 M3</th><th class="n">B1 SAM3D</th><th class="n">B0 扫描盒</th><th class="n">r2 重打分</th></tr></thead>
+    <tbody>
+      <tr class="best"><td>床 0037</td><td class="n"><b>0.623</b></td><td class="n">0.497</td><td class="n">0.516</td><td class="n">0.484</td><td class="n">0.672</td></tr>
+      <tr class="best"><td>靠枕 0016</td><td class="n"><b>0.627</b></td><td class="n">0.509</td><td class="n">0.541</td><td class="n">0.461</td><td class="n">0.508</td></tr>
+      <tr class="best"><td>包 0062</td><td class="n"><b>0.719</b></td><td class="n">0.691</td><td class="n">0.701</td><td class="n">0.732</td><td class="n">0.671</td></tr>
+      <tr class="worst"><td>obj_0061 头盔</td><td class="n"><b>0.126</b></td><td class="n">0.452</td><td class="n">0.659</td><td class="n">0.497</td><td class="n">0.665</td></tr>
+      <tr class="worst"><td>吊柜 0041</td><td class="n"><b>0.746</b></td><td class="n">0.769</td><td class="n">0.844</td><td class="n">0.369</td><td class="n">—</td></tr>
+      <tr><td><b>5 个平均</b></td><td class="n"><b>0.568</b></td><td class="n">0.583</td><td class="n">0.652</td><td class="n">0.509</td><td class="n">—</td></tr>
+      <tr><td>不算 obj_0061</td><td class="n">0.679</td><td class="n">0.616</td><td class="n">0.650</td><td class="n">0.511</td><td class="n">—</td></tr>
+      <tr><td>与 r2 共有的 4 个</td><td class="n">0.524</td><td class="n">0.537</td><td class="n">—</td><td class="n">—</td><td class="n">0.629</td></tr>
+    </tbody>
+  </table>
+
+  <div class="warn">
+    <b>比较口径。</b>report.html 顶部卡片上的起点 0.502、B1 0.508、B0 0.392 是 52 个物体的平均，"最终"只算这 5 个，二者不能直接比。上表全部在同一组物体上算。
+    r2 是测试实验第 2 轮（legacy，Claude Opus 5.5）的最终位姿，它没做吊柜。
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">变好的</div><div>床、靠枕、包都高于起点和 B1。靠枕比 r2 高 0.12（r2 把它摆正了，这次保留躺着生成的 −Y 朝上并压扁高度）。</div></div>
+    <div class="mark e"><div class="who">变差的</div><div>obj_0061 掉了 0.53（拆解见下一节）。吊柜比起点低 0.02、比 B1 低 0.10：为出墙沿 ext_S_1 法向移了 0.168 m，底面从 1.49 降到 1.454、高缩到 0.95；哪一项拉低的还没拆。它的 B1 很高，说明 SAM3D 原朝向就很好，起点配准 yaw 改了 5°。</div></div>
+  </div>
+
+  <div class="two">
+    <figure><img src="assets/assembly-batch3/eval_0037.jpg" alt="床轮廓">
+      <figcaption>床的最终位姿在首个关键帧 45 上的轮廓（绿线）。</figcaption></figure>
+    <figure><img src="assets/assembly-batch3/eval_0041.jpg" alt="吊柜轮廓">
+      <figcaption>吊柜的最终位姿在帧 58 上的轮廓。</figcaption></figure>
+  </div>
+</section>
+
+
+<!-- ============ 08 ============ -->
+<section id="helmet">
+  <h2><span class="no">08</span>obj_0061 拆解</h2>
+  <p class="sub">同一个评估器，一次只换一项</p>
+
+  <table>
+    <thead><tr><th>位姿</th><th class="n">IoU</th></tr></thead>
+    <tbody>
+      <tr><td>起点：yaw 60.7°、扫描中心 (3.99, 2.59)、底面 0.826</td><td class="n">0.452</td></tr>
+      <tr class="best"><td>只转 180°：yaw 241°，其余不动</td><td class="n"><b>0.647</b></td></tr>
+      <tr><td>只挪位置：agent 的 (4.10, 2.48)，起点 yaw</td><td class="n">0.073</td></tr>
+      <tr><td>转向 + 挪位置，底面仍 0.826</td><td class="n">0.267</td></tr>
+      <tr class="worst"><td>实际最终：再落到床资产表面，底面 0.774</td><td class="n"><b>0.126</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="flow">
+    <div class="step"><div class="dot">1</div><div class="body"><div class="name">转向对了</div><div class="io2">四面图 + 照片判断"通风壳朝相机"，0.452 → 0.647，已经和 B1、r2 持平</div></div></div>
+    <div class="step"><div class="dot e">2</div><div class="body"><div class="name">挪位置把收益抵消</div><div class="io2">按拼接图"往床头挪一点"，实际离扫描中心约 0.15 m。资产只有 0.12 m 高、0.3 m 长，这个距离已经超过它自身的一半：0.647 → 0.267</div></div></div>
+    <div class="step"><div class="dot e">3</div><div class="body"><div class="name">落 z 再降一截</div><div class="io2">声明放在床上，按床的视觉网格落：床资产顶面 0.775，扫描底面 0.826，低 5 cm：0.267 → 0.126</div></div></div>
+  </div>
+
+  <figure><img src="assets/assembly-batch3/eval_0061.jpg" alt="头盔轮廓">
+    <figcaption>最终位姿在帧 53 上的轮廓（绿线）：整体偏左上、偏低，只和照片里的头盔重叠一小块。</figcaption></figure>
+
+  <div class="marks">
+    <div class="mark w"><div class="who">信号其实有</div><div>点云覆盖 0.956 → 0.593 → 0.425，两次报"fits the scan worse"，是这一步唯一的警告。但点云只报告；而且靠枕的点云同样变差（0.528 → 0.297），IoU 却升了。只看点云会误伤。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 09 ============ -->
+<section id="findings">
+  <h2><span class="no">09</span>发现的问题</h2>
+  <p class="sub">都有记录可查 · 改动方向待讨论，代码未改</p>
+
+  <table>
+    <thead><tr><th>问题</th><th>证据</th><th>方向（待定）</th></tr></thead>
+    <tbody>
+      <tr><td><b>小物体落 z 偏低</b></td><td>obj_0061 落到床资产 0.775，扫描底 0.826。资产床面比真实床面低时，上面的小物体都会跟着低</td><td>取支撑面和扫描底面中较高的那个，或让 agent 二选一（D12）</td></tr>
+      <tr><td><b>小物体被挪离扫描位置</b></td><td>0.15 m 让 0.647 降到 0.267</td><td>提示词：小物体照片只决定朝向和支撑，位置尽量留在扫描处（D12）</td></tr>
+      <tr><td>点云变差只报告</td><td>obj_0061 两次报告被忽略；但靠枕同样变差、IoU 却升了</td><td>对小物体升级成要求理由或拦截；要先看更多批的数据（D12）</td></tr>
+      <tr><td>吊柜低于起点和 B1</td><td>0.746 对 0.769 / 0.844</td><td>拆开墙角移位、降高、缩高三项（D12）</td></tr>
+      <tr><td>set_pose 不报未变差的旧问题</td><td>吊柜贴 int_2 后仍穿墙 0.164 m，返回 issues 为空；提示词说的是"reported but kept"</td><td>返回里附上这个物体当前仍有的问题，或改提示词（新发现，未记入 debug 页）</td></tr>
+      <tr><td>缓存</td><td>D09 写"缓存读取仍是 0"（来自探测）；这次 21 / 31 轮命中，占输入 57%</td><td>更正 D09 的说法</td></tr>
+      <tr><td>文字卡中英混写</td><td>"未声明支撑，高度取自扫描底面"是中文，其余英文</td><td>统一成英文</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:14px;color:var(--ink-2)">D12 的四个方向和后两条小问题都还没定，代码没有改。只有一批 5 个物体，obj_0061 的问题是不是普遍，需要再跑一批（例如批 1 或批 8）确认。</p>
+</section>
+
+
+<!-- ============ 10 ============ -->
+<section id="files">
+  <h2><span class="no">10</span>文件与命令</h2>
+  <p class="sub">runs/assembly-batch3-20261123/（git 忽略）</p>
+
+  <pre><span class="c"># 在 SceneAssembly/ 下</span>
+.venv/bin/python src/run/main.py --name assembly-batch3-20261123 --batches 3
+.venv/bin/python -c "import sys; sys.path.insert(0, 'src'); from eval.run import evaluate; evaluate('runs/assembly-batch3-20261123')"   <span class="c"># 166 s</span></pre>
+
+  <table>
+    <thead><tr><th>文件</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td><code>batch_03/calls.jsonl</code></td><td>31 轮：每轮的 token、花费、推理摘要、工具参数和返回</td></tr>
+      <tr><td><code>batch_03/llm/NNN_request.json</code> · <code>_response.json</code></td><td>每轮的请求（最后 6 项）和响应、usage</td></tr>
+      <tr><td><code>batch_03/opening.json</code> · <code>plan_view.png</code> · <code>summary.json</code></td><td>开局记录、平面图、本批汇总</td></tr>
+      <tr><td><code>observe/opening/</code></td><td>文字卡、框、带框关键帧 4 张、四面图 5 张</td></tr>
+      <tr><td><code>observe/stitched/</code></td><td>19 张拼接图，编号按出图顺序</td></tr>
+      <tr><td><code>state/states/v0001–v0076.json</code> · <code>actions.jsonl</code></td><td>v0001–v0052 是 52 个起点，v0053–v0076 是这一批</td></tr>
+      <tr><td><code>verify/verify.jsonl</code> · <code>verify_physics.jsonl</code></td><td>12 次检查（被打回的那次没有执行，不检查）、8 次物理</td></tr>
+      <tr><td><code>batches.jsonl</code> · <code>checkpoints.json</code> · <code>progress.json</code></td><td>批事件、断点版本 76、进度与花费</td></tr>
+      <tr><td><code>eval/eval.json</code> · <code>report.html</code> · <code>overlays/</code></td><td>评估结果、报告、52 张轮廓图</td></tr>
+    </tbody>
+  </table>
+
+  <p style="font-size:13.5px;color:var(--ink-3)">相关页面：<a href="scene-assembly-design.html">场景组装 harness 设计框架</a> · <a href="scene-assembly-debug.html">debug 记录（D12 是这次运行）</a> · <a href="archive/scene-assembly-pilot-walkthrough-20261111.html">旧版复盘：测试实验批 1 r2</a></p>
+</section>
+
+<footer>
+  <p>SceneAssembly · 以一个批次为例的复盘 · runs/assembly-batch3-20261123 · 核对日期 2026-11-24</p>
+</footer>
+</main>
+</div>
+<script>
+  const rail=document.getElementById('rail');
+  if(rail){
+    const links=[...rail.querySelectorAll('a')];
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){
+          links.forEach(l=>l.classList.remove('on'));
+          const a=rail.querySelector(`a[href="#${e.target.id}"]`);
+          if(a)a.classList.add('on');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section[id]').forEach(s=>obs.observe(s));
+  }
+</script>
+</body>
+</html>

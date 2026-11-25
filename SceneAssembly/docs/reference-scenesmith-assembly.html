@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>参考实现 · scenesmith 的组装</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --model:#7c3aed; --model-soft:#f3eefe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr); max-width:1180px; margin:0 auto; padding:0 28px 120px}
+  @media (min-width:1080px){
+    .wrap{grid-template-columns:230px minmax(0,1fr); gap:56px; padding-left:36px; padding-right:36px}
+    .rail{position:sticky; top:0; align-self:start; max-height:100vh; overflow:auto; padding:44px 0}
+  }
+  .rail{display:none}
+  @media (min-width:1080px){ .rail{display:block} }
+  .rail-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px}
+  .rail a{display:block; padding:7px 12px; margin:1px 0; border-radius:6px; color:var(--ink-2); text-decoration:none; font-size:13.5px; border-left:2px solid transparent}
+  .rail a:hover{background:var(--line-2); color:var(--ink)}
+  .rail a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+  .rail a .n{font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:7px}
+  .rail a.on .n{color:var(--accent)}
+
+  header.top{padding:56px 0 34px; border-bottom:1px solid var(--line); margin-bottom:8px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+  h1{margin:0 0 14px; font-size:clamp(28px,3.6vw,40px); line-height:1.2; letter-spacing:-.022em; font-weight:700}
+  .lede{margin:0; max-width:64ch; color:var(--ink-2); font-size:16.5px}
+  .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+
+  section{padding-top:56px; scroll-margin-top:24px}
+  h2{margin:0 0 6px; font-size:23px; letter-spacing:-.014em; font-weight:700; display:flex; align-items:baseline; gap:12px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; letter-spacing:.04em}
+  .sub{margin:0 0 22px; color:var(--ink-3); font-size:14px; font-family:var(--mono)}
+  h3{margin:34px 0 10px; font-size:16.5px; font-weight:650; letter-spacing:-.006em}
+  h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  ul,ol{margin:0 0 14px; padding-left:22px; line-height:1.8}
+  li{margin-bottom:4px}
+  code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.8px; line-height:1.65}
+  pre .c{color:#7d8894} pre .k{color:#7dd3fc}
+
+  .io{border:1px solid var(--line); border-radius:10px; background:var(--card); margin:0 0 26px; overflow:hidden}
+  .io .row{display:grid; grid-template-columns:76px minmax(0,1fr); gap:16px; padding:13px 18px; border-bottom:1px solid var(--line-2)}
+  .io .row:last-child{border-bottom:none}
+  .io .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:700; padding-top:3px}
+  .io .val{font-size:14.5px; line-height:1.7}
+
+  .flow{display:grid; gap:0; margin:26px 0 8px}
+  .step{display:grid; grid-template-columns:34px minmax(0,1fr); gap:16px; align-items:start}
+  .step .dot{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:13px; font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .step .dot.m{background:var(--model-soft); color:var(--model); border-color:#ddd0fb}
+  .step .dot.w{background:var(--warn-soft); color:var(--warn); border-color:#f2ddb4}
+  .step .dot.e{background:var(--stop-soft); color:var(--stop); border-color:#f3c9c9}
+  .step .body{padding:5px 0 26px; border-bottom:1px dashed var(--line)}
+  .step:last-child .body{border-bottom:none}
+  .step .name{font-weight:650; font-size:15.5px; margin-bottom:3px}
+  .step .io2{font-family:var(--mono); font-size:12.3px; color:var(--ink-3); line-height:1.7}
+  .step .io2 em{font-style:normal; color:var(--ink-2)}
+
+  .marks{display:grid; gap:10px; margin:16px 0}
+  .mark{display:grid; grid-template-columns:74px minmax(0,1fr); gap:14px; padding:12px 15px; border-radius:8px; font-size:14.5px; line-height:1.65}
+  .mark .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding-top:2px}
+  .mark.a{background:var(--accent-soft); border:1px solid #bfe3dd} .mark.a .who{color:var(--accent)}
+  .mark.m{background:var(--model-soft); border:1px solid #ddd0fb} .mark.m .who{color:var(--model)}
+  .mark.w{background:var(--warn-soft); border:1px solid #f2ddb4} .mark.w .who{color:var(--warn)}
+  .mark.e{background:var(--stop-soft); border:1px solid #f3c9c9} .mark.e .who{color:var(--stop)}
+
+  .note{background:var(--accent-soft); border:1px solid #bfe3dd; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+  .warn{background:var(--warn-soft); border:1px solid #f2ddb4; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+
+  .stats{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0 22px}
+  @media (max-width:760px){ .stats{grid-template-columns:1fr} }
+  .stat{border:1px solid var(--line); border-radius:10px; background:var(--card); padding:14px 16px}
+  .stat .v{font-family:var(--mono); font-size:26px; font-weight:700; color:var(--accent); line-height:1.2}
+  .stat .l{font-size:13.5px; color:var(--ink-2); margin-top:6px; line-height:1.6}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; white-space:nowrap}
+  td code{font-size:12.6px}
+  tbody tr:hover{background:#f7f9fa}
+  td .s{display:inline-block; font-family:var(--mono); font-size:11px; border-radius:4px; padding:0 6px; margin-right:4px; border:1px solid; white-space:nowrap}
+  .s.done{color:#15803d; background:#ecfbf0; border-color:#bfe3c9}
+  .s.part{color:#a16207; background:#fefbe8; border-color:#f0dc9a}
+  .s.todo{color:var(--ink-3); background:var(--line-2); border-color:var(--line)}
+
+  .chain{display:flex; flex-direction:column; align-items:center; margin:26px 0 24px}
+  .node{width:min(100%,560px); border:2px solid var(--line); border-radius:12px; background:var(--card); padding:14px 18px; text-align:center}
+  .node .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-bottom:5px}
+  .node .t{font-weight:650; font-size:15px; line-height:1.45}
+  .node .d{font-size:13px; color:var(--ink-2); margin-top:6px; line-height:1.65}
+  .node .d code{font-size:11.8px}
+  .node .d ul{margin:8px 0 0; padding-left:22px; text-align:left}
+  .node.b{background:#eef4ff; border-color:#3b82f6} .node.b .k{color:#2563eb}
+  .node.g{background:#ecfbf0; border-color:#22a552} .node.g .k{color:#15803d}
+  .node.y{background:#fefbe8; border-color:#eab308} .node.y .k{color:#a16207}
+  .node.r{background:#fdeeee; border-color:#dc2626} .node.r .k{color:#b91c1c}
+  .node.p{background:#f4f0fd; border-color:#7c3aed} .node.p .k{color:#6d28d9}
+  .node.wide{width:min(100%,880px); text-align:left}
+  .node.wide .k,.node.wide .t{text-align:center}
+  .arrow{width:2px; height:28px; background:#9aa4b2; position:relative}
+  .arrow::after{content:""; position:absolute; left:50%; bottom:-2px; transform:translateX(-50%); border-left:6px solid transparent; border-right:6px solid transparent; border-top:9px solid #9aa4b2}
+  .split{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; width:min(100%,880px)}
+  .split .node{width:100%}
+  @media (max-width:760px){ .split{grid-template-columns:1fr} }
+  .loopnote{font-family:var(--mono); font-size:12px; color:var(--ink-3); margin:6px 0 0; text-align:center}
+
+  .layers{display:grid; grid-template-columns:120px minmax(0,1fr); gap:0; border:1px solid var(--line); border-radius:10px; background:var(--card); overflow:hidden; margin:16px 0 22px}
+  .layers .lv{font-family:var(--mono); font-size:11.5px; font-weight:700; letter-spacing:.06em; color:var(--ink-3); padding:12px 14px; border-bottom:1px solid var(--line-2); background:#f7f9fa}
+  .layers .its{padding:10px 14px; border-bottom:1px solid var(--line-2); display:flex; flex-wrap:wrap; gap:6px}
+  .layers .lv:nth-last-child(2), .layers .its:last-child{border-bottom:none}
+  .chip{font-size:13px; border:1px solid #c9d6e2; border-radius:6px; padding:2px 9px; background:#fff}
+  .chip.w{border-color:#f2ddb4; background:var(--warn-soft)}
+  .chip.dash{border-style:dashed}
+
+  .bar{display:flex; height:38px; border-radius:8px; overflow:hidden; border:1px solid var(--line); font-size:13.5px; margin:10px 0 6px}
+  .bar div{display:flex; align-items:center; justify-content:center; color:#fff; white-space:nowrap; padding:0 10px}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+
+  .figs{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:18px 0 10px}
+  .figs:has(figure:only-child){grid-template-columns:minmax(0,640px)}
+  @media (max-width:760px){ .figs{grid-template-columns:1fr} }
+  figure{margin:0; border:1px solid var(--line); border-radius:10px; background:var(--card); overflow:hidden}
+  figure img{display:block; width:100%; height:auto}
+  figcaption{padding:10px 14px; font-size:13px; color:var(--ink-2); line-height:1.6; border-top:1px solid var(--line-2)}
+  td[rowspan]{vertical-align:middle}
+  .mark{grid-template-columns:108px minmax(0,1fr)}
+  #code td:first-child{white-space:nowrap}
+  #code td:nth-child(2){width:46%}
+  #code td:nth-child(2) code{word-break:break-all}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="rail" id="rail">
+  <div class="rail-title">参考 · scenesmith</div>
+  <a href="#overview"><span class="n">00</span>总览</a>
+  <a href="#repr"><span class="n">01</span>阶段与表示</a>
+  <a href="#roles"><span class="n">02</span>三个角色</a>
+  <a href="#round"><span class="n">03</span>评审与回滚</a>
+  <a href="#furn"><span class="n">04</span>家具：工具</a>
+  <a href="#snap"><span class="n">05</span>snap_to_object</a>
+  <a href="#case"><span class="n">06</span>实例：椅子与衣柜</a>
+  <a href="#manip"><span class="n">07</span>小物件：逐件家具</a>
+  <a href="#surface"><span class="n">08</span>支撑面与面内放置</a>
+  <a href="#physics"><span class="n">09</span>物理</a>
+  <a href="#views"><span class="n">10</span>观察图</a>
+  <a href="#context"><span class="n">11</span>上下文控制</a>
+  <a href="#code"><span class="n">12</span>代码位置</a>
+  <a href="#notes"><span class="n">13</span>说明与未确认</a>
+</nav>
+
+<main>
+
+<header class="top">
+  <div class="eyebrow">SceneAssembly · Reference · scenesmith</div>
+  <h1>scenesmith：组装是怎么做的</h1>
+  <p class="lede">
+    它从一段文字生成可仿真的室内场景，没有真实照片可对照。
+    每个阶段都是同一套三角色结构：designer 用工具摆放，critic 只读并打分，planner 负责轮转和回滚。
+    模型给粗略位置和关系，贴合由工具算；每个阶段结束后用"去穿插投影 + 重力仿真"兜底。
+  </p>
+  <div class="meta">
+    <span class="tag">仓库 <b>Submodule/scenesmith</b></span>
+    <span class="tag">提交 <b>67cc408</b></span>
+    <span class="tag">输入 <b>文字描述</b></span>
+    <span class="tag">物理 <b>Drake</b></span>
+    <span class="tag">渲染 <b>Blender</b></span>
+    <span class="tag">读码日期 <b>2026-11-11</b></span>
+    <span class="tag">状态 <b>只读代码 · 未运行</b></span>
+  </div>
+</header>
+
+
+<!-- ============ 00 ============ -->
+<section id="overview">
+  <h2><span class="no">00</span>总览</h2>
+  <p class="sub">五个阶段依次执行 · 和我们相关的是家具和小物件两个阶段</p>
+
+  <div class="flow">
+    <div class="step">
+      <div class="dot m">01</div>
+      <div class="body">
+        <div class="name">户型</div>
+        <div class="io2"><em>输入</em> 文字描述 &nbsp;→&nbsp; <em>输出</em> 墙、门窗、地面</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">02</div>
+      <div class="body">
+        <div class="name">家具 agent</div>
+        <div class="io2"><em>输入</em> 空房间 &nbsp;→&nbsp; <em>输出</em> 落地家具，每件只有 x、y、yaw</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">03</div>
+      <div class="body">
+        <div class="name">家具后处理</div>
+        <div class="io2"><em>输入</em> 家具布局 &nbsp;→&nbsp; <em>输出</em> 去穿插投影 + 重力仿真之后的布局；倾倒超过 45° 的家具被移除</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">04</div>
+      <div class="body">
+        <div class="name">墙面物体 agent、天花板物体 agent</div>
+        <div class="io2">结构相同，这一页不展开</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">05</div>
+      <div class="body">
+        <div class="name">小物件 agent × 每件家具</div>
+        <div class="io2"><em>输入</em> 一件家具的支撑面 &nbsp;→&nbsp; <em>输出</em> 面上的小物件；每件家具摆完做一次局部的投影 + 仿真</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">06</div>
+      <div class="body">
+        <div class="name">最终后处理</div>
+        <div class="io2"><em>输入</em> 整个场景 &nbsp;→&nbsp; <em>输出</em> 家具固定，只让小物件移动的投影 + 仿真</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark m"><div class="who">模型</div><div>决定放什么、大致放哪、和谁有关系（椅子朝向桌子、衣柜背靠墙）。还负责评审和打分。</div></div>
+    <div class="mark a"><div class="who">工具</div><div>把粗略位置变成精确接触：定朝向、推到刚好碰上、落到支撑面、校验占地和净空。物理检查的结论优先于看图。</div></div>
+    <div class="mark w"><div class="who">和我们的差别</div><div>它是生成，不是重建：可以删物体、换更小的资产、加随机扰动，用主观评分判断好坏。我们有照片，物体集合是定死的。可借鉴的是工具设计、验收结构和物理处理。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 01 ============ -->
+<section id="repr">
+  <h2><span class="no">01</span>阶段与表示</h2>
+  <p class="sub">RoomScene · 每类物体只能由对应的 agent 修改</p>
+
+  <div class="io">
+    <div class="row"><div class="lbl">场景</div><div class="val"><code>RoomScene</code>：房间几何（墙、地面、门窗）加一组物体。可以整体序列化成字典再恢复，回滚靠这个。</div></div>
+    <div class="row"><div class="lbl">物体</div><div class="val">位姿、视觉网格、碰撞体（凸分解后的 SDF）、包围盒、缩放系数。小物件另记"在哪个支撑面上、面内坐标和旋转"。</div></div>
+    <div class="row"><div class="lbl">类型</div><div class="val">家具、墙面物体、天花板物体、小物件。每个 agent 只能改自己那一类；物理检查也只把它能改的违规报给它。</div></div>
+    <div class="row"><div class="lbl">资产</div><div class="val">按文字描述现场生成（SAM3D 或 Hunyuan3D），或从库里检索。入库前统一姿态和尺寸，见下。</div></div>
+  </div>
+
+  <h3>资产入库前的三步 <span class="h">放置阶段因此只需要 yaw</span></h3>
+  <div class="flow">
+    <div class="step">
+      <div class="dot m">01</div>
+      <div class="body">
+        <div class="name">VLM 看多视图</div>
+        <div class="io2">顶视、底视和若干侧视，每张带编号和坐标轴 &nbsp;→&nbsp; 哪个轴朝上、哪张图是正面、材质、质量</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">02</div>
+      <div class="body">
+        <div class="name">转到统一姿态</div>
+        <div class="io2">上 = +Z，正面 = +Y，底面在 z = 0，水平居中</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">03</div>
+      <div class="body">
+        <div class="name">按期望尺寸等比缩放</div>
+        <div class="io2">designer 生成资产时必须给 [宽, 深, 高]。三个轴各算一个缩放系数，取中位数，整体等比缩放</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">为什么等比</div><div>源码注释：图生三维的网格比例大体可信，绝对尺度未知，所以只定尺度、不改比例。这和 LiteReality 三个轴分别缩放正好相反。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 02 ============ -->
+<section id="roles">
+  <h2><span class="no">02</span>三个角色</h2>
+  <p class="sub">base_stateful_agent.py · designer 和 critic 各有独立的持久会话</p>
+
+  <table>
+    <thead><tr><th>角色</th><th>能用的工具</th><th>看得到什么</th><th>推理强度</th></tr></thead>
+    <tbody>
+      <tr><td><b>planner</b></td><td>选摆放风格 · 请求初始设计 · 请求评审 · 请求修改 · 回滚</td><td>designer 的总结、critic 的意见和评分变化</td><td>low</td></tr>
+      <tr><td><b>designer</b></td><td>全部修改工具 + 观察 + 物理检查 + 待办清单</td><td>自己的全部历史</td><td>high</td></tr>
+      <tr><td><b>critic</b></td><td>只读：观察、读场景状态、朝向核对（小物件阶段没有朝向核对）</td><td>场景本身。看不到 designer 的对话</td><td>high</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">物理结果直接注入</div><div>critic 不调用物理检查。每次评审前由 harness 算好，把结果写进它的指令里，保证 critic 和 designer 看到的是同一份。</div></div>
+    <div class="mark a"><div class="who">原文转达</div><div>planner 被要求把 critic 的意见原样转给 designer，不过滤、不加自己的提醒。</div></div>
+    <div class="mark w"><div class="who">防止停下来问</div><div>planner 的提示词专门处理一种情况：designer 或 critic 回了"要不要我继续？"而没有干活。这时不进入下一步，而是再叫同一个角色一次，让它直接执行。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 03 ============ -->
+<section id="round">
+  <h2><span class="no">03</span>评审与回滚</h2>
+  <p class="sub">一个阶段内的循环 · 家具最多 3 轮 · 小物件每件家具最多 2 轮</p>
+
+  <div class="chain">
+    <div class="node y">
+      <div class="k">planner</div>
+      <div class="t">选摆放风格：natural 或 perfect</div>
+      <div class="d">决定之后每次放置加多大的随机扰动</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node y">
+      <div class="k">designer · 初始设计</div>
+      <div class="t">观察空房间 → 列待办 → 生成资产 → 逐件放置 → 物理检查</div>
+      <div class="d">提示词要求：有任何碰撞都不许结束</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">harness · 评审前</div>
+      <div class="t">算物理违规（家具阶段还算通行性）</div>
+      <div class="d">结果写进 critic 这一次的指令</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r wide">
+      <div class="k">critic · 独立会话 · 只读</div>
+      <div class="t">观察 → 读物体列表 → 用工具核对朝向 → 写意见 + 打分</div>
+      <div class="d">
+        <ul>
+          <li>家具 6 项，小物件 5 项，每项 0–10：真实度、功能性、布局、完整度、提示词符合度（家具多一项通行性）</li>
+          <li>有任何物理碰撞，真实度最高 4 分</li>
+          <li>还有严重问题时，只许提严重问题，不许夹带优化建议</li>
+          <li>工具结论优先于看图：朝向核对说不对，就是不对</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node p">
+      <div class="k">harness · 存检查点</div>
+      <div class="t">场景状态 + 评分，保留最近两份</div>
+      <div class="d">把评分变化附在意见后面，一起交给 planner</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="split">
+      <div class="node r">
+        <div class="k">评分变差 · 回滚</div>
+        <div class="t">恢复上一份检查点</div>
+        <div class="d">触发条件：任一项下降 ≥ 2 分，或总分下降 ≥ 1 分。<br>planner 被建议调用回滚，换一种改法</div>
+      </div>
+      <div class="node y">
+        <div class="k">否则 · 继续修改</div>
+        <div class="t">critic 的意见原文转给 designer</div>
+        <div class="d">designer 只处理严重问题，改完再做物理检查，然后回到评审</div>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node p">
+      <div class="k">结束</div>
+      <div class="t">全部评分达标 · 轮数用尽 · 同一问题改了两次还在</div>
+      <div class="d">达标线：家具 ≥ 9，小物件 ≥ 8。<br>结束时 harness 再评一次；如果比上一份检查点差，自动恢复上一份</div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">回滚有两处</div><div>一处是 planner 自己决定调用，一处是流程结束时代码自动判断。后者不依赖模型记得去比较。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 04 ============ -->
+<section id="furn">
+  <h2><span class="no">04</span>家具：工具</h2>
+  <p class="sub">furniture_agents/tools/ · 家具只有三个自由度</p>
+
+  <table>
+    <thead><tr><th>工具</th><th>作用</th><th>要点</th></tr></thead>
+    <tbody>
+      <tr><td><code>generate_assets</code></td><td>按文字描述生成一批家具</td><td>每件必须给期望的 [宽, 深, 高]</td></tr>
+      <tr><td><code>add_furniture_to_scene_tool</code><br><code>move_furniture_tool</code></td><td>放置或移动</td><td>参数只有 <code>x, y, yaw</code>。z 固定在地面，不能倾斜。落点必须在地面范围内。放置后按风格加一点随机扰动</td></tr>
+      <tr><td><code>snap_to_object_tool</code></td><td>贴到另一个物体或墙上</td><td>见 <a href="#snap">05</a></td></tr>
+      <tr><td><code>check_facing_tool</code></td><td>A 是否朝向（或背向）B</td><td>从 A 沿它的正面方向发一条射线，看是否穿过 B 的包围盒（只看水平面）。返回是否正确，以及应该转到的角度</td></tr>
+      <tr><td><code>rescale_furniture_tool</code></td><td>等比缩放</td><td>改的是资产本身，同一资产的所有实例一起变</td></tr>
+      <tr><td><code>remove_furniture_tool</code></td><td>删除</td><td>提示词里是解决碰撞的备选手段</td></tr>
+      <tr><td><code>get_current_scene_state</code></td><td>读所有家具</td><td>位置、旋转、尺寸、世界坐标下的包围盒</td></tr>
+      <tr><td><code>observe_scene</code></td><td>渲染</td><td>见 <a href="#views">10</a></td></tr>
+      <tr><td><code>check_physics</code></td><td>物理违规列表</td><td>见 <a href="#physics">09</a></td></tr>
+      <tr><td><code>check_reachability</code></td><td>房间是否连通</td><td>按 0.3 m 宽的方形通行体检查，返回挡路的家具</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">随机扰动</div><div>natural：位置标准差 3 cm，yaw 标准差 1°；perfect：1 mm 和 0.1°。随机数的种子取自位姿本身，所以重放时结果一致。</div></div>
+    <div class="mark w"><div class="who">统一缩放的后果</div><div>比例不对时，缩放修不了，只能重新生成。提示词明说：比例对、尺寸错用缩放；形状或比例错就重新生成。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 05 ============ -->
+<section id="snap">
+  <h2><span class="no">05</span>snap_to_object</h2>
+  <p class="sub">scene_tools.py + snapping_helpers.py · 一次调用完成三件事</p>
+
+  <div class="chain">
+    <div class="node y">
+      <div class="k">designer</div>
+      <div class="t">snap_to_object(物体, 目标, orientation)</div>
+      <div class="d">物体已经放在大致位置。<code>orientation</code> 取 <code>toward</code>、<code>away</code> 或 <code>none</code></div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">第 1 步 · 先解开穿插</div>
+      <div class="t">如果两者已经重叠，沿水平方向保守推开</div>
+      <div class="d">把物体按它的最大尺寸当成圆来算。这样下一步无论转到什么角度，都不会重新穿进去</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">第 2 步 · 定朝向</div>
+      <div class="t">算出让物体正面朝向（或背向）目标的 yaw</div>
+      <div class="d">目标是圆的（凸包体积不到包围盒的 80%），朝它的中心；<br>目标是方的，朝包围盒上离自己最近的点。<code>none</code> 时跳过这一步</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g wide">
+      <div class="k">第 3 步 · 推到接触</div>
+      <div class="t">选方向，然后逐步移动直到碰上</div>
+      <div class="d">
+        <ul>
+          <li><b>定过朝向</b>：只沿物体自己的正面轴移动（<code>toward</code> 向前，<code>away</code> 向后），保住刚定好的朝向关系</li>
+          <li><b>没定朝向</b>：方向取两个网格最近点的连线</li>
+          <li><b>目标有网格</b>：每步 1 cm，用两者的碰撞体（凸分解）做碰撞检测，碰上就停</li>
+          <li><b>目标是墙</b>：按包围盒一步算出距离</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node p">
+      <div class="k">结果</div>
+      <div class="t">留 1 cm 的缝，写入新位姿</div>
+      <div class="d">返回：原位置、新位置、移动距离、转到的角度。距离不到 1 mm 时直接报告"已经接触"</div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">为什么逐步检测</div><div>源码注释：如果把顶点投影到移动方向上算距离，高处的顶点（比如桌面边缘）会挡住移动，即使下面是空的。用凸分解后的碰撞体逐步检测，椅子才能推进桌子下面。</div></div>
+    <div class="mark a"><div class="who">为什么留缝</div><div>避免浮点误差让"刚好接触"在下一次物理检查里被报成 1 mm 的穿插。</div></div>
+    <div class="mark w"><div class="who">角落要两次</div><div>放进角落要 snap 两次：第一次贴一面墙，第二次贴另一面墙并带 <code>away</code>。最终朝向由第二次决定。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 06 ============ -->
+<section id="case">
+  <h2><span class="no">06</span>实例：椅子与衣柜</h2>
+  <p class="sub">取自 designer 提示词里的示例调用 · 不是运行记录</p>
+
+  <h3>椅子靠到餐桌边 <span class="h">类别 A：正面朝向目标</span></h3>
+  <div class="chain">
+    <div class="node y">
+      <div class="k">designer · 调用 1</div>
+      <div class="t">add_furniture_to_scene_tool("dining_chair", x=3.0, y=5.0, yaw=0)</div>
+      <div class="d">位置和角度都是估的，不要求准。得到 <code>dining_chair_0</code></div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">designer · 调用 2 → 工具执行</div>
+      <div class="t">snap_to_object_tool("dining_chair_0", "dining_table_1", orientation="toward")</div>
+      <div class="d">转到正面朝向桌子 → 沿正面方向每步 1 cm 往前推 → 碰到桌子停下，留 1 cm</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">designer · 调用 3</div>
+      <div class="t">check_physics → observe_scene</div>
+      <div class="d">物理检查没有违规，再看一眼渲染</div>
+    </div>
+  </div>
+  <p class="loopnote">提示词的说法：原来要"放置 → 核对朝向 → 改角度 → 贴合"四步以上，现在三步。</p>
+
+  <h3>衣柜靠墙 <span class="h">类别 B：正面必须背向墙</span></h3>
+  <div class="chain">
+    <div class="node y">
+      <div class="k">designer · 调用 1</div>
+      <div class="t">add_furniture_to_scene_tool("wardrobe", x=-1.5, y=3.0, yaw=90)</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">designer · 调用 2 → 工具执行</div>
+      <div class="t">snap_to_object_tool("wardrobe_0", "wall_north", orientation="away")</div>
+      <div class="d">转到正面背向北墙 → 向后推到贴墙。柜门朝向房间</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">critic · 之后的评审</div>
+      <div class="t">check_facing_tool("wardrobe_0", "wall_north", direction="away")</div>
+      <div class="d">不看图判断，用工具核对。提示词：柜门朝墙属于"家具无法使用"，功能性最高 3 分</div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">这两个例子说明</div><div>designer 只需要知道"椅子朝桌子""衣柜背靠墙"这类关系。它给的坐标可以差几十厘米，角度可以完全不对，工具会补上。</div></div>
+    <div class="mark w"><div class="who">不适用的情况</div><div>提示词禁止把茶几 snap 到沙发上：两者之间要留 0.3–0.5 m 的腿部空间。这种"应该有间距"的关系仍然靠 designer 自己给坐标，再用物理检查确认。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 07 ============ -->
+<section id="manip">
+  <h2><span class="no">07</span>小物件：逐件家具</h2>
+  <p class="sub">stateful_manipuland_agent.py · 每件家具一组全新的三角色会话</p>
+
+  <div class="chain">
+    <div class="node y">
+      <div class="k">VLM · 一次调用</div>
+      <div class="t">哪些家具上要放东西</div>
+      <div class="d">对每件选中的家具给出：建议放的物品（必须的和可选的分开）、提示词里的约束、风格说明</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node y">
+      <div class="k">VLM · 一次调用</div>
+      <div class="t">每件家具的上下文家具</div>
+      <div class="d">2 m 内的邻居里挑出相关的，比如桌子周围的椅子。之后渲染时一起画出来，用来判断桌面物品该朝哪边</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node b">
+      <div class="k">循环 · 对每件选中的家具</div>
+      <div class="t">以下步骤重复一遍</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">harness</div>
+      <div class="t">提取这件家具的支撑面</div>
+      <div class="d">一个面都没有（比如植物）就跳过。见 <a href="#surface">08</a></div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node y">
+      <div class="k">新建 planner / designer / critic</div>
+      <div class="t">和 <a href="#round">03</a> 相同的循环，最多 2 轮评审</div>
+      <div class="d">会话是新的，不带上一件家具的历史。观察图只画这件家具、它上面的物体和上下文家具</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">harness · 这件家具的后处理</div>
+      <div class="t">去穿插投影 + 5 秒重力仿真</div>
+      <div class="d">只取"墙 + 地面 + 这件家具 + 它上面的物体"，家具固定。<br>下落超过 0.3 m 且落到地上的小物件被移除</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node p">
+      <div class="k">写回</div>
+      <div class="t">小物件的新位姿合并回完整场景</div>
+      <div class="d">某件家具出错不影响其他家具：记日志，继续下一件</div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">为什么逐件</div><div>两个原因：每件家具一个新会话，token 用量有上限；每次物理求解只涉及大约 7 个物体，比整场景 300 多个物体容易得多。</div></div>
+    <div class="mark a"><div class="who">检查按家具过滤</div><div>处理某件家具时，别的家具上的小物件引起的碰撞不报给当前的 designer。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 08 ============ -->
+<section id="surface">
+  <h2><span class="no">08</span>支撑面与面内放置</h2>
+  <p class="sub">support_surface_extraction.py + manipuland_tools.py · 高度不由模型给</p>
+
+  <h3>从家具网格提取支撑面</h3>
+  <div class="flow">
+    <div class="step">
+      <div class="dot">01</div>
+      <div class="body">
+        <div class="name">按法向聚类</div>
+        <div class="io2">三角面按法向相似度和邻接关系分组，留下法向朝上的（z 分量 ≥ 0.95）</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">02</div>
+      <div class="body">
+        <div class="name">按高度拆分</div>
+        <div class="io2">同一法向但不同高度的面分开：书架的每层是一个面</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">03</div>
+      <div class="body">
+        <div class="name">定高度和边界</div>
+        <div class="io2">面的高度取顶点高度的高分位数，再抬高 1 cm，让物体放上去后靠重力落稳；边界取凸包</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">04</div>
+      <div class="body">
+        <div class="name">量净空</div>
+        <div class="io2">从面上的顶点向上发射线，打到家具自身就记下距离，取第 10 百分位。净空不到 5 cm 的面丢弃</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>放置</h3>
+  <p><code>list_support_surfaces</code> 返回每个面的 id、面积、高度、净空。然后：</p>
+<pre>place_manipuland_on_surface(asset_id, surface_id, position_x, position_z, rotation_degrees)
+<span class="c"># 坐标原点在面的中心；x 是左右，另一个是前后；旋转绕面的法向</span></pre>
+
+  <table>
+    <thead><tr><th>校验</th><th>不通过时</th></tr></thead>
+    <tbody>
+      <tr><td>落点在面的凸包内</td><td rowspan="3">返回错误和原因，场景不变。<br>例："物体高 0.32 m，超过该面净空 0.25 m。请确认是不是选错了面。"</td></tr>
+      <tr><td>物体的凸包占地在面内。顶面先把占地缩小 5% 再判断，允许少量悬出；隔层不允许</td></tr>
+      <tr><td>物体高度不超过该面的净空</td></tr>
+    </tbody>
+  </table>
+
+  <div class="figs">
+    <figure>
+      <img src="assets/reference-agents/ss_multi_surface.jpg" alt="书架的每个支撑面用不同颜色标出并编号">
+      <figcaption>多层家具：每个支撑面一个编号和颜色，designer 按编号选面。</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/reference-agents/ss_manipuland_top.jpg" alt="桌面俯视图，带面内坐标网格、物体标签和朝向箭头">
+      <figcaption>单个面的俯视图：红点是面内坐标，蓝色标签是物体，箭头是正面方向。</figcaption>
+    </figure>
+  </div>
+  <p style="font-size:13px;color:var(--ink-3)">图片来自仓库的 <code>tests/integration/reference_renders/</code>（MIT）。</p>
+
+  <h3>组合工具</h3>
+  <table>
+    <thead><tr><th>工具</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td><code>create_stack</code></td><td>从下到上叠一摞（盘子、书），作为一个整体移动</td></tr>
+      <tr><td><code>fill_container</code></td><td>往容器里放东西（果盘、笔筒）</td></tr>
+      <tr><td><code>create_arrangement</code></td><td>在托盘这类扁平容器上按给定坐标摆放</td></tr>
+      <tr><td><code>create_pile</code></td><td>随机投放后用物理落稳，得到自然的一堆</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark e"><div class="who">一个负面结果</div><div>还有一个 <code>resolve_penetrations</code> 工具：让 designer 主动调用，把一个面上重叠的物体挤开。它被注释掉了，配置文件的说明是"实验中成功率 0%，agent 改用删除和移动来补偿"。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 09 ============ -->
+<section id="physics">
+  <h2><span class="no">09</span>物理</h2>
+  <p class="sub">physics_validation.py + physical_feasibility.py · 检查给 agent 看 · 投影和仿真在 agent 之后兜底</p>
+
+  <h3>check_physics：碰撞判定</h3>
+  <table>
+    <thead><tr><th>方面</th><th>做法</th></tr></thead>
+    <tbody>
+      <tr><td>几何</td><td>每个物体的碰撞体（凸分解）。检查时所有物体都设成自由体，这样固定的家具之间也会被查到</td></tr>
+      <tr><td>度量</td><td>Drake 的成对有符号距离，只取负值（穿插）。同一对物体只报一次</td></tr>
+      <tr><td>阈值</td><td>穿插超过 1 mm 就报</td></tr>
+      <tr><td>地面</td><td>放宽到 5 cm</td></tr>
+      <tr><td>物体与自己所在的家具</td><td>放宽到 2 cm，算作正常接触。其他任何一对都不放宽</td></tr>
+      <tr><td>其他违规</td><td>挡住门的开合、堵死通道、超过墙高（都算失败）；挡窗（只警告）；地毯互相重叠或伸到墙下</td></tr>
+    </tbody>
+  </table>
+
+  <h3>投影 + 仿真</h3>
+  <div class="chain">
+    <div class="node b">
+      <div class="k">输入</div>
+      <div class="t">agent 摆完的场景（或其中一件家具的子场景）</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">阶段 1 · 去穿插投影</div>
+      <div class="t">带"最小距离"约束的优化，求最小的移动量</div>
+      <div class="d">旋转固定，只动位置。物体很多时只把有碰撞的设成可动。<br>单个面上的版本还约束物体不出面的边界</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">阶段 2 · 重力仿真</div>
+      <div class="t">让物体落稳，六个自由度都放开</div>
+      <div class="d">每件家具后 5 秒；整场景 15 秒；步长 1 ms</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">清理</div>
+      <div class="t">移除倒下或掉落的物体</div>
+      <div class="d">家具：倾斜超过 45°。小物件：下落超过 0.3 m 并落到地上</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node p">
+      <div class="k">输出</div>
+      <div class="t">更新后的位姿</div>
+      <div class="d">任何一步出错都退回输入的场景，不中断流程</div>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>何时</th><th>范围</th><th>谁能动</th></tr></thead>
+    <tbody>
+      <tr><td>家具 agent 结束后</td><td>整个房间</td><td>所有家具</td></tr>
+      <tr><td>每件家具的小物件摆完后</td><td>墙 + 地面 + 这件家具 + 它上面的物体</td><td>只有小物件</td></tr>
+      <tr><td>全部结束后</td><td>整个场景</td><td>只有小物件</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">分工</div><div><code>check_physics</code> 是给 agent 的反馈，要求它自己改到零碰撞。投影和仿真不经过 agent，是它没改干净时的兜底，也顺便把略微悬空的物体落到面上。</div></div>
+    <div class="mark w"><div class="who">对重建的含义</div><div>它可以直接删掉倒下的物体。重建不能删，但"仿真前后位移了多少"本身是一个质量信号。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 10 ============ -->
+<section id="views">
+  <h2><span class="no">10</span>观察图</h2>
+  <p class="sub">observe_scene · 没有照片可比 · 所以把度量信息直接画在图上</p>
+
+  <div class="figs">
+    <figure>
+      <img src="assets/reference-agents/ss_furniture_top.jpg" alt="房间俯视图，带坐标网格、物体标签、包围盒和朝向箭头">
+      <figcaption>家具阶段的俯视图。红点和数字是世界坐标（米）；蓝框是包围盒；蓝色标签是物体 id 和墙的名字；箭头是每件家具的正面方向；左下角是坐标轴。</figcaption>
+    </figure>
+  </div>
+  <p style="font-size:13px;color:var(--ink-3)">图片来自仓库的 <code>tests/integration/reference_renders/</code>（MIT）。</p>
+
+  <table>
+    <thead><tr><th>方面</th><th>家具阶段</th><th>小物件阶段</th></tr></thead>
+    <tbody>
+      <tr><td>视图</td><td colspan="2">配置是 1 张俯视（1024 px）加 4 张侧视（512 px）。提示词里写的 9 张对应另一个可选布局</td></tr>
+      <tr><td>画哪些物体</td><td>整个房间</td><td>当前家具、它上面的物体、上下文家具。墙不画</td></tr>
+      <tr><td>坐标</td><td>世界坐标网格</td><td>支撑面的面内坐标网格</td></tr>
+      <tr><td>其他</td><td>挡住视线的墙自动隐藏；门窗有标签</td><td>多个支撑面各用一种颜色并编号；带门或抽屉的家具打开后渲染</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">图是给坐标用的</div><div>designer 要给的是数字。把坐标网格画在图上，它可以直接从图里读出"桌子大约在 (1.25, 2.5)"。</div></div>
+    <div class="mark w"><div class="who">但朝向不靠图</div><div>两份提示词都写明：透视会造成错觉，朝向和碰撞必须用工具核对，工具结论优先于图上的印象。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 11 ============ -->
+<section id="context">
+  <h2><span class="no">11</span>上下文控制</h2>
+  <p class="sub">图片是主要开销 · 三个机制</p>
+
+  <table>
+    <thead><tr><th>机制</th><th>做法</th><th>配置值</th></tr></thead>
+    <tbody>
+      <tr><td>轮次裁剪</td><td>只有最近的轮次保留完整内容和图片。更早的轮次去掉图片，文字部分可以用模型摘要成一段</td><td>保留最近 1 轮；摘要开启</td></tr>
+      <tr><td>轮内裁剪</td><td>同一轮里多次观察时，只保留最近几次的图片</td><td>最近 2 次（小物件阶段）</td></tr>
+      <tr><td>重复调用拦截</td><td>在最近若干次调用的窗口里，同一个调用（同名同参数）重复太多次就返回错误，并提示先刷新场景状态再试</td><td>窗口 30 次，上限 25 次</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">加上逐件新会话</div><div>小物件阶段的上下文不会随家具数量增长：每件家具从空会话开始，只带这件家具的任务说明。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 12 ============ -->
+<section id="code">
+  <h2><span class="no">12</span>代码位置</h2>
+  <p class="sub">路径相对 Submodule/scenesmith/ · 行号是定义行</p>
+
+  <table>
+    <thead><tr><th>环节</th><th>文件 : 行</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>阶段顺序</td><td><code>scenesmith/experiments/indoor_scene_generation.py:464</code></td><td><code>_generate_room</code>；家具后处理 <code>:586</code>；最终后处理 <code>:834</code></td></tr>
+      <tr><td>三角色框架</td><td><code>scenesmith/agent_utils/base_stateful_agent.py:94</code></td><td>planner 工具 <code>:663</code>；评审 <code>:762</code></td></tr>
+      <tr><td>回滚</td><td><code>.../base_stateful_agent.py:400</code></td><td>判定；执行 <code>:442</code>；结束时自动检查 <code>:479</code></td></tr>
+      <tr><td>家具放置</td><td><code>scenesmith/furniture_agents/tools/furniture_tools.py:273</code></td><td>生成 <code>:218</code>；移动 <code>:311</code>；缩放 <code>:376</code></td></tr>
+      <tr><td>snap</td><td><code>scenesmith/furniture_agents/tools/scene_tools.py:112</code></td><td>实现 <code>:578</code>；定朝向 <code>:411</code></td></tr>
+      <tr><td>snap 的三步</td><td><code>scenesmith/furniture_agents/tools/snapping_helpers.py</code></td><td>先推开 <code>:520</code>；逐步推到接触 <code>:320</code>；算法选择 <code>:782</code></td></tr>
+      <tr><td>朝向核对</td><td><code>.../scene_tools.py:73</code></td><td>实现 <code>:175</code></td></tr>
+      <tr><td>家具观察与检查</td><td><code>scenesmith/furniture_agents/tools/vision_tools.py:132</code></td><td>物理 <code>:175</code>；通行性 <code>:186</code></td></tr>
+      <tr><td>小物件主流程</td><td><code>scenesmith/manipuland_agents/stateful_manipuland_agent.py:681</code></td><td><code>add_manipulands</code>；单件家具的循环 <code>:617</code></td></tr>
+      <tr><td>选家具</td><td><code>scenesmith/agent_utils/scene_analyzer.py:267</code></td><td>上下文家具 <code>:411</code></td></tr>
+      <tr><td>支撑面提取</td><td><code>scenesmith/agent_utils/support_surface_extraction.py:1004</code></td><td>聚类 <code>:169</code>；按高度拆分 <code>:275</code>；净空 <code>:587</code></td></tr>
+      <tr><td>支撑面数据结构</td><td><code>scenesmith/agent_utils/room.py:168</code></td><td>面内坐标转世界位姿 <code>:243</code></td></tr>
+      <tr><td>面内放置</td><td><code>scenesmith/manipuland_agents/tools/manipuland_tools.py:557</code></td><td>实现 <code>:988</code>；占地校验 <code>:392</code>；列出支撑面 <code>:516</code></td></tr>
+      <tr><td>组合工具</td><td><code>.../manipuland_tools.py</code></td><td>叠放 <code>:696</code>；填充 <code>:746</code>；排列 <code>:797</code>；堆 <code>:848</code>；被禁用的工具 <code>:984</code></td></tr>
+      <tr><td>小物件观察</td><td><code>scenesmith/manipuland_agents/tools/vision_tools.py:108</code></td><td>只渲染相关物体</td></tr>
+      <tr><td>碰撞判定</td><td><code>scenesmith/agent_utils/physics_validation.py:155</code></td><td>放宽规则 <code>:330</code>；汇总成文字 <code>physics_tools.py:157</code></td></tr>
+      <tr><td>投影与仿真</td><td><code>scenesmith/agent_utils/physical_feasibility.py:1548</code></td><td>投影 <code>:761</code>；仿真 <code>:1327</code>；单件家具 <code>:1668</code></td></tr>
+      <tr><td>资产规范化</td><td><code>scenesmith/agent_utils/mesh_physics_analyzer.py:149</code></td><td>转姿态 <code>mesh_canonicalization.py:20</code>；等比缩放 <code>mesh_utils.py:368</code></td></tr>
+      <tr><td>图上标注</td><td><code>scenesmith/agent_utils/blender/annotations.py</code></td><td>—</td></tr>
+      <tr><td>上下文控制</td><td><code>scenesmith/agent_utils/turn_trimming_session.py:336</code></td><td>轮内裁剪 <code>intra_turn_image_filter.py:29</code>；重复拦截 <code>loop_detector.py:18</code></td></tr>
+      <tr><td>提示词</td><td><code>scenesmith/prompts/data/furniture_agent/</code><br><code>scenesmith/prompts/data/manipuland_agent/</code></td><td>designer、critic、planner 各一份，另有每次调用的指令模板</td></tr>
+      <tr><td>配置</td><td><code>configurations/furniture_agent/base_furniture_agent.yaml</code><br><code>configurations/manipuland_agent/base_manipuland_agent.yaml</code><br><code>configurations/experiment/base_experiment.yaml</code></td><td>轮数、阈值、渲染、物理、后处理</td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+<!-- ============ 13 ============ -->
+<section id="notes">
+  <h2><span class="no">13</span>说明与未确认</h2>
+  <p class="sub">这一页的可信范围</p>
+
+  <div class="marks">
+    <div class="mark w"><div class="who">只读代码</div><div>以上流程、阈值和配置值都来自读源码、提示词和配置文件，没有运行验证。运行它需要 Drake、Blender 服务和 OpenAI 接口。06 的实例取自提示词里的示例，不是运行记录。</div></div>
+    <div class="mark w"><div class="who">没有展开的部分</div><div>户型、墙面物体、天花板物体三个阶段没有读细节。资产生成和检索的路由只看了入库前的规范化。</div></div>
+    <div class="mark w"><div class="who">配置注释不一致</div><div>重复调用拦截的配置值是"上限 25 次"，旁边的注释写的是"2 次相同调用后拦截"；支撑面最小面积的值和注释的单位也对不上。这一页用的是配置值。</div></div>
+  </div>
+
+  <p style="font-size:13.5px;color:var(--ink-3)">相关页面：<a href="reference-litereality-assembly.html">LiteReality-Agent 的组装</a> · <a href="reference-agents-lessons.md">两套参考实现的可借鉴经验（逐条带代码位置）</a> · <a href="scene-assembly-design.html">我们的方案</a></p>
+</section>
+
+<footer>
+  <p>SceneAssembly · Reference · scenesmith @ 67cc408 · 整理于 2026-11-12</p>
+</footer>
+</main>
+</div>
+<script>
+  const rail=document.getElementById('rail');
+  if(rail){
+    const links=[...rail.querySelectorAll('a')];
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){
+          links.forEach(l=>l.classList.remove('on'));
+          const a=rail.querySelector(`a[href="#${e.target.id}"]`);
+          if(a)a.classList.add('on');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section[id]').forEach(s=>obs.observe(s));
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>参考实现 · LiteReality-Agent 的组装</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --model:#7c3aed; --model-soft:#f3eefe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr); max-width:1180px; margin:0 auto; padding:0 28px 120px}
+  @media (min-width:1080px){
+    .wrap{grid-template-columns:230px minmax(0,1fr); gap:56px; padding-left:36px; padding-right:36px}
+    .rail{position:sticky; top:0; align-self:start; max-height:100vh; overflow:auto; padding:44px 0}
+  }
+  .rail{display:none}
+  @media (min-width:1080px){ .rail{display:block} }
+  .rail-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px}
+  .rail a{display:block; padding:7px 12px; margin:1px 0; border-radius:6px; color:var(--ink-2); text-decoration:none; font-size:13.5px; border-left:2px solid transparent}
+  .rail a:hover{background:var(--line-2); color:var(--ink)}
+  .rail a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+  .rail a .n{font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:7px}
+  .rail a.on .n{color:var(--accent)}
+
+  header.top{padding:56px 0 34px; border-bottom:1px solid var(--line); margin-bottom:8px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+  h1{margin:0 0 14px; font-size:clamp(28px,3.6vw,40px); line-height:1.2; letter-spacing:-.022em; font-weight:700}
+  .lede{margin:0; max-width:64ch; color:var(--ink-2); font-size:16.5px}
+  .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+
+  section{padding-top:56px; scroll-margin-top:24px}
+  h2{margin:0 0 6px; font-size:23px; letter-spacing:-.014em; font-weight:700; display:flex; align-items:baseline; gap:12px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; letter-spacing:.04em}
+  .sub{margin:0 0 22px; color:var(--ink-3); font-size:14px; font-family:var(--mono)}
+  h3{margin:34px 0 10px; font-size:16.5px; font-weight:650; letter-spacing:-.006em}
+  h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  ul,ol{margin:0 0 14px; padding-left:22px; line-height:1.8}
+  li{margin-bottom:4px}
+  code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.8px; line-height:1.65}
+  pre .c{color:#7d8894} pre .k{color:#7dd3fc}
+
+  .io{border:1px solid var(--line); border-radius:10px; background:var(--card); margin:0 0 26px; overflow:hidden}
+  .io .row{display:grid; grid-template-columns:76px minmax(0,1fr); gap:16px; padding:13px 18px; border-bottom:1px solid var(--line-2)}
+  .io .row:last-child{border-bottom:none}
+  .io .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:700; padding-top:3px}
+  .io .val{font-size:14.5px; line-height:1.7}
+
+  .flow{display:grid; gap:0; margin:26px 0 8px}
+  .step{display:grid; grid-template-columns:34px minmax(0,1fr); gap:16px; align-items:start}
+  .step .dot{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:13px; font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .step .dot.m{background:var(--model-soft); color:var(--model); border-color:#ddd0fb}
+  .step .dot.w{background:var(--warn-soft); color:var(--warn); border-color:#f2ddb4}
+  .step .dot.e{background:var(--stop-soft); color:var(--stop); border-color:#f3c9c9}
+  .step .body{padding:5px 0 26px; border-bottom:1px dashed var(--line)}
+  .step:last-child .body{border-bottom:none}
+  .step .name{font-weight:650; font-size:15.5px; margin-bottom:3px}
+  .step .io2{font-family:var(--mono); font-size:12.3px; color:var(--ink-3); line-height:1.7}
+  .step .io2 em{font-style:normal; color:var(--ink-2)}
+
+  .marks{display:grid; gap:10px; margin:16px 0}
+  .mark{display:grid; grid-template-columns:74px minmax(0,1fr); gap:14px; padding:12px 15px; border-radius:8px; font-size:14.5px; line-height:1.65}
+  .mark .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding-top:2px}
+  .mark.a{background:var(--accent-soft); border:1px solid #bfe3dd} .mark.a .who{color:var(--accent)}
+  .mark.m{background:var(--model-soft); border:1px solid #ddd0fb} .mark.m .who{color:var(--model)}
+  .mark.w{background:var(--warn-soft); border:1px solid #f2ddb4} .mark.w .who{color:var(--warn)}
+  .mark.e{background:var(--stop-soft); border:1px solid #f3c9c9} .mark.e .who{color:var(--stop)}
+
+  .note{background:var(--accent-soft); border:1px solid #bfe3dd; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+  .warn{background:var(--warn-soft); border:1px solid #f2ddb4; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+
+  .stats{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0 22px}
+  @media (max-width:760px){ .stats{grid-template-columns:1fr} }
+  .stat{border:1px solid var(--line); border-radius:10px; background:var(--card); padding:14px 16px}
+  .stat .v{font-family:var(--mono); font-size:26px; font-weight:700; color:var(--accent); line-height:1.2}
+  .stat .l{font-size:13.5px; color:var(--ink-2); margin-top:6px; line-height:1.6}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; white-space:nowrap}
+  td code{font-size:12.6px}
+  tbody tr:hover{background:#f7f9fa}
+  td .s{display:inline-block; font-family:var(--mono); font-size:11px; border-radius:4px; padding:0 6px; margin-right:4px; border:1px solid; white-space:nowrap}
+  .s.done{color:#15803d; background:#ecfbf0; border-color:#bfe3c9}
+  .s.part{color:#a16207; background:#fefbe8; border-color:#f0dc9a}
+  .s.todo{color:var(--ink-3); background:var(--line-2); border-color:var(--line)}
+
+  .chain{display:flex; flex-direction:column; align-items:center; margin:26px 0 24px}
+  .node{width:min(100%,560px); border:2px solid var(--line); border-radius:12px; background:var(--card); padding:14px 18px; text-align:center}
+  .node .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-bottom:5px}
+  .node .t{font-weight:650; font-size:15px; line-height:1.45}
+  .node .d{font-size:13px; color:var(--ink-2); margin-top:6px; line-height:1.65}
+  .node .d code{font-size:11.8px}
+  .node .d ul{margin:8px 0 0; padding-left:22px; text-align:left}
+  .node.b{background:#eef4ff; border-color:#3b82f6} .node.b .k{color:#2563eb}
+  .node.g{background:#ecfbf0; border-color:#22a552} .node.g .k{color:#15803d}
+  .node.y{background:#fefbe8; border-color:#eab308} .node.y .k{color:#a16207}
+  .node.r{background:#fdeeee; border-color:#dc2626} .node.r .k{color:#b91c1c}
+  .node.p{background:#f4f0fd; border-color:#7c3aed} .node.p .k{color:#6d28d9}
+  .node.wide{width:min(100%,880px); text-align:left}
+  .node.wide .k,.node.wide .t{text-align:center}
+  .arrow{width:2px; height:28px; background:#9aa4b2; position:relative}
+  .arrow::after{content:""; position:absolute; left:50%; bottom:-2px; transform:translateX(-50%); border-left:6px solid transparent; border-right:6px solid transparent; border-top:9px solid #9aa4b2}
+  .split{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; width:min(100%,880px)}
+  .split .node{width:100%}
+  @media (max-width:760px){ .split{grid-template-columns:1fr} }
+  .loopnote{font-family:var(--mono); font-size:12px; color:var(--ink-3); margin:6px 0 0; text-align:center}
+
+  .layers{display:grid; grid-template-columns:120px minmax(0,1fr); gap:0; border:1px solid var(--line); border-radius:10px; background:var(--card); overflow:hidden; margin:16px 0 22px}
+  .layers .lv{font-family:var(--mono); font-size:11.5px; font-weight:700; letter-spacing:.06em; color:var(--ink-3); padding:12px 14px; border-bottom:1px solid var(--line-2); background:#f7f9fa}
+  .layers .its{padding:10px 14px; border-bottom:1px solid var(--line-2); display:flex; flex-wrap:wrap; gap:6px}
+  .layers .lv:nth-last-child(2), .layers .its:last-child{border-bottom:none}
+  .chip{font-size:13px; border:1px solid #c9d6e2; border-radius:6px; padding:2px 9px; background:#fff}
+  .chip.w{border-color:#f2ddb4; background:var(--warn-soft)}
+  .chip.dash{border-style:dashed}
+
+  .bar{display:flex; height:38px; border-radius:8px; overflow:hidden; border:1px solid var(--line); font-size:13.5px; margin:10px 0 6px}
+  .bar div{display:flex; align-items:center; justify-content:center; color:#fff; white-space:nowrap; padding:0 10px}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+
+  .figs{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:18px 0 10px}
+  .figs:has(figure:only-child){grid-template-columns:minmax(0,640px)}
+  @media (max-width:760px){ .figs{grid-template-columns:1fr} }
+  figure{margin:0; border:1px solid var(--line); border-radius:10px; background:var(--card); overflow:hidden}
+  figure img{display:block; width:100%; height:auto}
+  figcaption{padding:10px 14px; font-size:13px; color:var(--ink-2); line-height:1.6; border-top:1px solid var(--line-2)}
+  td[rowspan]{vertical-align:middle}
+  .mark{grid-template-columns:108px minmax(0,1fr)}
+  #code td:first-child{white-space:nowrap}
+  #code td:nth-child(2){width:46%}
+  #code td:nth-child(2) code{word-break:break-all}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="rail" id="rail">
+  <div class="rail-title">参考 · LiteReality-Agent</div>
+  <a href="#overview"><span class="n">00</span>总览</a>
+  <a href="#repr"><span class="n">01</span>输入与表示</a>
+  <a href="#check"><span class="n">02</span>盒子阶段的检查</a>
+  <a href="#repair"><span class="n">03</span>确定性修复</a>
+  <a href="#agent"><span class="n">04</span>布局 agent</a>
+  <a href="#case"><span class="n">05</span>实例：过深的台面</a>
+  <a href="#fit"><span class="n">06</span>资产进盒</a>
+  <a href="#author"><span class="n">07</span>作者 agent 与支撑声明</a>
+  <a href="#tools"><span class="n">08</span>检查与渲染工具</a>
+  <a href="#accept"><span class="n">09</span>验收循环</a>
+  <a href="#publish"><span class="n">10</span>发布</a>
+  <a href="#code"><span class="n">11</span>代码位置</a>
+  <a href="#notes"><span class="n">12</span>说明与未确认</a>
+</nav>
+
+<main>
+
+<header class="top">
+  <div class="eyebrow">SceneAssembly · Reference · LiteReality-Agent</div>
+  <h1>LiteReality-Agent：组装是怎么做的</h1>
+  <p class="lede">
+    它把一次手机扫描变成可仿真的房间。组装分两次：先在物体盒子上把布局修到没有碰撞，再把生成的资产按盒子放进去；
+    之后由一个 agent 补上小物件并声明支撑关系，最后过一道"几何检查 + 独立看图"的验收。
+    模型只在几何解决不了的地方出场，而且它的每个提议都要过几何的门。
+  </p>
+  <div class="meta">
+    <span class="tag">仓库 <b>Submodule/LiteReality-Agent</b></span>
+    <span class="tag">提交 <b>28ffe1f</b></span>
+    <span class="tag">输入 <b>Apple RoomPlan 扫描</b></span>
+    <span class="tag">场景表示 <b>Room.py + SHELL</b></span>
+    <span class="tag">读码日期 <b>2026-11-11</b></span>
+    <span class="tag">状态 <b>只读代码 · 未运行</b></span>
+  </div>
+</header>
+
+
+<!-- ============ 00 ============ -->
+<section id="overview">
+  <h2><span class="no">00</span>总览</h2>
+  <p class="sub">五步 · 第 2、3、4 步会调模型 · 每一步后面都有确定性的检查</p>
+
+  <div class="flow">
+    <div class="step">
+      <div class="dot">01</div>
+      <div class="body">
+        <div class="name">盒子阶段：检查 + 确定性修复</div>
+        <div class="io2"><em>输入</em> RoomPlan 的墙、门窗、物体盒（中心 / 尺寸 / yaw） &nbsp;→&nbsp; <em>输出</em> 违规列表，以及搜索出的最好布局</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">02</div>
+      <div class="body">
+        <div class="name">布局 agent：看照片，提一个动作</div>
+        <div class="io2"><em>输入</em> 仍有违规的物体 + 画了盒子的照片 &nbsp;→&nbsp; <em>输出</em> 通过接受门的修改；过不了门的连同原因回传给下一轮</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">03</div>
+      <div class="body">
+        <div class="name">资产进盒</div>
+        <div class="io2"><em>输入</em> 修好的盒子 + 每个物体的 GLB &nbsp;→&nbsp; <em>输出</em> Room.py：资产三个轴分别缩放到盒子的宽、深、高</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">04</div>
+      <div class="body">
+        <div class="name">作者 agent：补材质、灯、固定物、小物件</div>
+        <div class="io2"><em>输入</em> Room.py + 证据包（照片、深度、点云、测量工具） &nbsp;→&nbsp; <em>输出</em> 修改后的 Room.py；每个新物体声明 rests_on 或 attached_to</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot w">05</div>
+      <div class="body">
+        <div class="name">验收循环 + 发布</div>
+        <div class="io2"><em>输入</em> 编译出的 Room.glb &nbsp;→&nbsp; <em>输出</em> 通过，或交给修复 agent 再来一轮（最多 2 轮）；发布前再做一次网格去穿插和验收</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark m"><div class="who">模型</div><div>决定"这个盒子哪里错了"：尺寸记深了、该贴哪面墙、是不是两个物体被合并成了一个。还负责补扫描看不到的东西。</div></div>
+    <div class="mark a"><div class="who">几何</div><div>算所有厘米数：贴墙距离、角落里裁多少、推开多远、落到台面的高度。并且决定模型的提议留不留。</div></div>
+    <div class="mark w"><div class="who">和我们的差别</div><div>它的输入已经有墙体线段和带朝向的物体盒，我们只有扫描点云、地面高度和轴对齐矩阵。它的贴墙类规则我们暂时用不上。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 01 ============ -->
+<section id="repr">
+  <h2><span class="no">01</span>输入与表示</h2>
+  <p class="sub">房间是一段 Python 程序 · 布局是其中一个字典</p>
+
+  <div class="io">
+    <div class="row"><div class="lbl">Room.py</div><div class="val">一个确定性的组装器，加一个 <code>SHELL</code> 字典。重新运行它就能重建整个房间，所以任何修改都要落在这个文件里。</div></div>
+    <div class="row"><div class="lbl">SHELL</div><div class="val"><code>walls</code>（起点、终点、厚度）· <code>openings</code>（所在墙、偏移、宽高、窗台高）· <code>objects</code>（每件家具一个盒子：<code>center</code>、<code>size</code>、<code>yaw</code>、<code>category</code>）· <code>floor_z</code>、<code>ceiling_z</code></div></div>
+    <div class="row"><div class="lbl">资产</div><div class="val">每个盒子对应一个 GLB。有的是神经网格（TRELLIS），有的是程序化生成、带关节（门、抽屉）。</div></div>
+    <div class="row"><div class="lbl">照片</div><div class="val">扫描时的 RGB 帧，带相机位姿和内参；另有 LiDAR 深度和点云。</div></div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">要点</div><div>布局阶段只动 <code>SHELL['objects']</code> 里的盒子，不碰网格。检查是纯算术，不需要 Blender，也不需要编译出的模型，所以可以在一次修复里试很多次。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 02 ============ -->
+<section id="check">
+  <h2><span class="no">02</span>盒子阶段的检查</h2>
+  <p class="sub">adjust.py · check() · 修复的优化目标就是它的输出</p>
+
+  <table>
+    <thead><tr><th>违规</th><th>判定</th><th>阈值</th></tr></thead>
+    <tbody>
+      <tr><td><code>object_clash</code></td><td>两个带朝向的盒子在俯视图上重叠，且共享一段高度。穿插深度取最短分离向量的长度</td><td>共享高度 &gt; 5 cm；重叠 &gt; 1 mm</td></tr>
+      <tr><td><code>wall_clash</code></td><td>占地越过墙线，或中心落在墙体内</td><td>越过 &gt; 5 cm</td></tr>
+      <tr><td><code>outside_room</code></td><td>占地的角点落在地面多边形之外</td><td>&gt; 5 cm</td></tr>
+      <tr><td><code>floating</code> / <code>sunk</code></td><td>落地类家具的底面高于或低于地面</td><td>高 &gt; 8 cm / 低 &gt; 5 cm</td></tr>
+      <tr><td><code>below_floor</code> / <code>above_ceiling</code></td><td>任何物体穿过地面或天花板</td><td>&gt; 5 cm</td></tr>
+      <tr><td><code>fixture_over_opening</code> 等</td><td>墙面固定物压在门窗上；门窗不在任何墙上或超出墙的长度</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">允许名单</div><div>有一张"本来就该重叠"的类别对表：椅子与桌子、水槽与柜子、烤箱与柜子、电视与柜子等。开放式架子（书架、货架）也不参与碰撞检查。检查和修复共用这张表，避免修复器去"修"正确的重叠。</div></div>
+    <div class="mark w"><div class="who">只记不罚</div><div>离地但挂在墙上的柜子记为 <code>wall_hung</code>，级别是 info：会写进报告，但不算失败，也不会被修复。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 03 ============ -->
+<section id="repair">
+  <h2><span class="no">03</span>确定性修复</h2>
+  <p class="sub">repair.py · 合法动作搜索 · 不会比输入更差</p>
+
+  <div class="chain">
+    <div class="node b">
+      <div class="k">输入</div>
+      <div class="t">扫描得到的 SHELL</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">预处理 · 只动 Z</div>
+      <div class="t">落地：把悬空的落地类家具放到地面</div>
+      <div class="d">挂墙的不动；门窗重新对齐到所在的墙</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g wide">
+      <div class="k">搜索 · 最多 14 轮 · 束宽 3</div>
+      <div class="t">每个违规提出若干候选动作 → 在副本上执行 → 打分</div>
+      <div class="d">
+        <ul>
+          <li><b>snap</b>：读成"在墙里"的安装类家具，贴回墙面</li>
+          <li><b>corner_fit</b>：放进两面墙的角落，必要时裁一点</li>
+          <li><b>slide</b> / <b>dewrap</b>：沿自己靠的墙滑动；同一面墙上的两件沿墙分开</li>
+          <li><b>separate</b>：按最短分离向量推开，带着同组的物体一起走（桌子带椅子）</li>
+          <li><b>shrink</b>：盒子记得太深时裁掉一部分，再贴回墙。最多裁 35%</li>
+          <li><b>push</b> / <b>return</b>：推出墙体；回到地面多边形内</li>
+          <li><b>drop</b>：删除重复检测。默认关闭，要设 <code>LR_LAYOUT_DROP=1</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">评分 · 字典序 · 越小越好</div>
+      <div class="t">（缺陷数，总穿插深度，总位移）</div>
+      <div class="d">缺陷数 = 违规数 + 被破坏的贴墙关系 + 移动超过 22 cm 的贴墙物体数</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node p">
+      <div class="k">输出</div>
+      <div class="t">搜索过程中见过的最好状态</div>
+      <div class="d">输入本身也在候选里，所以结果不会比输入差</div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">为什么用束搜索</div><div>纯贪心会卡住：有的房间里两件物体必须一起动，任何单步都会让分数变差。束搜索允许中途经过更差的状态，保证只在终点兑现。</div></div>
+    <div class="mark a"><div class="who">为什么穿插排第二</div><div>有的修复要两步：先裁掉过深的台面，才露出它和侧墙还有 7 cm 的重叠。如果只数违规个数，第一步就会被丢掉。</div></div>
+    <div class="mark w"><div class="who">为什么默认不删</div><div>移错了，看得到一个位置奇怪的盒子；删错了，房间里就少一个烤箱，下游没有任何环节会报告。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 04 ============ -->
+<section id="agent">
+  <h2><span class="no">04</span>布局 agent</h2>
+  <p class="sub">converge.py + agent.py · 确定性修复之后仍有违规才启动 · 最多 6 轮</p>
+
+  <div class="chain">
+    <div class="node b">
+      <div class="k">状态</div>
+      <div class="t">确定性修复后的布局 + 扫描基线</div>
+      <div class="d">如果修复结果相对扫描改动过大，整个丢弃，退回扫描原样交给 agent</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">harness · 选目标</div>
+      <div class="t">仍有违规的物体（碰撞的两方都算）+ 改动超限的物体</div>
+      <div class="d">每个目标处理前重新检查一次：前一个修改可能已经顺带解决了它</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g wide">
+      <div class="k">harness · 给一个物体准备上下文</div>
+      <div class="t">几何 + 照片 + 之前的失败</div>
+      <div class="d">
+        <ul>
+          <li>这个物体的尺寸、中心、yaw；违规类型、对方是谁、两者共享多少高度</li>
+          <li>1.2 m 内的墙（到墙面的间隙）；2.5 m 内的邻居，各带 2 张照片</li>
+          <li>扫描基线里它原来的样子；它被合并前的成员</li>
+          <li>2 张把当前盒子投影上去的原始帧（按画面占比挑，帧号至少隔 3）</li>
+          <li><code>previous_attempts</code>：之前被拒的提议和拒绝原因</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node y">
+      <div class="k">模型 · 一次调用</div>
+      <div class="t">读照片，回一个 JSON</div>
+      <div class="d"><code>resize</code> 给新尺寸 · <code>translate</code> 给新中心 · <code>attach</code> 给一或两面墙的名字 · <code>split</code> 拆回合并前的成员 · <code>none</code><br>
+        附 <code>confidence</code> 和一句话理由。用 <code>claude -p</code>，只开放 Read 工具</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">harness · 执行</div>
+      <div class="t">先查范围，再在副本上做</div>
+      <div class="d">单次改动：每个尺寸不超过 60%，中心不超过 0.6 m，高度不超过 5 cm。<br>
+        <code>attach</code> 的贴墙距离和角落裁剪由几何算；<code>resize</code> 之后自动把物体贴回它原来靠的墙</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">接受门</div>
+      <div class="t">（违规数，总穿插深度）严格下降，且没有破坏别的物体的贴墙关系</div>
+      <div class="d">之后再跑一次确定性修复收尾，并检查相对扫描的累计改动上限</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="split">
+      <div class="node y">
+        <div class="k">不通过</div>
+        <div class="t">丢弃，记下原因</div>
+        <div class="d">原因写进 <code>layout_feedback</code>，下一轮作为 <code>previous_attempts</code> 给模型。<br>连续两轮没有任何进展就停</div>
+      </div>
+      <div class="node p">
+        <div class="k">通过</div>
+        <div class="t">成为当前布局</div>
+        <div class="d">继续处理下一个目标；全部干净就停，状态记为 <code>validated</code></div>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">管线门</div>
+      <div class="t">从磁盘重新读盒子，再检查一遍</div>
+      <div class="d">仍有错误就抛异常，管线不往下走。上一份报告里写的"0 个违规"不被信任</div>
+    </div>
+  </div>
+
+  <h3>相对扫描的累计改动上限</h3>
+  <table>
+    <thead><tr><th>量</th><th>上限</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>水平位移</td><td>0.6 m</td><td rowspan="3">相对保存下来的扫描基线，不是相对上一步。超出的物体算作违规，即使它没有碰撞</td></tr>
+      <tr><td>垂直位移</td><td>0.08 m</td></tr>
+      <tr><td>每个尺寸</td><td>15%（桌、椅、沙发、床）<br>35%（其他）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark m"><div class="who">源码原话</div><div>"模型选择试什么，几何决定什么是真的。"以及："模型擅长判断'这个衣柜属于那个角落'，不该由它算厘米。"</div></div>
+    <div class="mark w"><div class="who">默认值</div><div>代码里布局 agent 默认开启（<code>LR_LAYOUT_AGENT</code> 默认为 1）；同目录的 README 写的是默认关闭，两者不一致，以代码为准。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 05 ============ -->
+<section id="case">
+  <h2><span class="no">05</span>实例：过深的台面</h2>
+  <p class="sub">根据源码注释整理 · Kitchen 场景的 Oven_Storage_Stove0 · 不是我跑出来的结果</p>
+
+  <div class="chain">
+    <div class="node b">
+      <div class="k">扫描</div>
+      <div class="t">一段合并后的台面，记录为 2.53 × 1.47 m</div>
+      <div class="d">厨房台面不会有一米半深。RoomPlan 把相邻的单元合并了，并把深度记长</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">检查</div>
+      <div class="t">wall_clash：约半米在后墙里</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">确定性修复 · 只会平移</div>
+      <div class="t">失败</div>
+      <div class="d">往外推，撞上中岛；沿墙滑，还是太深。问题在尺寸，不在位置</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node y">
+      <div class="k">模型</div>
+      <div class="t">看照片后回 resize，给出更浅的深度</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">第一版实现 · 被门拒绝</div>
+      <div class="t">绕中心缩小，两个面各缩一半</div>
+      <div class="d">深度多记了半米，缩小后只从墙里出来四分之一米，违规还在</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">修正 · 缩完自动贴回墙</div>
+      <div class="t">模型只给尺寸，位置由几何决定</div>
+      <div class="d">优先贴违规里点名的那面墙。之前贴的是"先找到的那面"，结果贴到了本来没问题的墙上</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node p">
+      <div class="k">结果</div>
+      <div class="t">通过接受门，写回盒子</div>
+      <div class="d">修好的盒子同时发给资产生成和房间组装。之前只发给了前者：台面按 63 cm 生成，又被拉回 87 cm 的旧盒子里</div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">这个例子说明</div><div>几何对"位置错"有办法，对"尺寸错"没办法，这正是需要看照片的地方。同时，模型给出正确方向之后，落到厘米上的事仍然要几何来做，而且做错了门会拦下来。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 06 ============ -->
+<section id="fit">
+  <h2><span class="no">06</span>资产进盒</h2>
+  <p class="sub">build_room.py · _place_in_box() · 盒子说了算</p>
+
+  <div class="flow">
+    <div class="step">
+      <div class="dot">01</div>
+      <div class="body">
+        <div class="name">量资产</div>
+        <div class="io2">导入 GLB，取它自己的轴对齐包围盒：宽 aw、深 ad、高 ah、中心</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">02</div>
+      <div class="body">
+        <div class="name">量盒子</div>
+        <div class="io2">从盒子取出中心、朝上方向、宽方向、深方向，以及 W、D、H</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">03</div>
+      <div class="body">
+        <div class="name">三个轴分别缩放</div>
+        <div class="io2">资产 X → 盒子宽，缩放 W/aw；资产 Y → 盒子深，缩放 D/ad；资产 Z → 盒子高，缩放 H/ah</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">04</div>
+      <div class="body">
+        <div class="name">定位</div>
+        <div class="io2">资产中心对齐盒子中心。朝向完全取盒子的 yaw，不按长宽比交换轴</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">前提</div><div>资产必须已经在统一的姿态里：上是 +Z，正面朝固定方向。程序化资产靠生成时的提示词规定这一点。源码注释说：之前按长宽比交换轴，反而把本来对的物体转了 90° 或转反了。</div></div>
+    <div class="mark a"><div class="who">放到台面上</div><div>另有 <code>place_on(目标, 资产, 偏移, yaw)</code>：读目标的顶面高度，物体底面落在上面，占地最多缩到台面的一半。</div></div>
+    <div class="mark w"><div class="who">和我们的差别</div><div>我们的资产来自 SAM3D，姿态不统一，有的还是倒置的。所以我们多一步"哪面朝上、哪面是正面"的判断；它没有这一步。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 07 ============ -->
+<section id="author">
+  <h2><span class="no">07</span>作者 agent 与支撑声明</h2>
+  <p class="sub">agent/author.py · 一次自定步调的会话 · 直接编辑 Room.py</p>
+
+  <p>这个 agent 负责扫描给不出的东西：墙面和地面材质、灯、插座和暖气这类固定物、桌面上的小物件。它有四套提示词，最新的一套（<code>open</code>）只给目标、证据和验收门，不规定步骤。</p>
+
+  <h3>证据包</h3>
+  <table>
+    <thead><tr><th>内容</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td>全部照片的缩略图总览</td><td>动手之前先看完，写下房间里有什么</td></tr>
+      <tr><td>每面墙、地面、天花板的正视拼接图</td><td>材质和固定物位置的参考</td></tr>
+      <tr><td>原始帧、位姿、内参、深度、点云</td><td>测量</td></tr>
+      <tr><td><code>probe_depth</code></td><td>照片上一个像素对应的三维点</td></tr>
+      <tr><td><code>triangulate</code></td><td>同一个特征在两张以上照片里点出来，求三维位置。LiDAR 失效的地方用（深色布料、玻璃、细腿）</td></tr>
+      <tr><td><code>height_profile</code></td><td>给一个占地范围，返回里面有哪些水平面及其高度。用来量桌面、层板的高度</td></tr>
+      <tr><td><code>pcd_slice</code></td><td>某个高度上的点云俯视切片</td></tr>
+    </tbody>
+  </table>
+
+  <h3>每个新增物体必须满足的两件事</h3>
+  <div class="marks">
+    <div class="mark a"><div class="who">成组</div><div>一个物体的所有零件用 <code>group_fixture(name, category, parts, ...)</code> 包成一个有名字的整体，比如 <code>Mug0</code>、<code>Radiator0</code>。</div></div>
+    <div class="mark a"><div class="who">声明支撑</div><div><code>rests_on="Table0"</code>、<code>rests_on="Floor0"</code> 或 <code>attached_to="Wall3"</code>，三者必居其一。放在带关节的家具上还要写 <code>support_part</code>，指明是哪个活动部件在托着它。</div></div>
+    <div class="mark e"><div class="who">声明必须是真的</div><div>提示词要求：底面的高度从支撑物的顶面读出来，不许凭眼睛摆。"悬空的物体会在仿真第一帧掉下去，穿插的物体会被引擎弹飞。"</div></div>
+  </div>
+
+  <div class="marks">
+    <div class="mark m"><div class="who">为什么不规定步骤</div><div>源码注释记录了一次对比：只给原始扫描和一页意图，模型自己先看完所有照片、从深度图量高度、做穿插和接触的自检，结果比照着步骤做的版本更接近照片。规定节奏原本是为了防止模型把预算花在便宜的调用上、最后才动手；作者认为这是 harness 的问题，用结果门解决更好。</div></div>
+    <div class="mark w"><div class="who">权限</div><div><code>open</code> 之前的三套提示词禁止移动家具盒子；<code>open</code> 允许，但要在总结里写明依据的测量值。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 08 ============ -->
+<section id="tools">
+  <h2><span class="no">08</span>检查与渲染工具</h2>
+  <p class="sub">agent 可调用 · 检查只报告不修改 · 渲染永远成对</p>
+
+  <h3>check_collisions</h3>
+  <table>
+    <thead><tr><th>方面</th><th>做法</th></tr></thead>
+    <tbody>
+      <tr><td>是否接触</td><td>用编译出的 Room.glb 里的真实三角网格判定（FCL）。只有这样才能分清"椅子塞在桌下"和"椅子穿过桌子"</td></tr>
+      <tr><td>穿多深、往哪移</td><td>不取自网格。生成的网格不是水密的，这种网格上的穿插深度不可信（源码举例：贴墙的桌子报出 1.16 m）。深度和方向取自盒子</td></tr>
+      <tr><td>返回</td><td>每条结果带解除它所需的移动量（世界坐标 Δx、Δy），以及"移另一个"和"缩小多少"的等价方案</td></tr>
+      <tr><td>谁决定</td><td>移动还是缩小由调用方看图决定：只是漂了一点的就移，画得太大的就缩</td></tr>
+    </tbody>
+  </table>
+
+  <h3>render</h3>
+  <p>不单独返回渲染图。每张都是同一个扫描相机位姿下的"渲染 | 照片"并排，可以指定整间房、某面墙或某个物体。渲染前如果 Room.py 改过，先强制重新编译，避免 agent 看到旧状态后得出"我的修改没生效"的结论。打分由另一个工具 <code>critic</code> 做，不混进图里。</p>
+
+  <div class="figs">
+    <figure>
+      <img src="assets/reference-agents/lr_compare_scene.jpg" alt="整间房的渲染与照片对比，每个物体带名称标签">
+      <figcaption>target="room"：左边是渲染，右边是同一帧的照片，每个物体带名称标签。</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/reference-agents/lr_compare_object.jpg" alt="单个物体的渲染与照片对比，物体的盒子画在两边">
+      <figcaption>target="Table0"：只标出这一个物体，盒子同时画在渲染和照片上。</figcaption>
+    </figure>
+  </div>
+  <p style="font-size:13px;color:var(--ink-3)">图片来自仓库的 <code>assets/doc/</code>（Apache-2.0）。</p>
+</section>
+
+
+<!-- ============ 09 ============ -->
+<section id="accept">
+  <h2><span class="no">09</span>验收循环</h2>
+  <p class="sub">realism_authoring/acceptance.py · 作者 agent 结束后由 harness 执行 · 缺任何一项检查都不算通过</p>
+
+  <div class="chain">
+    <div class="node g">
+      <div class="k">编译</div>
+      <div class="t">Room.py → Room.glb + room_layout.json</div>
+      <div class="d">这一轮的房间目录整份留档，不覆盖之前的尝试</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">检查 1 · 物体没有被改没</div>
+      <div class="t">物体清单和源网格文件的哈希，与作者 agent 开始前一致</div>
+      <div class="d">防止通过删掉难处理的物体、或悄悄换资产来过关</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r wide">
+      <div class="k">检查 2 · 几何</div>
+      <div class="t">支撑图 + 真实接触 + 网格碰撞</div>
+      <div class="d">
+        <ul>
+          <li><b>支撑图</b>：每个物体都声明了支撑；目标存在；没有环；沿着链能走到地面、墙或天花板</li>
+          <li><b>接触</b>：从物体底面取最多 128 个采样点向下，只和支撑物朝上的三角面求交。间隙和下陷都在 5 mm 内才算接触</li>
+          <li><b>稳定性</b>：接触点占比不到一半、且物体中心不在接触点凸包内，判为接触不足</li>
+          <li><b>柔性物体</b>（枕头、被子、地毯等）改用整个下表面采样，要求接触面积不小于 1 cm²</li>
+          <li><b>挂墙物体</b>：到墙的网格距离不超过 1 cm</li>
+          <li><b>碰撞</b>：真实网格的物体互碰、穿墙、挡住门窗。包围盒重叠只列出来供复查，不拦截</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node y">
+      <div class="k">检查 3 · 独立看图</div>
+      <div class="t">另一个模型调用，看 6 组"渲染 | 照片"</div>
+      <div class="d">它看不到作者 agent 的对话。通过条件：评分 ≥ 8、问题列表为空、声明所有物体都看过。<br>看完之后再核对一次文件哈希，确保检查的和交付的是同一份</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="split">
+      <div class="node y">
+        <div class="k">不通过 · 修复 agent</div>
+        <div class="t">读验收报告，只修报告里的问题</div>
+        <div class="d">工具只有 render、select_views、check_collisions；默认 40 步、600 秒。<br>提示词：先修支撑；不许删物体、加看不见的支撑、改检查代码或改报告。<br>修完回到"编译"。默认最多 2 轮</div>
+      </div>
+      <div class="node p">
+        <div class="k">通过</div>
+        <div class="t">写 author_acceptance.json</div>
+        <div class="d">里面有源文件、检查代码和构建产物的哈希。以后只有三者都没变，才认这份通过</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">三道检查的次序</div><div>便宜的在前。物体被改没或几何不过，就不花钱做看图评审。</div></div>
+    <div class="mark w"><div class="who">文档与代码</div><div><code>doc/QC/supporting_relationship.md</code> 说检查只对地面测量，并描述了"支撑物移动时带着上面的物体走"。代码里已经有物体对物体的接触核对；"带着走"的实现我没找到。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 10 ============ -->
+<section id="publish">
+  <h2><span class="no">10</span>发布</h2>
+  <p class="sub">room_qc/publish · 交付前的最后一遍 · 全部确定性，除了最后的验收</p>
+
+  <div class="flow">
+    <div class="step">
+      <div class="dot">01</div>
+      <div class="body">
+        <div class="name">网格去穿插</div>
+        <div class="io2">对真实网格检测到的物体互碰和穿墙，把能动的那一件推开，只改 SHELL 里的中心。贴墙的安装类家具不动，椅子、桌子、沙发让开；单次最多 30 cm</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">02</div>
+      <div class="body">
+        <div class="name">盒子级质量检查</div>
+        <div class="io2">有违规只记为警告，不中止</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">03</div>
+      <div class="body">
+        <div class="name">最终编译 + 材质烘焙</div>
+        <div class="io2">失败则中止，候选文件保留</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot e">04</div>
+      <div class="body">
+        <div class="name">对最终产物再做一次验收</div>
+        <div class="io2">和 09 相同的三道检查。不通过则发布失败，状态记为 needs_repair</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">卡住的四种情况</div><div>去穿插收不了尾时区分四种情况：已收敛；需要的移动超过上限（上游摆放有问题）；两件都贴墙、都不能动；轮数用尽。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 11 ============ -->
+<section id="code">
+  <h2><span class="no">11</span>代码位置</h2>
+  <p class="sub">路径相对 Submodule/LiteReality-Agent/src/litereality_agent/ · 行号是定义行</p>
+
+  <table>
+    <thead><tr><th>环节</th><th>文件 : 行</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>布局入口</td><td><code>pipeline/scene_init/layout/stage.py:105</code></td><td><code>run_layout</code>；调用处 <code>pipeline/scene_init/flow.py:147</code></td></tr>
+      <tr><td>检查</td><td><code>.../layout/adjust.py:425</code></td><td><code>check</code>；阈值 <code>:74-86</code></td></tr>
+      <tr><td>允许名单</td><td><code>.../layout/graph.py:88</code></td><td><code>EXPECTED_CONTAINMENT</code>；最短分离向量 <code>:311</code></td></tr>
+      <tr><td>确定性修复</td><td><code>.../layout/repair.py:592</code></td><td><code>repair</code>；评分 <code>:164</code>；候选动作 <code>:382</code></td></tr>
+      <tr><td>agent 循环</td><td><code>.../layout/converge.py:39</code></td><td><code>solve</code>；改动上限 <code>:10</code></td></tr>
+      <tr><td>单次提问</td><td><code>.../layout/agent.py:150</code></td><td><code>propose</code>；提示词 <code>:106</code>；上下文 <code>:51</code></td></tr>
+      <tr><td>接受门</td><td><code>.../layout/agent.py:229</code></td><td><code>apply_proposals</code>；范围检查 <code>:205</code>；缩后贴墙 <code>:180</code></td></tr>
+      <tr><td>照片证据</td><td><code>.../layout/evidence.py:14</code></td><td><code>prepare</code>：把盒子投影到原始帧</td></tr>
+      <tr><td>管线门</td><td><code>.../layout/validation.py:75</code></td><td><code>require_valid_layout</code></td></tr>
+      <tr><td>修复前后对比图</td><td><code>.../layout/report.py</code></td><td>每次运行都输出</td></tr>
+      <tr><td>资产进盒</td><td><code>room_ops/compile/build_room.py:757</code></td><td><code>_place_in_box</code>；放到台面 <code>:1126</code>；成组与支撑声明 <code>:198</code></td></tr>
+      <tr><td>作者 agent</td><td><code>agent/author.py:371</code></td><td><code>OPEN_PROMPT</code>；节奏规则 <code>:53</code></td></tr>
+      <tr><td>测量工具</td><td><code>evidence_kit/measure.py</code></td><td><code>probe_depth :49</code>、<code>triangulate :83</code>、<code>pcd_slice :107</code>、<code>height_profile :136</code></td></tr>
+      <tr><td>碰撞工具</td><td><code>agent/tools/check_collisions/tool.py</code></td><td>网格接触 <code>source/collision_mesh.py:137</code></td></tr>
+      <tr><td>渲染工具</td><td><code>agent/tools/render/tool.py</code></td><td>拼图 <code>source/compose.py</code></td></tr>
+      <tr><td>验收循环</td><td><code>pipeline/realism_authoring/acceptance.py:190</code></td><td><code>finish</code>；三道检查 <code>:127</code>；修复 agent <code>:94</code></td></tr>
+      <tr><td>几何总门</td><td><code>pipeline/room_qc/validate.py:195</code></td><td><code>validate</code></td></tr>
+      <tr><td>支撑核对</td><td><code>pipeline/room_qc/support_audit.py:261</code></td><td><code>audit</code>；支撑图 <code>:34</code>；接触 <code>:121</code></td></tr>
+      <tr><td>网格去穿插</td><td><code>pipeline/room_qc/correct.py</code></td><td>可移动性和校验在 <code>fix.py</code></td></tr>
+      <tr><td>发布</td><td><code>pipeline/room_qc/publish/__init__.py:109</code></td><td><code>run</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+<!-- ============ 12 ============ -->
+<section id="notes">
+  <h2><span class="no">12</span>说明与未确认</h2>
+  <p class="sub">这一页的可信范围</p>
+
+  <div class="marks">
+    <div class="mark w"><div class="who">只读代码</div><div>以上流程、阈值和默认值都来自读源码和仓库文档，没有运行验证。05 的实例整理自源码注释。</div></div>
+    <div class="mark w"><div class="who">未确认</div><div>神经网格（TRELLIS）在盒内的朝向怎么保证：没找到对它做位姿估计的步骤。程序化资产是靠提示词规定统一朝向的。</div></div>
+    <div class="mark w"><div class="who">没接上的代码</div><div><code>layout/agent_loop.py</code> 和 <code>toolcli.py</code> 是另一种形态：给 agent 一组命令行动词（summary / object / attach / move / resize / undo），每次修改都打印前后评分。但它引用的模块在仓库里不存在，也没有调用方，这一页没有把它算进流程。</div></div>
+  </div>
+
+  <p style="font-size:13.5px;color:var(--ink-3)">相关页面：<a href="reference-scenesmith-assembly.html">scenesmith 的组装</a> · <a href="reference-agents-lessons.md">两套参考实现的可借鉴经验（逐条带代码位置）</a> · <a href="scene-assembly-design.html">我们的方案</a></p>
+</section>
+
+<footer>
+  <p>SceneAssembly · Reference · LiteReality-Agent @ 28ffe1f · 整理于 2026-11-12</p>
+</footer>
+</main>
+</div>
+<script>
+  const rail=document.getElementById('rail');
+  if(rail){
+    const links=[...rail.querySelectorAll('a')];
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){
+          links.forEach(l=>l.classList.remove('on'));
+          const a=rail.querySelector(`a[href="#${e.target.id}"]`);
+          if(a)a.classList.add('on');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section[id]').forEach(s=>obs.observe(s));
+  }
+</script>
+</body>
+</html>

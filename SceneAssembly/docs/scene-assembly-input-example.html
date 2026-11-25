@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>一个批会话的输入 · 第 1 批 · scene0000_00</title><style>
+:root{color-scheme:light;--ink:#203247;--line:#d8e3ed;--blue:#14628b;--green:#2f7a45;--amber:#b27a12;--muted:#5b7181}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{margin:0;background:#f3f7fa;color:var(--ink);font:17px/1.75 system-ui,sans-serif}
+main{max-width:1180px;margin:auto;padding:32px 24px 80px}a{color:var(--blue)}
+h1{font-size:34px;line-height:1.3;margin:6px 0 10px}h2{font-size:25px;margin:46px 0 14px}h3{font-size:19px;margin:0 0 8px}h4{font-size:16px;margin:18px 0 6px;color:#38536a}p{margin:8px 0}
+header,.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px}
+.meta{font-size:14px;color:var(--muted);letter-spacing:.07em}.lead{font-size:19px}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}nav.toc a{font-size:14px;text-decoration:none;background:#e8f2f9;border:1px solid #cde1ef;border-radius:8px;padding:3px 10px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.note{border-left:4px solid #dfae4f;padding:12px 18px;background:#fff9e9;border-radius:0 10px 10px 0;margin:14px 0}
+table{width:100%;border-collapse:collapse;background:#fff;font-size:14.5px}th,td{text-align:left;vertical-align:top;border:1px solid var(--line);padding:7px 10px}th{background:#f6f9fb}
+.table{overflow:auto}code{font-size:.88em;background:#eef3f7;padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+figure{margin:16px 0;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px}figure svg{width:100%;height:auto;display:block}
+figcaption{font-size:14.5px;color:var(--muted);margin-top:8px}
+.big{font-size:30px;font-weight:700;line-height:1.2}.small{font-size:14px;color:var(--muted)}
+ol li,ul li{margin:4px 0}
+pre.msg{background:#0f1a24;color:#cfe3f3;border-radius:10px;padding:14px 16px;font:13px/1.55 ui-monospace,Menlo,Consolas,monospace;overflow:auto;white-space:pre;margin:8px 0}
+pre.msg .k{color:#7fd3a0}pre.msg .n{color:#f0c674}pre.msg .q{color:#9db8cc}
+.bundle{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:18px 0}
+.bhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:12px}
+.bhead .oid{font:700 20px ui-monospace,monospace;color:#14628b}.bhead .lb{font-weight:700}.bhead .tk{margin-left:auto;font-size:14px;color:var(--muted)}
+.shot{display:flex;gap:12px;align-items:flex-start;margin:10px 0;flex-wrap:wrap}
+.shot img{border:1px solid var(--line);border-radius:8px;max-width:100%;display:block}
+.lab{font-size:13px;color:var(--muted);margin:2px 0 4px}
+.held{width:330px}.held img{width:330px}
+.wide{flex:1 1 480px;min-width:320px}.wide img{width:100%}
+.tag{display:inline-block;font-size:12.5px;border-radius:6px;padding:1px 7px;margin-right:4px;background:#e8f2f9;border:1px solid #cde1ef;color:#14628b}
+.warn{background:#fdeaea;border-color:#e7b4b4;color:#a33}
+.ok{background:#e9f7ee;border-color:#b8d8c0;color:#2b6b3f}
+details summary{cursor:pointer;font-weight:600;color:var(--blue);margin:6px 0}
+@media(max-width:820px){.grid,.grid3{grid-template-columns:1fr}.held{width:100%}.held img{width:100%}h1{font-size:27px}main{padding:18px 12px}}
+</style></head><body><main>
+
+<header>
+<div class="meta">SCENEASSEMBLY · 会话输入实例 · 2026-11-10 · scene0000_00</div>
+<h1>一个批会话的输入：第 1 批，6 个物体</h1>
+<p class="lead">这一页是照 <a href="scene-assembly-design.html">方案页</a> §2 真的装配出来的一次会话输入。所有图都是按精确关键帧相机离线渲染的，所有数字都是这一批现算的。页面上每一张图、每一行文字，就是模型在那个上下文里实际看到的东西。</p>
+<nav class="toc"><a href="#batch">0 这一批</a><a href="#shape">1 输入的整体形状</a><a href="#shared">2 共享层</a><a href="#bundles">3 六个输入包</a><a href="#budget">4 预算</a><a href="#findings">5 这批暴露的问题</a></nav>
+</header>
+
+
+<h2 id="batch">0 · 这一批是什么</h2>
+<p>选第 1 批是因为它<b>自洽</b>：床是骨架，床头柜立在地上，枕头、两个未标注物、纸巾盒都压在它们上面。批内按支撑深度排序即可，不需要等别的批先落位。它同时踩到方案设想的三类难点——大物体、小占比物体、SAM3D 倒置。</p>
+<div class="grid3">
+<div class="card"><div class="big">6</div><p>个物体，按支撑深度排：bed → nightstand / tissue box → pillow / obj_0061 / obj_0062</p></div>
+<div class="card"><div class="big">5</div><p>张不同的主关键帧。6 个物体里 obj_0062 和 pillow 共用第 81 帧——这就是"共享关键帧"规则在起作用</p></div>
+<div class="card"><div class="big">15</div><p>张共视候选帧（6 个物体全部关键帧的并集）。装配器只发了其中 5 张</p></div>
+</div>
+<div class="table"><table>
+<tr><th style="width:13%">物体</th><th style="width:12%">label</th><th style="width:9%">主帧</th><th style="width:11%">mask 占比</th><th style="width:17%">扫描 bbox (m)</th><th style="width:17%">资产 (m)</th><th>处理顺序依据</th></tr>
+<tr><td><code>obj_0037</code></td><td>bed</td><td>63</td><td>37.35%</td><td>1.98×2.32×0.83</td><td>2.33×2.78×0.78</td><td>骨架：所有上层物的支撑面</td></tr>
+<tr><td><code>obj_0049</code></td><td>nightstand</td><td>27</td><td>4.57%</td><td>0.48×0.47×0.82</td><td>0.56×0.52×0.78</td><td>立在地上，先于其上的纸巾盒</td></tr>
+<tr><td><code>obj_0048</code></td><td>tissue box</td><td>26</td><td>4.34%</td><td>0.46×0.43×0.41</td><td>0.46×0.84×0.38</td><td>压在 nightstand 上</td></tr>
+<tr><td><code>obj_0062</code></td><td>object (unlabelled)</td><td>81</td><td>6.22%</td><td>0.66×0.77×0.20</td><td>0.43×0.55×0.19</td><td>躺在床上</td></tr>
+<tr><td><code>obj_0016</code></td><td>pillow</td><td>81</td><td>4.70%</td><td>0.90×0.61×0.40</td><td>1.04×0.57×0.38</td><td>躺在床上</td></tr>
+<tr><td><code>obj_0061</code></td><td>object (unlabelled)</td><td>53</td><td>4.61%</td><td>0.31×0.23×0.12</td><td>0.23×0.30×0.12</td><td>压在 bed + obj_0062 上</td></tr>
+</table></div>
+
+<h2 id="shape">1 · 输入的整体形状</h2>
+<p>一次会话的输入 = <b>一段共享层（发一次）</b> + <b>六个物体包（各含图与文字）</b>。共享层保证 agent 知道自己在哪个场景、还有什么没放；物体包保证每个物体都能被"看清"而不是"猜对"。</p>
+<figure>
+<svg viewBox="0 0 1120 620" xmlns="http://www.w3.org/2000/svg" font-family="system-ui,sans-serif">
+<defs><marker id="bx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4a6478"/></marker></defs>
+<rect x="14" y="14" width="270" height="470" rx="12" fill="#fff8e8" stroke="#dfae4f" stroke-width="1.5"/>
+<text x="149" y="44" text-anchor="middle" font-size="16" font-weight="700" fill="#8a5d08">共享层 · 每批发一次</text>
+<g font-size="13.5" fill="#203247">
+<text x="28" y="76">① 初始事实 ~450 token</text>
+<text x="28" y="105">② 场景目录 52 行 ~1.4k</text>
+<text x="28" y="134">③ 共视帧表 15×6 ~250</text>
+<text x="28" y="163">④ 支撑接触候选表 ~300</text>
+<text x="28" y="192">⑤ 约定登记表 ~150</text>
+<text x="28" y="221">⑥ 候选与 IoU 表 ~300</text></g>
+<text x="28" y="256" font-size="13" fill="#5b7181">合计 ≈ 2.8k token</text>
+<line x1="28" y1="272" x2="270" y2="272" stroke="#e6d3aa"/>
+<text x="28" y="298" font-size="13" font-weight="600" fill="#8a5d08">不含任何物体的图</text>
+<text x="28" y="320" font-size="13" fill="#5b7181">图片一律走物体包，</text>
+<text x="28" y="340" font-size="13" fill="#5b7181">避免 116 张关键帧堆进来</text>
+<text x="28" y="386" font-size="13" font-weight="600" fill="#8a5d08">发一次的判定</text>
+<text x="28" y="408" font-size="13" fill="#5b7181">跨批信息进约定登记表，</text>
+<text x="28" y="428" font-size="13" fill="#5b7181">不进对话历史（§2.4）</text>
+</g>
+
+<text x="322" y="34" font-size="15" font-weight="700" fill="#203247">物体包 × 6（按支撑深度排）</text>
+<rect x="322" y="58" width="500" height="72" rx="10" fill="#eef5fb" stroke="#9cc3dc"/>
+<text x="336" y="84" font-size="14" font-weight="700" fill="#14628b">obj_0037</text>
+<text x="410" y="84" font-size="13" fill="#203247">bed · frame 63 · mask 37.4%</text>
+<text x="336" y="110" font-size="12.5" fill="#38536a">① 帧 418 · ② 环绕 770 · ③ 候选 599 · ④ 卡 230</text>
+<text x="812" y="84" font-size="13" font-weight="600" fill="#14628b" text-anchor="end">2017 tok</text>
+<rect x="322" y="136" width="500" height="72" rx="10" fill="#eef5fb" stroke="#9cc3dc"/>
+<text x="336" y="162" font-size="14" font-weight="700" fill="#14628b">obj_0049</text>
+<text x="410" y="162" font-size="13" fill="#203247">nightstand · frame 27 · mask 4.6%</text>
+<text x="336" y="188" font-size="12.5" fill="#38536a">① 帧 418 · 裁块 396 · ② 环绕 770 · ③ 候选 765 · ④ 卡 230</text>
+<text x="812" y="162" font-size="13" font-weight="600" fill="#14628b" text-anchor="end">2579 tok</text>
+<rect x="322" y="214" width="500" height="72" rx="10" fill="#eef5fb" stroke="#9cc3dc"/>
+<text x="336" y="240" font-size="14" font-weight="700" fill="#14628b">obj_0048</text>
+<text x="410" y="240" font-size="13" fill="#203247">tissue box · frame 26 · mask 4.3%</text>
+<text x="336" y="266" font-size="12.5" fill="#38536a">① 帧 418 · 裁块 502 · ② 环绕 770 · ③ 候选 417 · ④ 卡 230</text>
+<text x="812" y="240" font-size="13" font-weight="600" fill="#14628b" text-anchor="end">2337 tok</text>
+<rect x="322" y="292" width="500" height="72" rx="10" fill="#eef5fb" stroke="#9cc3dc"/>
+<text x="336" y="318" font-size="14" font-weight="700" fill="#14628b">obj_0062</text>
+<text x="410" y="318" font-size="13" fill="#203247">object (unlabelled) · frame 81 · mask 6.2%</text>
+<text x="336" y="344" font-size="12.5" fill="#38536a">① 帧 418 · ② 环绕 770 · ③ 候选 446 · ④ 卡 230</text>
+<text x="812" y="318" font-size="13" font-weight="600" fill="#14628b" text-anchor="end">1864 tok</text>
+<rect x="322" y="370" width="500" height="72" rx="10" fill="#eef5fb" stroke="#9cc3dc"/>
+<text x="336" y="396" font-size="14" font-weight="700" fill="#14628b">obj_0016</text>
+<text x="410" y="396" font-size="13" fill="#203247">pillow · frame 81 · mask 4.7%</text>
+<text x="336" y="422" font-size="12.5" fill="#38536a">① 帧 418 · 裁块 431 · ② 环绕 770 · ③ 候选 549 · ④ 卡 230</text>
+<text x="812" y="396" font-size="13" font-weight="600" fill="#14628b" text-anchor="end">2398 tok</text>
+<rect x="322" y="448" width="500" height="72" rx="10" fill="#eef5fb" stroke="#9cc3dc"/>
+<text x="336" y="474" font-size="14" font-weight="700" fill="#14628b">obj_0061</text>
+<text x="410" y="474" font-size="13" fill="#203247">object (unlabelled) · frame 53 · mask 4.6%</text>
+<text x="336" y="500" font-size="12.5" fill="#38536a">① 帧 418 · 裁块 406 · ② 环绕 770 · ③ 候选 429 · ④ 卡 230</text>
+<text x="812" y="474" font-size="13" font-weight="600" fill="#14628b" text-anchor="end">2253 tok</text>
+<line x1="318" y1="512" x2="822" y2="512" stroke="#9cc3dc" stroke-dasharray="4 3"/>
+<text x="322" y="536" font-size="13.5" fill="#38536a">6 个包合计 13448 token · 共享层 2800 · 会话输入合计 16248</text>
+<rect x="852" y="14" width="254" height="560" rx="12" fill="#edf8f0" stroke="#8cc09a" stroke-width="1.5"/>
+<text x="979" y="44" text-anchor="middle" font-size="16" font-weight="700" fill="#24603a">一次会话</text>
+<g font-size="13" fill="#203247">
+<text x="866" y="76">共享层 + 6 个包顺序灌入</text>
+<text x="866" y="102">批内串行：先床，再床上的</text>
+<text x="866" y="128">每个物体：看图 → propose</text>
+<text x="866" y="152">→ 核验渲染 → commit</text>
+<text x="866" y="182">agent 可回看同批任意图</text>
+<text x="866" y="206">（同批共视，不跨批）</text>
+</g>
+<line x1="866" y1="228" x2="1092" y2="228" stroke="#b8d8c0"/>
+<text x="866" y="256" font-size="13" font-weight="700" fill="#24603a">输入预算</text>
+<g font-size="13" fill="#203247">
+<text x="866" y="282">展示分辨率 16.2k</text>
+<text x="866" y="306">原生关键帧 23.8k</text>
+<text x="866" y="330">（方案页 §2.1 估 35k）</text></g>
+<line x1="866" y1="352" x2="1092" y2="352" stroke="#b8d8c0"/>
+<text x="866" y="380" font-size="13" font-weight="700" fill="#24603a">共享 vs 私有</text>
+<g font-size="12.5" fill="#38536a">
+<text x="866" y="404">目录、约定：全批共享</text>
+<text x="866" y="426">帧 81：0062 与 pillow</text>
+<text x="866" y="446">共用原图，只换 mask</text>
+<text x="866" y="468">其余图各归各的包</text></g>
+<text x="866" y="512" font-size="12.5" fill="#5b7181">批末写回：约定、</text>
+<text x="866" y="532" font-size="12.5" fill="#5b7181">支撑确认结果、asset flags</text>
+</svg>
+<figcaption>左边是只发一次的文本上下文，中间是按处理顺序排好的六个包，右边是这个会话的预算与共享边界。每张图后面的数字是按"像素 / 750"估的输入 token。</figcaption>
+</figure>
+
+
+<h2 id="shared">2 · 共享层：每个批都发这一段</h2>
+<p>下面这三段是<b>原样</b>发给模型的文本。它们不含任何一张图，也不含任何已经落位的物体——初始状态里 52 个物体全是 unplaced。</p>
+
+<h3>2.1 · 初始事实</h3>
+<pre class="msg"><span class="k">SCENE</span> scene0000_00 (ScanNet) · frame is the raw scan frame
+  Z-up, metres, no axisAlignment applied. floor_z = 0.0544 m
+  colour intrinsics fx=1170.188 fy=1170.188 cx=647.75 cy=483.75 · 1296x968
+  camera_to_world is OpenCV convention (+Z forward, +Y down). camera centre = M[:3,3]
+  keyframe RGB and binary mask: scene handoff keyframes/&lt;oid&gt;/&lt;seq:04d&gt;_{rgb.jpg,mask.png}
+  obj_NNNN == ScanNet objectId NNNN; instance-mask pixel value = objectId + 1, 0 = unannotated
+
+<span class="k">ASSETS</span> assembly_handoff/v2, one USD per object
+  Z-up, metresPerUnit 1, XY bbox centred, bottom at z=0, upright
+  visual.usdc default prim /Obj&lt;N&gt;; displayColor is vertex-interpolated and LINEAR
+    -&gt; any render you are shown is already converted to sRGB
+  physics.usdc gives body_type, mass, collider, friction
+  the asset's XY orientation comes from the SAM3D canonical frame: it is NOT the scene orientation
+
+<span class="k">POSE EVIDENCE</span>
+  SAM3D rotation is usable; its scale and translation are not metric. Do not use them as xyz.
+  "yaw" is degrees about +Z, measured from +X, counter-clockwise.
+  up error = angle between the SAM3D +Z and the world +Z. &gt; 30 deg means the whole asset
+  is probably rotated upside down, and its yaw is then unreliable.
+  registrations are yaw-locked to the scan cloud, bounded to +/-20 deg and 25 cm from their start.
+  a small residual difference does NOT mean one yaw is more correct than another.</pre>
+
+<h3>2.2 · 场景目录（52 行）</h3>
+<p>每行压缩到"还有什么没放"这个粒度：标号、类别、扫描尺寸、底面高度、物理体、可看的关键帧。agent 不需要为知道隔壁有什么而看图。</p>
+<div class="table"><table>
+<tr><th>oid</th><th>label</th><th>扫描尺寸 x×y×z</th><th>底面 z</th><th>body</th><th>collider</th><th>主帧</th><th>主帧占比</th><th>关键帧数</th></tr>
+<tr><td><code>obj_0002</code></td><td>table</td><td>1.16×2.54×1.21</td><td>0.13</td><td>dynamic</td><td>convexDecomposition</td><td>454</td><td>44.5%</td><td>3</td></tr>
+<tr><td><code>obj_0003</code></td><td>kitchen counter</td><td>0.97×1.88×0.29</td><td>0.91</td><td>static</td><td>convexHull</td><td>419</td><td>15.9%</td><td>3</td></tr>
+<tr><td><code>obj_0004</code></td><td>shower</td><td>1.16×1.12×1.82</td><td>0.05</td><td>static</td><td>convexDecomposition</td><td>357</td><td>49.1%</td><td>2</td></tr>
+<tr><td><code>obj_0005</code></td><td>curtain</td><td>1.32×3.64×2.16</td><td>0.12</td><td>kinematic</td><td>convexHull</td><td>301</td><td>47.8%</td><td>3</td></tr>
+<tr><td><code>obj_0006</code></td><td>curtain</td><td>1.89×0.72×1.28</td><td>1.07</td><td>kinematic</td><td>convexHull</td><td>40</td><td>42.4%</td><td>3</td></tr>
+<tr><td><code>obj_0007</code></td><td>desk</td><td>1.49×0.96×1.06</td><td>0.06</td><td>dynamic</td><td>convexDecomposition</td><td>35</td><td>19.2%</td><td>3</td></tr>
+<tr><td><code>obj_0008</code></td><td>cabinet</td><td>1.17×1.79×2.34</td><td>0.11</td><td>static</td><td>convexHull</td><td>227</td><td>49.0%</td><td>3</td></tr>
+<tr><td><code>obj_0010</code></td><td>sink</td><td>0.53×0.61×0.90</td><td>0.08</td><td>static</td><td>convexDecomposition</td><td>345</td><td>9.9%</td><td>2</td></tr>
+<tr><td><code>obj_0011</code></td><td>scale</td><td>0.40×0.40×0.04</td><td>0.05</td><td>dynamic</td><td>convexHull</td><td>354</td><td>4.4%</td><td>2</td></tr>
+<tr><td><code>obj_0012</code></td><td>trash can</td><td>0.39×0.42×0.39</td><td>0.08</td><td>dynamic</td><td>convexDecomposition</td><td>141</td><td>4.1%</td><td>3</td></tr>
+<tr><td><code>obj_0013</code></td><td>trash can</td><td>0.46×0.48×0.65</td><td>0.09</td><td>dynamic</td><td>convexHull</td><td>160</td><td>5.4%</td><td>3</td></tr>
+<tr><td><code>obj_0014</code></td><td>trash can</td><td>0.34×0.44×0.27</td><td>0.06</td><td>dynamic</td><td>convexHull</td><td>25</td><td>3.7%</td><td>3</td></tr>
+<tr><td><code>obj_0015</code></td><td>tv</td><td>0.73×0.97×0.45</td><td>0.89</td><td>dynamic</td><td>convexHull</td><td>247</td><td>5.0%</td><td>3</td></tr>
+<tr style="background:#eef5fb"><td><code>obj_0016</code></td><td>pillow</td><td>0.89×0.61×0.40</td><td>0.82</td><td>dynamic</td><td>convexHull</td><td>81</td><td>4.7%</td><td>3</td></tr>
+<tr><td><code>obj_0017</code></td><td>clock</td><td>0.13×0.31×0.41</td><td>1.65</td><td>dynamic</td><td>convexHull</td><td>13</td><td>2.1%</td><td>1</td></tr>
+<tr><td><code>obj_0018</code></td><td>backpack</td><td>0.38×0.40×0.46</td><td>0.06</td><td>dynamic</td><td>convexHull</td><td>241</td><td>5.6%</td><td>3</td></tr>
+<tr><td><code>obj_0028</code></td><td>stool</td><td>0.45×0.50×0.71</td><td>0.11</td><td>dynamic</td><td>convexDecomposition</td><td>452</td><td>12.8%</td><td>3</td></tr>
+<tr><td><code>obj_0029</code></td><td>stool</td><td>0.41×0.50×0.72</td><td>0.11</td><td>dynamic</td><td>convexDecomposition</td><td>448</td><td>11.9%</td><td>3</td></tr>
+<tr><td><code>obj_0030</code></td><td>stool</td><td>0.39×0.52×0.69</td><td>0.15</td><td>dynamic</td><td>convexDecomposition</td><td>437</td><td>4.3%</td><td>2</td></tr>
+<tr><td><code>obj_0031</code></td><td>stool</td><td>0.39×0.52×0.69</td><td>0.20</td><td>dynamic</td><td>convexDecomposition</td><td>439</td><td>8.5%</td><td>3</td></tr>
+<tr><td><code>obj_0032</code></td><td>couch</td><td>2.83×2.90×0.92</td><td>0.07</td><td>dynamic</td><td>convexDecomposition</td><td>269</td><td>63.7%</td><td>3</td></tr>
+<tr><td><code>obj_0033</code></td><td>refrigerator</td><td>1.06×1.40×1.81</td><td>0.09</td><td>dynamic</td><td>convexHull</td><td>390</td><td>43.3%</td><td>3</td></tr>
+<tr><td><code>obj_0034</code></td><td>coffee table</td><td>1.12×0.85×0.48</td><td>0.06</td><td>dynamic</td><td>convexHull</td><td>284</td><td>28.1%</td><td>3</td></tr>
+<tr><td><code>obj_0035</code></td><td>table</td><td>0.72×1.05×0.50</td><td>0.08</td><td>dynamic</td><td>convexDecomposition</td><td>0</td><td>16.8%</td><td>3</td></tr>
+<tr><td><code>obj_0036</code></td><td>toilet</td><td>0.78×0.66×0.74</td><td>0.08</td><td>static</td><td>convexDecomposition</td><td>348</td><td>10.3%</td><td>3</td></tr>
+<tr style="background:#eef5fb"><td><code>obj_0037</code></td><td>bed</td><td>1.98×2.32×0.83</td><td>0.11</td><td>dynamic</td><td>convexHull</td><td>63</td><td>37.3%</td><td>3</td></tr>
+<tr><td><code>obj_0038</code></td><td>cabinet</td><td>0.51×1.04×2.37</td><td>0.10</td><td>static</td><td>convexHull</td><td>145</td><td>36.2%</td><td>3</td></tr>
+<tr><td><code>obj_0039</code></td><td>cabinet</td><td>0.82×1.28×1.94</td><td>0.06</td><td>dynamic</td><td>convexHull</td><td>0</td><td>19.6%</td><td>3</td></tr>
+<tr><td><code>obj_0040</code></td><td>kitchen cabinets</td><td>0.92×0.92×0.66</td><td>1.80</td><td>static</td><td>convexHull</td><td>393</td><td>17.7%</td><td>2</td></tr>
+<tr><td><code>obj_0041</code></td><td>cabinet</td><td>0.33×0.78×0.90</td><td>1.49</td><td>static</td><td>convexHull</td><td>97</td><td>8.2%</td><td>3</td></tr>
+<tr><td><code>obj_0042</code></td><td>cabinet</td><td>0.63×1.74×0.89</td><td>0.13</td><td>static</td><td>convexHull</td><td>432</td><td>64.0%</td><td>3</td></tr>
+<tr><td><code>obj_0043</code></td><td>kitchen cabinets</td><td>0.69×1.60×1.05</td><td>1.43</td><td>static</td><td>convexHull</td><td>409</td><td>42.1%</td><td>2</td></tr>
+<tr><td><code>obj_0044</code></td><td>object</td><td>0.47×0.80×1.17</td><td>0.03</td><td>dynamic</td><td>convexHull</td><td>357</td><td>6.8%</td><td>2</td></tr>
+<tr><td><code>obj_0045</code></td><td>toaster oven</td><td>0.42×0.77×0.31</td><td>0.95</td><td>dynamic</td><td>convexHull</td><td>423</td><td>10.1%</td><td>3</td></tr>
+<tr><td><code>obj_0046</code></td><td>laundry basket</td><td>0.54×0.52×0.54</td><td>0.04</td><td>dynamic</td><td>convexHull</td><td>84</td><td>4.1%</td><td>3</td></tr>
+<tr><td><code>obj_0047</code></td><td>guitar</td><td>0.49×0.45×1.00</td><td>0.11</td><td>dynamic</td><td>convexDecomposition</td><td>89</td><td>12.2%</td><td>3</td></tr>
+<tr style="background:#eef5fb"><td><code>obj_0048</code></td><td>tissue box</td><td>0.46×0.43×0.41</td><td>0.62</td><td>dynamic</td><td>convexHull</td><td>26</td><td>4.3%</td><td>3</td></tr>
+<tr style="background:#eef5fb"><td><code>obj_0049</code></td><td>nightstand</td><td>0.48×0.47×0.82</td><td>0.08</td><td>dynamic</td><td>convexDecomposition</td><td>27</td><td>4.6%</td><td>3</td></tr>
+<tr><td><code>obj_0050</code></td><td>nightstand</td><td>0.55×0.47×0.49</td><td>0.26</td><td>dynamic</td><td>convexHull</td><td>87</td><td>1.8%</td><td>3</td></tr>
+<tr><td><code>obj_0051</code></td><td>dish rack</td><td>0.43×0.68×0.47</td><td>0.91</td><td>dynamic</td><td>convexDecomposition</td><td>419</td><td>9.0%</td><td>3</td></tr>
+<tr><td><code>obj_0052</code></td><td>microwave</td><td>0.53×0.63×0.45</td><td>1.49</td><td>dynamic</td><td>convexHull</td><td>409</td><td>10.5%</td><td>1</td></tr>
+<tr><td><code>obj_0053</code></td><td>toaster</td><td>0.25×0.26×0.17</td><td>1.01</td><td>dynamic</td><td>convexHull</td><td>421</td><td>4.2%</td><td>3</td></tr>
+<tr><td><code>obj_0054</code></td><td>door</td><td>0.27×0.66×1.92</td><td>0.08</td><td>kinematic</td><td>convexHull</td><td>144</td><td>21.2%</td><td>3</td></tr>
+<tr><td><code>obj_0056</code></td><td>shelf</td><td>2.86×1.29×2.35</td><td>0.06</td><td>static</td><td>convexHull</td><td>250</td><td>66.6%</td><td>3</td></tr>
+<tr><td><code>obj_0057</code></td><td>bicycle</td><td>0.65×1.27×0.85</td><td>0.14</td><td>dynamic</td><td>convexDecomposition</td><td>298</td><td>9.6%</td><td>3</td></tr>
+<tr><td><code>obj_0058</code></td><td>shoes</td><td>0.23×0.26×0.10</td><td>0.07</td><td>dynamic</td><td>convexHull</td><td>3</td><td>1.3%</td><td>3</td></tr>
+<tr><td><code>obj_0059</code></td><td>object</td><td>0.25×0.43×0.67</td><td>0.31</td><td>dynamic</td><td>convexHull</td><td>25</td><td>3.2%</td><td>3</td></tr>
+<tr><td><code>obj_0060</code></td><td>object</td><td>0.47×0.35×0.29</td><td>1.18</td><td>dynamic</td><td>convexHull</td><td>84</td><td>2.4%</td><td>3</td></tr>
+<tr style="background:#eef5fb"><td><code>obj_0061</code></td><td>object</td><td>0.31×0.23×0.12</td><td>0.83</td><td>dynamic</td><td>convexDecomposition</td><td>53</td><td>4.6%</td><td>3</td></tr>
+<tr style="background:#eef5fb"><td><code>obj_0062</code></td><td>object</td><td>0.66×0.77×0.20</td><td>0.79</td><td>dynamic</td><td>convexHull</td><td>81</td><td>6.2%</td><td>3</td></tr>
+<tr><td><code>obj_0064</code></td><td>mirror</td><td>0.27×0.46×0.52</td><td>1.37</td><td>static</td><td>convexHull</td><td>343</td><td>0.9%</td><td>3</td></tr>
+<tr><td><code>obj_0066</code></td><td>guitar case</td><td>0.73×0.43×0.99</td><td>0.05</td><td>dynamic</td><td>convexHull</td><td>267</td><td>3.9%</td><td>3</td></tr>
+</table></div><p class="small">浅蓝底是本批的 6 个。目录本身约 1.4k token。</p>
+
+<h3>2.3 · 已经算好的证据表</h3>
+<p>确定性的东西 harness 先算完，模型不重算、也不靠记。三张表：本批 15 张候选帧里每个物体各占多少（挑图依据）；每个物体的支撑接触候选；每个物体的候选朝向与残差。</p>
+<h4>共视矩阵（百分比 = 该物体在那一帧里的 mask 占比）</h4>
+<div class="table"><table>
+<tr><th>帧</th><th>0037</th><th>0049</th><th>0048</th><th>0062</th><th>0016</th><th>0061</th><th>说明</th></tr>
+<tr><td>26</td><td>4.85</td><td>4.19</td><td style="background:#e9f7ee">4.34</td><td>0.56</td><td>0.00</td><td>0.00</td><td class="small">本批主帧：obj_0048</td></tr>
+<tr><td>27</td><td>2.14</td><td style="background:#e9f7ee">4.57</td><td>3.78</td><td>0.00</td><td>0.00</td><td>0.00</td><td class="small">本批主帧：obj_0049</td></tr>
+<tr><td>31</td><td>7.86</td><td>2.49</td><td>1.86</td><td>0.00</td><td>0.00</td><td>0.00</td><td class="small"></td></tr>
+<tr><td>36</td><td>13.45</td><td>1.12</td><td>0.90</td><td>0.00</td><td>2.90</td><td>0.00</td><td class="small"></td></tr>
+<tr><td>40</td><td>5.93</td><td>1.43</td><td>1.15</td><td>0.00</td><td>2.02</td><td>0.00</td><td class="small"></td></tr>
+<tr><td>45</td><td>22.96</td><td>1.83</td><td>1.44</td><td>1.83</td><td>3.29</td><td>0.00</td><td class="small"></td></tr>
+<tr><td>53</td><td>16.03</td><td>1.86</td><td>1.54</td><td>5.69</td><td>4.70</td><td style="background:#e9f7ee">4.61</td><td class="small">本批主帧：obj_0061</td></tr>
+<tr><td>55</td><td>25.73</td><td>1.80</td><td>1.41</td><td>4.09</td><td>3.46</td><td>2.63</td><td class="small"></td></tr>
+<tr><td>58</td><td>14.47</td><td>2.14</td><td>1.78</td><td>4.72</td><td>3.36</td><td>0.78</td><td class="small"></td></tr>
+<tr><td>60</td><td>30.42</td><td>2.56</td><td>1.72</td><td>3.64</td><td>3.12</td><td>2.20</td><td class="small"></td></tr>
+<tr><td>61</td><td>37.31</td><td>2.48</td><td>1.70</td><td>3.32</td><td>3.24</td><td>2.00</td><td class="small"></td></tr>
+<tr><td>63</td><td style="background:#e9f7ee">37.35</td><td>0.89</td><td>0.42</td><td>2.72</td><td>2.50</td><td>1.53</td><td class="small">本批主帧：obj_0037</td></tr>
+<tr><td>81</td><td>18.71</td><td>0.00</td><td>0.00</td><td style="background:#e9f7ee">6.22</td><td style="background:#e9f7ee">4.70</td><td>0.02</td><td class="small">本批主帧：obj_0062、obj_0016</td></tr>
+<tr><td>86</td><td>38.12</td><td>0.04</td><td>0.73</td><td>2.68</td><td>3.50</td><td>0.00</td><td class="small"></td></tr>
+<tr><td>317</td><td>21.89</td><td>0.00</td><td>0.00</td><td>1.25</td><td>0.19</td><td>1.40</td><td class="small"></td></tr>
+</table></div><p class="small">绿色是本批选用的主帧。15 张里只有 5 张被用上——其余 10 张的物体占比都太小，或者与已选帧重复。</p>
+<h4>支撑接触候选（扫描点，±4 cm 水平栈、底面下 5 cm 带内）</h4>
+<div class="table"><table><tr><th>物体</th><th>底面 z (p2)</th><th>支撑候选（点数 / 接触 z 区间）</th></tr>
+<tr><td><code>obj_0037</code> bed</td><td>0.106</td><td><code>obj_0049</code> 19 点 @ 0.059–0.113</td></tr>
+<tr><td><code>obj_0049</code> nightstand</td><td>0.081</td><td>—</td></tr>
+<tr><td><code>obj_0048</code> tissue box</td><td>0.619</td><td><code>obj_0049</code> 32 点 @ 0.573–0.628 · <code>obj_0037</code> 7 点 @ 0.585–0.624</td></tr>
+<tr><td><code>obj_0062</code> object (unlabelled)</td><td>0.792</td><td><code>obj_0037</code> 104 点 @ 0.742–0.801</td></tr>
+<tr><td><code>obj_0016</code> pillow</td><td>0.821</td><td><code>obj_0037</code> 84 点 @ 0.771–0.830</td></tr>
+<tr><td><code>obj_0061</code> object (unlabelled)</td><td>0.826</td><td><code>obj_0037</code> 25 点 @ 0.780–0.829</td></tr>
+</table></div>
+<div class="note"><b>这张表会骗人，而且这一批正好有一个例子。</b>bed 的支撑候选是 nightstand 的 19 个点（z 0.059–0.113）——那是床边柜腿，不是床躺在柜子上。点级检测只看"下方有点"，方向分不出来。所以表里只写候选和点数，不写结论；结论由 agent 看图后 <code>declare_relation</code>。</div>
+<h4>候选朝向与残差（每块含 yaw、残差、内点率、关键帧 IoU）</h4>
+<div class="table"><table><tr><th>物体</th><th>SAM3D</th><th>up 偏差</th><th>ICP 0°</th><th>ICP 90°</th><th>ICP 180°</th><th>ICP 270°</th><th>IoU 最大</th></tr>
+<tr><td><code>obj_0037</code></td><td>196° / 31.7 cm / 0.51</td><td>2°</td><td>4° / 31.9 cm / 0.53</td><td>92° / 33.6 cm / 0.53</td><td>184° / 35.6 cm / 0.50</td><td>273° / 34.5 cm / 0.50</td><td>0.53 @ 4°</td></tr>
+<tr><td><code>obj_0049</code></td><td>202° / 9.0 cm / 0.29</td><td>13°</td><td>3° / 11.2 cm / 0.29</td><td>94° / 11.0 cm / 0.30</td><td>183° / 10.4 cm / 0.29</td><td>274° / 10.4 cm / 0.30</td><td>0.30 @ 94°</td></tr>
+<tr><td><code>obj_0048</code></td><td>121° / 14.9 cm / 0.42</td><td>14°</td><td>0° / 17.9 cm / 0.47</td><td>95° / 15.0 cm / 0.40</td><td>175° / 19.0 cm / 0.37</td><td>267° / 17.0 cm / 0.40</td><td>0.47 @ 0°</td></tr>
+<tr><td><code>obj_0062</code></td><td>22° / 5.1 cm / 0.60</td><td>2°</td><td>0° / 5.4 cm / 0.60</td><td>90° / 5.1 cm / 0.79</td><td>180° / 6.2 cm / 0.59</td><td>271° / 5.7 cm / 0.75</td><td>0.79 @ 90°</td></tr>
+<tr><td><code>obj_0016</code></td><td>18° / 12.4 cm / 0.43</td><td>71°</td><td>359° / 11.7 cm / 0.41</td><td>85° / 11.1 cm / 0.54</td><td>180° / 11.5 cm / 0.45</td><td>268° / 14.8 cm / 0.49</td><td>0.54 @ 85°</td></tr>
+<tr><td><code>obj_0061</code></td><td>61° / 2.1 cm / 0.59</td><td>176°</td><td>1° / 2.3 cm / 0.54</td><td>90° / 2.3 cm / 0.56</td><td>180° / 2.9 cm / 0.51</td><td>270° / 2.0 cm / 0.61</td><td>0.61 @ 270°</td></tr>
+</table></div>
+
+<h3>2.4 · 约定登记表</h3>
+<p>登记表是<b>跨批</b>的唯一通道。第 1 批开始时它只有 harness 预置的三条；批末由 agent 写回结论。</p>
+<div class="table"><table>
+<tr><th style="width:8%">状态</th><th style="width:26%">条目</th><th>来源</th></tr>
+<tr><td>预置</td><td><code>yaw 从 +X 起算、绕 +Z 逆时针</code></td><td>harness 统一口径</td></tr>
+<tr><td>预置</td><td><code>SAM3D up 偏差 &gt; 30° 时整体可能倒置，yaw 不可信</code></td><td>全场景实测：8 个物体偏差 ≥30°，其中 6 个确为倒置</td></tr>
+<tr><td>预置</td><td><code>残差与 IoU 的微小差距不能用来定正反</code></td><td>实测 4/52 个物体 IoU 差距 ≥0.05；48/52 个残差比 &lt;1.2</td></tr>
+<tr><td>本批待写</td><td><code>正面 = 有抽屉把手/开口的那面</code></td><td>nightstand obj_0049 与 tissue box obj_0048 本批一起定</td></tr>
+<tr><td>本批待写</td><td><code>床以枕头的一侧为"头"</code></td><td>影响后续 pillow 与 nightstand 的相对朝向</td></tr>
+</table></div>
+
+<h2 id="bundles">3 · 六个输入包</h2>
+<p>每个包五件：① 主关键帧（叠 mask 轮廓，占比 &lt;5% 的另给裁块）② 资产环绕 ③ 候选对比 ④ 文字卡 ⑤ 状态行。下面是原样的内容。</p>
+
+<div class="bundle">
+<div class="bhead"><span class="oid">obj_0037</span><span class="lb">bed</span>
+<span class="small">frame 63 · mask 37.35% · 主关键帧由 1 个物体共用</span>
+<span class="tk">包内 2017 tok</span></div>
+
+<div class="shot">
+  <div class="held"><div class="lab">① 主关键帧 648×484 · 418 tok</div>
+  <img src="assets/scene-assembly-input-example/kf/obj_0037.jpg" alt="obj_0037 keyframe"></div>
+  <div class="held"><div class="lab">①b 不裁：占比 37.35% ≥ 5%</div>
+  <div class="card small" style="padding:14px">这一档原图已经够看。方案 §2.3 只在 &lt;5% 时给裁块，省一张图。</div></div>
+</div>
+<div class="shot">
+  <div class="held"><div class="lab">② 资产环绕 4 视角 + 局部坐标轴 · 760² · 770 tok</div>
+  <img src="assets/scene-assembly-input-example/surround/obj_0037.jpg" alt="obj_0037 surround"></div>
+  <div class="wide"><div class="lab">③ 候选对比：同一精确关键帧相机，1×5 · 1548×290 · 599 tok</div>
+  <img src="assets/scene-assembly-input-example/cand/obj_0037.jpg" alt="obj_0037 candidates"></div>
+</div>
+<div class="lab">④ 文字卡（英文，原样）</div>
+<pre class="msg">card obj_0037 · bed · [1.98, 2.317, 0.834] scan bbox
+  scan   1.980 x 2.317 x 0.834 m, bottom z 0.106
+  asset  2.326 x 2.779 x 0.780 m, height 0.780 (scale src: scan height, x2.825)
+physics dynamic · convexHull collider · see catalog for mass
+pose   SAM3D yaw 196.2°, up err 1.7°
+       ICP (yaw-locked, bounded +/-20° and 25 cm from its start)
+           0° -&gt;   4.4°  res  31.9 cm  inl5  9.0%  IoU 0.53
+          90° -&gt;  92.0°  res  33.6 cm  inl5 10.0%  IoU 0.53
+         180° -&gt; 183.7°  res  35.6 cm  inl5  8.4%  IoU 0.50
+         270° -&gt; 272.9°  res  34.5 cm  inl5  9.8%  IoU 0.50
+support  obj_0049 19 pts (z 0.059-0.113)
+        wall nearest 0.018 m (wall objectId 19 / 26)</pre>
+<div class="lab">⑤ 状态行</div>
+<pre class="msg">state obj_0037 · unplaced · pose — · scale 1.000 · relations — · flags —</pre>
+</div>
+
+<div class="bundle">
+<div class="bhead"><span class="oid">obj_0049</span><span class="lb">nightstand</span>
+<span class="small">frame 27 · mask 4.57% · 主关键帧由 1 个物体共用</span>
+<span class="tk">包内 2579 tok</span></div>
+
+<div class="shot">
+  <div class="held"><div class="lab">① 主关键帧 648×484 · 418 tok</div>
+  <img src="assets/scene-assembly-input-example/kf/obj_0049.jpg" alt="obj_0049 keyframe"></div>
+  <div class="held"><div class="lab">①b 裁块（占比 &lt;5%）bbox×2 · 512×580 显示 · 396 tok</div>
+  <img src="assets/scene-assembly-input-example/crop/obj_0049.jpg" alt="obj_0049 crop"></div>
+</div>
+<div class="shot">
+  <div class="held"><div class="lab">② 资产环绕 4 视角 + 局部坐标轴 · 760² · 770 tok</div>
+  <img src="assets/scene-assembly-input-example/surround/obj_0049.jpg" alt="obj_0049 surround"></div>
+  <div class="wide"><div class="lab">③ 候选对比：同一精确关键帧相机，1×5 · 1283×447 · 765 tok</div>
+  <img src="assets/scene-assembly-input-example/cand/obj_0049.jpg" alt="obj_0049 candidates"></div>
+</div>
+<div class="lab">④ 文字卡（英文，原样）</div>
+<pre class="msg">card obj_0049 · nightstand · [0.479, 0.465, 0.825] scan bbox
+  scan   0.479 x 0.465 x 0.825 m, bottom z 0.081
+  asset  0.565 x 0.522 x 0.781 m, height 0.781 (scale src: scan height, x0.781)
+physics dynamic · convexDecomposition collider · see catalog for mass
+pose   SAM3D yaw 202.4°, up err 12.9°
+       ICP (yaw-locked, bounded +/-20° and 25 cm from its start)
+           0° -&gt;   3.2°  res  11.2 cm  inl5 12.4%  IoU 0.29
+          90° -&gt;  93.5°  res  11.0 cm  inl5 13.9%  IoU 0.30
+         180° -&gt; 183.0°  res  10.4 cm  inl5 12.3%  IoU 0.29
+         270° -&gt; 274.0°  res  10.4 cm  inl5 15.0%  IoU 0.30
+support  none inside footprint
+        wall nearest 0.016 m (wall objectId 19 / 26)</pre>
+<div class="lab">⑤ 状态行</div>
+<pre class="msg">state obj_0049 · unplaced · pose — · scale 1.000 · relations — · flags —</pre>
+</div>
+
+<div class="bundle">
+<div class="bhead"><span class="oid">obj_0048</span><span class="lb">tissue box</span>
+<span class="small">frame 26 · mask 4.34% · 主关键帧由 1 个物体共用</span>
+<span class="tk">包内 2337 tok</span></div>
+
+<div class="shot">
+  <div class="held"><div class="lab">① 主关键帧 648×484 · 418 tok</div>
+  <img src="assets/scene-assembly-input-example/kf/obj_0048.jpg" alt="obj_0048 keyframe"></div>
+  <div class="held"><div class="lab">①b 裁块（占比 &lt;5%）bbox×2 · 512×735 显示 · 502 tok</div>
+  <img src="assets/scene-assembly-input-example/crop/obj_0048.jpg" alt="obj_0048 crop"></div>
+</div>
+<div class="shot">
+  <div class="held"><div class="lab">② 资产环绕 4 视角 + 局部坐标轴 · 760² · 770 tok</div>
+  <img src="assets/scene-assembly-input-example/surround/obj_0048.jpg" alt="obj_0048 surround"></div>
+  <div class="wide"><div class="lab">③ 候选对比：同一精确关键帧相机，1×5 · 923×339 · 417 tok</div>
+  <img src="assets/scene-assembly-input-example/cand/obj_0048.jpg" alt="obj_0048 candidates"></div>
+</div>
+<div class="lab">④ 文字卡（英文，原样）</div>
+<pre class="msg">card obj_0048 · tissue box · [0.463, 0.433, 0.413] scan bbox
+  scan   0.463 x 0.433 x 0.413 m, bottom z 0.619
+  asset  0.463 x 0.836 x 0.384 m, height 0.384 (scale src: scan height, x0.842)
+physics dynamic · convexHull collider · see catalog for mass
+pose   SAM3D yaw 120.7°, up err 13.5°
+       ICP (yaw-locked, bounded +/-20° and 25 cm from its start)
+           0° -&gt;   0.0°  res  17.9 cm  inl5  3.7%  IoU 0.47  rejected: refinement made it worse
+          90° -&gt;  95.0°  res  15.0 cm  inl5  6.3%  IoU 0.40
+         180° -&gt; 175.0°  res  19.0 cm  inl5 11.8%  IoU 0.37
+         270° -&gt; 267.5°  res  17.0 cm  inl5  6.9%  IoU 0.40
+support  obj_0049 32 pts (z 0.573-0.628) · obj_0037 7 pts (z 0.585-0.624)
+        wall nearest 0.020 m (wall objectId 19 / 26)</pre>
+<div class="lab">⑤ 状态行</div>
+<pre class="msg">state obj_0048 · unplaced · pose — · scale 1.000 · relations — · flags —</pre>
+</div>
+
+<div class="bundle">
+<div class="bhead"><span class="oid">obj_0062</span><span class="lb">object (unlabelled)</span>
+<span class="small">frame 81 · mask 6.22% · 主关键帧由 2 个物体共用</span>
+<span class="tk">包内 1864 tok</span></div>
+
+<div class="shot">
+  <div class="held"><div class="lab">① 主关键帧 648×484 · 418 tok</div>
+  <img src="assets/scene-assembly-input-example/kf/obj_0062.jpg" alt="obj_0062 keyframe"></div>
+  <div class="held"><div class="lab">①b 不裁：占比 6.22% ≥ 5%</div>
+  <div class="card small" style="padding:14px">这一档原图已经够看。方案 §2.3 只在 &lt;5% 时给裁块，省一张图。</div></div>
+</div>
+<div class="shot">
+  <div class="held"><div class="lab">② 资产环绕 4 视角 + 局部坐标轴 · 760² · 770 tok</div>
+  <img src="assets/scene-assembly-input-example/surround/obj_0062.jpg" alt="obj_0062 surround"></div>
+  <div class="wide"><div class="lab">③ 候选对比：同一精确关键帧相机，1×5 · 1173×285 · 446 tok</div>
+  <img src="assets/scene-assembly-input-example/cand/obj_0062.jpg" alt="obj_0062 candidates"></div>
+</div>
+<div class="lab">④ 文字卡（英文，原样）</div>
+<pre class="msg">card obj_0062 · object · [0.655, 0.774, 0.2] scan bbox
+  scan   0.655 x 0.774 x 0.200 m, bottom z 0.792
+  asset  0.432 x 0.548 x 0.193 m, height 0.193 (scale src: scan height, x0.549)
+physics dynamic · convexHull collider · see catalog for mass
+pose   SAM3D yaw 21.5°, up err 2.3°
+       ICP (yaw-locked, bounded +/-20° and 25 cm from its start)
+           0° -&gt;   0.1°  res   5.4 cm  inl5 46.3%  IoU 0.60
+          90° -&gt;  90.0°  res   5.1 cm  inl5 48.8%  IoU 0.79  rejected: refinement made it worse
+         180° -&gt; 179.8°  res   6.2 cm  inl5 34.1%  IoU 0.59
+         270° -&gt; 271.2°  res   5.7 cm  inl5 44.0%  IoU 0.75
+support  obj_0037 104 pts (z 0.742-0.801)
+        wall nearest 0.984 m (wall objectId 19 / 26)</pre>
+<div class="lab">⑤ 状态行</div>
+<pre class="msg">state obj_0062 · unplaced · pose — · scale 1.000 · relations — · flags —</pre>
+</div>
+
+<div class="bundle">
+<div class="bhead"><span class="oid">obj_0016</span><span class="lb">pillow</span>
+<span class="small">frame 81 · mask 4.70% · 主关键帧由 2 个物体共用</span>
+<span class="tk">包内 2398 tok</span></div>
+
+<div class="shot">
+  <div class="held"><div class="lab">① 主关键帧 648×484 · 418 tok</div>
+  <img src="assets/scene-assembly-input-example/kf/obj_0016.jpg" alt="obj_0016 keyframe"></div>
+  <div class="held"><div class="lab">①b 裁块（占比 &lt;5%）bbox×2 · 512×631 显示 · 431 tok</div>
+  <img src="assets/scene-assembly-input-example/crop/obj_0016.jpg" alt="obj_0016 crop"></div>
+</div>
+<div class="shot">
+  <div class="held"><div class="lab">② 资产环绕 4 视角 + 局部坐标轴 · 760² · 770 tok</div>
+  <img src="assets/scene-assembly-input-example/surround/obj_0016.jpg" alt="obj_0016 surround"></div>
+  <div class="wide"><div class="lab">③ 候选对比：同一精确关键帧相机，1×5 · 1548×266 · 549 tok</div>
+  <img src="assets/scene-assembly-input-example/cand/obj_0016.jpg" alt="obj_0016 candidates"></div>
+</div>
+<div class="lab">④ 文字卡（英文，原样）</div>
+<pre class="msg">card obj_0016 · pillow · [0.895, 0.606, 0.404] scan bbox
+  scan   0.895 x 0.606 x 0.404 m, bottom z 0.821
+  asset  1.040 x 0.570 x 0.376 m, height 0.376 (scale src: scan height, x1.041)
+physics dynamic · convexHull collider · see catalog for mass
+pose   SAM3D yaw 18.4°, up err 70.8°
+       ICP (yaw-locked, bounded +/-20° and 25 cm from its start)
+           0° -&gt; 359.0°  res  11.7 cm  inl5 18.0%  IoU 0.41
+          90° -&gt;  85.5°  res  11.1 cm  inl5 23.9%  IoU 0.54
+         180° -&gt; 180.0°  res  11.5 cm  inl5 17.7%  IoU 0.45  rejected: refinement made it worse
+         270° -&gt; 268.4°  res  14.8 cm  inl5 17.2%  IoU 0.49
+support  obj_0037 84 pts (z 0.771-0.830)
+        wall nearest 0.015 m (wall objectId 19 / 26)</pre>
+<div class="lab">⑤ 状态行</div>
+<pre class="msg">state obj_0016 · unplaced · pose — · scale 1.000 · relations — · flags —</pre>
+</div>
+
+<div class="bundle">
+<div class="bhead"><span class="oid">obj_0061</span><span class="lb">object (unlabelled)</span>
+<span class="small">frame 53 · mask 4.61% · 主关键帧由 1 个物体共用</span>
+<span class="tk">包内 2253 tok</span></div>
+
+<div class="shot">
+  <div class="held"><div class="lab">① 主关键帧 648×484 · 418 tok</div>
+  <img src="assets/scene-assembly-input-example/kf/obj_0061.jpg" alt="obj_0061 keyframe"></div>
+  <div class="held"><div class="lab">①b 裁块（占比 &lt;5%）bbox×2 · 512×595 显示 · 406 tok</div>
+  <img src="assets/scene-assembly-input-example/crop/obj_0061.jpg" alt="obj_0061 crop"></div>
+</div>
+<div class="shot">
+  <div class="held"><div class="lab">② 资产环绕 4 视角 + 局部坐标轴 · 760² · 770 tok</div>
+  <img src="assets/scene-assembly-input-example/surround/obj_0061.jpg" alt="obj_0061 surround"></div>
+  <div class="wide"><div class="lab">③ 候选对比：同一精确关键帧相机，1×5 · 1103×292 · 429 tok</div>
+  <img src="assets/scene-assembly-input-example/cand/obj_0061.jpg" alt="obj_0061 candidates"></div>
+</div>
+<div class="lab">④ 文字卡（英文，原样）</div>
+<pre class="msg">card obj_0061 · object · [0.308, 0.229, 0.124] scan bbox
+  scan   0.308 x 0.229 x 0.124 m, bottom z 0.826
+  asset  0.225 x 0.301 x 0.120 m, height 0.120 (scale src: scan height, x0.302)
+physics dynamic · convexDecomposition collider · see catalog for mass
+pose   SAM3D yaw 60.7°, up err 176.3°
+       ICP (yaw-locked, bounded +/-20° and 25 cm from its start)
+           0° -&gt;   1.3°  res   2.3 cm  inl5 97.8%  IoU 0.54
+          90° -&gt;  90.0°  res   2.3 cm  inl5 98.5%  IoU 0.56  rejected: refinement made it worse
+         180° -&gt; 180.0°  res   2.9 cm  inl5 96.3%  IoU 0.51  rejected: refinement made it worse
+         270° -&gt; 270.0°  res   2.0 cm  inl5 100.0%  IoU 0.61  rejected: refinement made it worse
+support  obj_0037 25 pts (z 0.780-0.829)
+        wall nearest 1.591 m (wall objectId 19 / 26)</pre>
+<div class="lab">⑤ 状态行</div>
+<pre class="msg">state obj_0061 · unplaced · pose — · scale 1.000 · relations — · flags —</pre>
+</div>
+
+<h2 id="budget">4 · 预算</h2>
+<div class="table"><table>
+<tr><th style="width:22%">项</th><th style="width:10%">张数</th><th style="width:16%">尺寸</th><th style="width:14%">展示 token</th><th style="width:14%">原生 token</th><th>说明</th></tr>
+<tr><td>① 主关键帧</td><td>6</td><td>648×484 / 1296×968</td><td>2508</td><td>10038</td><td>一物体一张；0062 与 pillow 共用第 81 帧的原图，各叠各的 mask</td></tr>
+<tr><td>①b 裁块</td><td>4</td><td>512 宽</td><td>1735</td><td>同左</td><td>只有占比 &lt;5% 的 4 个，见下表</td></tr>
+<tr><td>② 资产环绕</td><td>6</td><td>760²</td><td>4620</td><td>同左</td><td>4 视角拼成一张，不单独发 4 张</td></tr>
+<tr><td>③ 候选对比</td><td>6</td><td>≤1500×300</td><td>3205</td><td>同左</td><td>5 个候选拼一张，取代 5 次 view_compare</td></tr>
+<tr><td>④ 文字卡</td><td>6</td><td>文本</td><td>1380</td><td>同左</td><td>约 230 token/物体</td></tr>
+<tr><td>共享层</td><td>1</td><td>文本</td><td>2800</td><td>同左</td><td>目录、事实、三张证据表、约定</td></tr>
+<tr style="background:#eef5fb"><td><b>合计</b></td><td><b>22</b></td><td>—</td><td><b>16248</b></td><td><b>23778</b></td><td>方案 §2.1 估 35k；展示分辨率下这批只要 16.2k</td></tr>
+</table></div>
+<p>两个数字都给，是因为它们回答的是不同问题。<b>展示分辨率</b>（关键帧发一半尺寸）是这一页实际渲染出来的东西，也是我建议的默认档：小物体的细节由裁块补，主帧只需要看朝向和支撑关系。<b>原生分辨率</b>是保守情况——如果某个物体在原图里确实太小、裁块又不够，才发原图。</p>
+<div class="note"><b>比方案页的 35k 少，原因是估法和实际装配不一样。</b>方案页按"5 个物体 × 4 张图 × 全尺寸"估；实际装配里每个物体只发 1 张主关键帧（二次、三次关键帧留给核验轮的按需调用），环绕与候选都拼成单张，裁块只给小物体。图的数量从 20 降到 22，每张也都不大。</div>
+
+<h4>裁块判定</h4><div class="table"><table><tr><th>物体</th><th>mask 占比</th><th>是否裁</th><th>理由</th></tr>
+<tr><td><code>obj_0037</code></td><td>37.35%</td><td><span class="tag">不裁</span></td><td>468564 像素，轮廓和支撑关系在原图里已经够清楚</td></tr>
+<tr><td><code>obj_0049</code></td><td>4.57%</td><td><span class="tag ok">裁</span></td><td>低于 5%，原图里只有 57305 像素，裁剪到 bbox×2 后边长 810 px</td></tr>
+<tr><td><code>obj_0048</code></td><td>4.34%</td><td><span class="tag ok">裁</span></td><td>低于 5%，原图里只有 54389 像素，裁剪到 bbox×2 后边长 481 px</td></tr>
+<tr><td><code>obj_0062</code></td><td>6.22%</td><td><span class="tag">不裁</span></td><td>78053 像素，轮廓和支撑关系在原图里已经够清楚</td></tr>
+<tr><td><code>obj_0016</code></td><td>4.70%</td><td><span class="tag ok">裁</span></td><td>低于 5%，原图里只有 58964 像素，裁剪到 bbox×2 后边长 769 px</td></tr>
+<tr><td><code>obj_0061</code></td><td>4.61%</td><td><span class="tag ok">裁</span></td><td>低于 5%，原图里只有 57831 像素，裁剪到 bbox×2 后边长 494 px</td></tr>
+</table></div>
+
+<h2 id="findings">5 · 这批暴露的问题</h2>
+<p>装配和渲染过程本身就是一次体检。六个物体里，几何能分开的只有一个。</p>
+<div class="table"><table>
+<tr><th style="width:15%">物体</th><th style="width:38%">这批判出来的</th><th>所以 agent 要做什么</th></tr>
+<tr><td><code>obj_0062</code></td><td><b>唯一一个轮廓能分开朝向的。</b>yaw 90° 的 IoU 0.785，yaw 0°/180° 只有 0.60 / 0.59，差 0.18。原因是它是一块扁平物体，长宽比大</td><td>可以直接信候选图上的最强朝向，不必额外调用</td></tr>
+<tr><td><code>obj_0037</code></td><td><b>资产比扫描大。</b>资产 2.33×2.78×0.78 m，扫描 1.98×2.32×0.83 m：占地大 18%，矮 6%。四个朝向残差 31.9–35.6 cm、IoU 0.50–0.53，全挤在一起</td><td>判"接受并缩放到扫描占地"还是"标记资产";朝向只能看图，且床这种对称物体正反差别很小</td></tr>
+<tr><td><code>obj_0049</code></td><td>四个朝向残差 10.4–11.2 cm、IoU 0.286–0.300。<b>几何完全分不开</b>，而且 IoU 整体偏低说明资产形状和扫描对不齐（抽屉、隔板细节）</td><td>唯一判据是环绕图上"哪面有抽屉"，再由 <code>align_with</code> 贴墙</td></tr>
+<tr><td><code>obj_0016</code></td><td><b>up 偏差 70.8°。</b>超过 30° 阈值，资产整体姿态可疑；四个朝向残差 11.1–14.8 cm</td><td>先决定要不要 <code>flip</code>，再谈 yaw</td></tr>
+<tr><td><code>obj_0061</code></td><td><b>up 偏差 176.3°——完全倒置。</b>四个朝向残差 2.0–2.9 cm、IoU 0.51–0.62，几何上完全看不出倒置。SAM3D yaw 61° 与四个候选都不一致</td><td>必须看图发现倒置，用 <code>flip</code> 修正；修正后 yaw 要重新取</td></tr>
+<tr><td><code>obj_0048</code></td><td><b>资产形状错了。</b>资产深 0.836 m，扫描深 0.433 m，差 1.9 倍；残差 15–19 cm 是这批最大的之一。而且扫描底面 0.619 m 高于柜面——它其实压在床头柜上，不是在床上</td><td>判 <code>accept_scaled</code> 还是 <code>regen</code>；支撑关系声明为 <code>supported_by: obj_0049</code></td></tr>
+</table></div>
+<div class="note"><b>六分之五的物体，几何给不出朝向，只能给"四个都差不多"。</b>这不是渲染的问题——候选图在同一相机、同一裁剪下并排，人一眼能分出正反；残差和 IoU 的数字则互相咬住。这一批正好把方案页 §1 的论断复现了一遍：<b>离散判断交给看图，连续量交给几何。</b></div>
+<p class="small">另外两个装配层面的发现：① 第 81 帧被两个物体共用，但发了两份独立的叠轮廓图（418 token ×2）。可以直接合成一张双色轮廓图，省一张。② 第 53 帧同时是 obj_0061 的主帧和 obj_0062 的次帧，装配器发的是 obj_0061 的版本——同一个相机，只是叠的 mask 不同，不重复发。</p>
+
+
+<h2 id="method">附 · 这一页的图是怎么来的</h2>
+<div class="card"><ul style="margin:0;padding-left:20px">
+<li>资产从 <code>visual.usdc</code> 读点、面、逐个顶点的 <code>primvars:displayColor</code>，线性色转 sRGB 后逐面平均。</li>
+<li>渲染用 trimesh + embree 光线求交，按面法向做背面剔除和 Lambert 明暗。候选图用场景交接里的真实 <code>camera_to_world</code> 和真实内参（1296×968），按半分辨率出图后拼在一张里。整场景不走渲染器，只渲染单个资产叠在照片上，<b>所以候选图里看不到遮挡</b>：被床挡住的柜腿也会画出来。</li>
+<li>候选是"yaw 锁定 + 竖直锁定"的 ICP：初始 yaw 取 0/90/180/270°，初始平移取扫描包围盒的 XY 中心与底面，然后限制在 ±20°、25 cm 窗口内收敛。收敛后如果残差没变好，就回退到起点并标 <code>diverged</code>——这批 24 个候选里有 6 个触发了回退。</li>
+<li>ICP 的对应关系是资产顶点到扫描点（单向，最近邻，去掉最差 15%）。所以残差偏大也可能只是资产比扫描大，而不一定是朝向错。这正是为什么它只作证据、不作结论。</li>
+<li>脚本：<code>SceneAssembly/src/legacy/</code> 下的 <code>usdmesh.py</code>（USD 读取）、<code>render.py</code>（相机与光线求交）、<code>icp.py</code>（带窗口的 ICP）、<code>assemble_batch.py</code>（组装）、<code>make_page.py</code>（本页）。</li>
+</ul></div>
+
+</main></body></html>

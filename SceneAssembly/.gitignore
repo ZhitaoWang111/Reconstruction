@@ -1,0 +1,5 @@
+# experiment output: images, call logs, state chains (see src/run_experiment.py)
+runs/
+
+# src/inputs/ is M0 source code, not data; the root rule **/inputs/ would hide it
+!src/inputs/

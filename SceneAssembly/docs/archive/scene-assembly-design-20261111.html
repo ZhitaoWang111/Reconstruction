@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>场景组装 harness 方案 · agent 主导</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --model:#7c3aed; --model-soft:#f3eefe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr); max-width:1180px; margin:0 auto; padding:0 28px 120px}
+  @media (min-width:1080px){
+    .wrap{grid-template-columns:230px minmax(0,1fr); gap:56px; padding-left:36px; padding-right:36px}
+    .rail{position:sticky; top:0; align-self:start; max-height:100vh; overflow:auto; padding:44px 0}
+  }
+  .rail{display:none}
+  @media (min-width:1080px){ .rail{display:block} }
+  .rail-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px}
+  .rail a{display:block; padding:7px 12px; margin:1px 0; border-radius:6px; color:var(--ink-2); text-decoration:none; font-size:13.5px; border-left:2px solid transparent}
+  .rail a:hover{background:var(--line-2); color:var(--ink)}
+  .rail a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+  .rail a .n{font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:7px}
+  .rail a.on .n{color:var(--accent)}
+
+  header.top{padding:56px 0 34px; border-bottom:1px solid var(--line); margin-bottom:8px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+  h1{margin:0 0 14px; font-size:clamp(28px,3.6vw,40px); line-height:1.2; letter-spacing:-.022em; font-weight:700}
+  .lede{margin:0; max-width:64ch; color:var(--ink-2); font-size:16.5px}
+  .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+
+  section{padding-top:56px; scroll-margin-top:24px}
+  h2{margin:0 0 6px; font-size:23px; letter-spacing:-.014em; font-weight:700; display:flex; align-items:baseline; gap:12px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; letter-spacing:.04em}
+  .sub{margin:0 0 22px; color:var(--ink-3); font-size:14px; font-family:var(--mono)}
+  h3{margin:34px 0 10px; font-size:16.5px; font-weight:650; letter-spacing:-.006em}
+  h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  ul,ol{margin:0 0 14px; padding-left:22px; line-height:1.8}
+  li{margin-bottom:4px}
+  code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.8px; line-height:1.65}
+  pre .c{color:#7d8894} pre .k{color:#7dd3fc}
+
+  .io{border:1px solid var(--line); border-radius:10px; background:var(--card); margin:0 0 26px; overflow:hidden}
+  .io .row{display:grid; grid-template-columns:76px minmax(0,1fr); gap:16px; padding:13px 18px; border-bottom:1px solid var(--line-2)}
+  .io .row:last-child{border-bottom:none}
+  .io .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:700; padding-top:3px}
+  .io .val{font-size:14.5px; line-height:1.7}
+
+  .flow{display:grid; gap:0; margin:26px 0 8px}
+  .step{display:grid; grid-template-columns:34px minmax(0,1fr); gap:16px; align-items:start}
+  .step .dot{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:13px; font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .step .dot.m{background:var(--model-soft); color:var(--model); border-color:#ddd0fb}
+  .step .dot.w{background:var(--warn-soft); color:var(--warn); border-color:#f2ddb4}
+  .step .dot.e{background:var(--stop-soft); color:var(--stop); border-color:#f3c9c9}
+  .step .body{padding:5px 0 26px; border-bottom:1px dashed var(--line)}
+  .step:last-child .body{border-bottom:none}
+  .step .name{font-weight:650; font-size:15.5px; margin-bottom:3px}
+  .step .io2{font-family:var(--mono); font-size:12.3px; color:var(--ink-3); line-height:1.7}
+  .step .io2 em{font-style:normal; color:var(--ink-2)}
+
+  .marks{display:grid; gap:10px; margin:16px 0}
+  .mark{display:grid; grid-template-columns:74px minmax(0,1fr); gap:14px; padding:12px 15px; border-radius:8px; font-size:14.5px; line-height:1.65}
+  .mark .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding-top:2px}
+  .mark.a{background:var(--accent-soft); border:1px solid #bfe3dd} .mark.a .who{color:var(--accent)}
+  .mark.m{background:var(--model-soft); border:1px solid #ddd0fb} .mark.m .who{color:var(--model)}
+  .mark.w{background:var(--warn-soft); border:1px solid #f2ddb4} .mark.w .who{color:var(--warn)}
+  .mark.e{background:var(--stop-soft); border:1px solid #f3c9c9} .mark.e .who{color:var(--stop)}
+
+  .note{background:var(--accent-soft); border:1px solid #bfe3dd; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+  .warn{background:var(--warn-soft); border:1px solid #f2ddb4; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+
+  .stats{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0 22px}
+  @media (max-width:760px){ .stats{grid-template-columns:1fr} }
+  .stat{border:1px solid var(--line); border-radius:10px; background:var(--card); padding:14px 16px}
+  .stat .v{font-family:var(--mono); font-size:26px; font-weight:700; color:var(--accent); line-height:1.2}
+  .stat .l{font-size:13.5px; color:var(--ink-2); margin-top:6px; line-height:1.6}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; white-space:nowrap}
+  td code{font-size:12.6px}
+  tbody tr:hover{background:#f7f9fa}
+  td .s{display:inline-block; font-family:var(--mono); font-size:11px; border-radius:4px; padding:0 6px; margin-right:4px; border:1px solid; white-space:nowrap}
+  .s.done{color:#15803d; background:#ecfbf0; border-color:#bfe3c9}
+  .s.part{color:#a16207; background:#fefbe8; border-color:#f0dc9a}
+  .s.todo{color:var(--ink-3); background:var(--line-2); border-color:var(--line)}
+
+  .chain{display:flex; flex-direction:column; align-items:center; margin:26px 0 24px}
+  .node{width:min(100%,560px); border:2px solid var(--line); border-radius:12px; background:var(--card); padding:14px 18px; text-align:center}
+  .node .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-bottom:5px}
+  .node .t{font-weight:650; font-size:15px; line-height:1.45}
+  .node .d{font-size:13px; color:var(--ink-2); margin-top:6px; line-height:1.65}
+  .node .d code{font-size:11.8px}
+  .node .d ul{margin:8px 0 0; padding-left:22px; text-align:left}
+  .node.b{background:#eef4ff; border-color:#3b82f6} .node.b .k{color:#2563eb}
+  .node.g{background:#ecfbf0; border-color:#22a552} .node.g .k{color:#15803d}
+  .node.y{background:#fefbe8; border-color:#eab308} .node.y .k{color:#a16207}
+  .node.r{background:#fdeeee; border-color:#dc2626} .node.r .k{color:#b91c1c}
+  .node.p{background:#f4f0fd; border-color:#7c3aed} .node.p .k{color:#6d28d9}
+  .node.wide{width:min(100%,880px); text-align:left}
+  .node.wide .k,.node.wide .t{text-align:center}
+  .arrow{width:2px; height:28px; background:#9aa4b2; position:relative}
+  .arrow::after{content:""; position:absolute; left:50%; bottom:-2px; transform:translateX(-50%); border-left:6px solid transparent; border-right:6px solid transparent; border-top:9px solid #9aa4b2}
+  .split{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; width:min(100%,880px)}
+  .split .node{width:100%}
+  @media (max-width:760px){ .split{grid-template-columns:1fr} }
+  .loopnote{font-family:var(--mono); font-size:12px; color:var(--ink-3); margin:6px 0 0; text-align:center}
+
+  .layers{display:grid; grid-template-columns:120px minmax(0,1fr); gap:0; border:1px solid var(--line); border-radius:10px; background:var(--card); overflow:hidden; margin:16px 0 22px}
+  .layers .lv{font-family:var(--mono); font-size:11.5px; font-weight:700; letter-spacing:.06em; color:var(--ink-3); padding:12px 14px; border-bottom:1px solid var(--line-2); background:#f7f9fa}
+  .layers .its{padding:10px 14px; border-bottom:1px solid var(--line-2); display:flex; flex-wrap:wrap; gap:6px}
+  .layers .lv:nth-last-child(2), .layers .its:last-child{border-bottom:none}
+  .chip{font-size:13px; border:1px solid #c9d6e2; border-radius:6px; padding:2px 9px; background:#fff}
+  .chip.w{border-color:#f2ddb4; background:var(--warn-soft)}
+  .chip.dash{border-style:dashed}
+
+  .bar{display:flex; height:38px; border-radius:8px; overflow:hidden; border:1px solid var(--line); font-size:13.5px; margin:10px 0 6px}
+  .bar div{display:flex; align-items:center; justify-content:center; color:#fff; white-space:nowrap; padding:0 10px}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="rail" id="rail">
+  <div class="rail-title">场景组装 · 方案</div>
+  <a href="#overview"><span class="n">00</span>总览</a>
+  <a href="#why"><span class="n">01</span>为什么让 agent 判断</a>
+  <a href="#arch"><span class="n">02</span>分工与架构</a>
+  <a href="#batch"><span class="n">03</span>批次</a>
+  <a href="#bundle"><span class="n">04</span>批输入</a>
+  <a href="#state"><span class="n">05</span>状态</a>
+  <a href="#tools"><span class="n">06</span>工具</a>
+  <a href="#commit"><span class="n">07</span>提交与核验</a>
+  <a href="#schedule"><span class="n">08</span>调度</a>
+  <a href="#support"><span class="n">09</span>支撑图</a>
+  <a href="#eval"><span class="n">10</span>评估</a>
+  <a href="#status"><span class="n">11</span>实现进度</a>
+  <a href="#open"><span class="n">12</span>待决问题</a>
+</nav>
+
+<main>
+
+<div style="margin:24px 0 0;padding:10px 14px;border:1px solid #f2ddb4;background:#fef6e7;border-radius:8px;font-size:14px">存档：2026-11-11 测试实验（legacy 代码、批 1 r2）时的版本，已被新链路取代。当前版本见 <a href="../scene-assembly-design.html">场景组装 harness 设计框架</a> · <a href="../scene-assembly-pilot-walkthrough.html">以一个批次为例的复盘</a>。</div>
+<header class="top">
+  <div class="eyebrow">SceneAssembly · Harness Design · agent 主导</div>
+  <h1>场景组装：agent 判断，几何作证据</h1>
+  <p class="lede">
+    agent 决定"做什么"：放在哪、朝哪面、立在谁上面、资产能不能用。
+    harness 负责把 agent 的决定精确做到，并如实测量。
+    几何结果不会自动写进状态，只以证据，或 agent 主动调用的执行器的形式出现。
+  </p>
+  <div class="meta">
+    <span class="tag">场景 <b>scene0000_00</b></span>
+    <span class="tag">资产 <b>52 个 USD</b></span>
+    <span class="tag">输入 <b>assembly_handoff/v2 + 场景交接</b></span>
+    <span class="tag">循环内渲染 <b>trimesh 离线</b></span>
+    <span class="tag">物理与导出 <b>Isaac Sim</b></span>
+    <span class="tag">首个试验 <b>批 1 · IoU 0.532</b></span>
+  </div>
+</header>
+
+
+<!-- ============ 00 ============ -->
+<section id="overview">
+  <h2><span class="no">00</span>总览</h2>
+  <p class="sub">五个阶段 · 中间三个调模型 · 一头一尾纯本地</p>
+
+  <div class="flow">
+    <div class="step">
+      <div class="dot">01</div>
+      <div class="body">
+        <div class="name">准备</div>
+        <div class="io2"><em>输入</em> 两份交接文件 &nbsp;→&nbsp; <em>输出</em> 每个物体一份视图（资产、扫描、关键帧、5 个候选位姿）+ 支撑候选图 + 切好的批次</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">02</div>
+      <div class="body">
+        <div class="name">规划会话</div>
+        <div class="io2"><em>输入</em> 52 行场景目录 + 点级支撑候选 &nbsp;→&nbsp; <em>输出</em> 确认后的支撑关系、处理顺序</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">03</div>
+      <div class="body">
+        <div class="name">批会话 × 10–13</div>
+        <div class="io2"><em>输入</em> 共享层 + 4–6 个物体的输入包 &nbsp;→&nbsp; <em>输出</em> 每个物体一个已提交位姿（不可变版本链）、资产问题标记、写回约定登记表</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot m">04</div>
+      <div class="body">
+        <div class="name">整体复查 + 物理会话</div>
+        <div class="io2"><em>输入</em> 整场景渲染、俯视图、Isaac 物理沉降后的漂移 &nbsp;→&nbsp; <em>输出</em> 重开并修正的物体</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="dot">05</div>
+      <div class="body">
+        <div class="name">导出与评估</div>
+        <div class="io2"><em>输入</em> 最终状态 &nbsp;→&nbsp; <em>输出</em> scene.usd（可在 Isaac Sim 打开）+ 留出帧评分</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark m"><div class="who">agent</div><div>只做离散判断和选择：正反、倒置、支撑、缩放幅度、资产能不能用、处理顺序、何时重开。所有改动都先 propose，看过渲染和警告再 commit。</div></div>
+    <div class="mark a"><div class="who">harness</div><div>算证据、精确执行、渲染、给警告、记账。连续量的精确求解（落到支撑面、局部配准）做成执行器，由 agent 给意图和搜索窗口后调用。</div></div>
+    <div class="mark w"><div class="who">现状</div><div>02 / 04 和批次切分还没实现；03 已在批 1 上跑通两轮，详见 <a href="scene-assembly-pilot-walkthrough-20261111.html">批 1 试验复盘</a>。逐项进度见 <a href="#status">11</a>。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 01 ============ -->
+<section id="why">
+  <h2><span class="no">01</span>为什么让 agent 判断</h2>
+  <p class="sub">几何在连续量上很准，在几类离散判断上无能为力</p>
+
+  <div class="stats">
+    <div class="stat"><div class="v">48 / 52</div><div class="l">个物体，配准最优解和次优解残差比 &lt;1.2，多数相差 180°。正反面靠几何分不出来。</div></div>
+    <div class="stat"><div class="v">4 / 52</div><div class="l">个物体，关键帧轮廓 IoU 在最优和次优朝向之间能拉开 ≥0.05。IoU 也分不出来。</div></div>
+    <div class="stat"><div class="v">3.2 cm</div><div class="l">竖直锁定配准的残差中位数。给定朝向之后，几何对平移的求解很准。</div></div>
+  </div>
+
+  <table>
+    <thead><tr><th>问题</th><th>几何看到的</th><th>看图看到的</th></tr></thead>
+    <tbody>
+      <tr><td>正反面</td><td>toaster oven 两个朝向 IoU 0.63 vs 0.62；shelf 0.90 vs 0.89。几何最优解经常恰好是背面。</td><td>一个朝向是平板背面，另一个能看到门、旋钮和书，与关键帧一致。</td></tr>
+      <tr><td>倒置</td><td>SAM3D 有 6 个物体整体倒置。冰箱倒置前后残差 5.3 vs 5.1 cm，IoU 0.88 vs 0.90，几何检测不出来。</td><td>微波炉脚朝上，冰箱出水口在下面，一眼可见。</td></tr>
+      <tr><td>支撑</td><td>nightstand obj_0050 扫描底面在 0.23 m，stool 在 0.17 m。按扫描底面放会悬空。</td><td>关键帧里它们立在地上，是扫描缺了下半截。</td></tr>
+      <tr><td>支撑物</td><td>点级检测给出候选：tv 下方有 250 个点属于柜子 obj_0008。</td><td>"电视放在柜子上"是语义判断，确认后成为一条关系。</td></tr>
+      <tr><td>资产本身</td><td>mirror 所有朝向 IoU ≈0.10；couch 残差 20 cm；kitchen counter 是一块 5 cm 薄板；guitar case 平躺。</td><td>决定缩放、接受、标记，还是重新生成。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">结论</div><div>离散判断（正反、倒置、支撑、资产好坏）交给 agent；连续量的精确求解（贴面、局部配准）做成执行器，由 agent 指定意图和搜索窗口后调用。</div></div>
+    <div class="mark m"><div class="who">批 1 验证</div><div>在 agent 没见过的留出帧上，按残差最小选朝向（0.436）比完全不管朝向（0.472）还差；agent 看图后达到 0.532。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 02 ============ -->
+<section id="arch">
+  <h2><span class="no">02</span>分工与架构</h2>
+  <p class="sub">agent 只能通过工具读证据、提修改 · harness 是仪器加账本</p>
+
+  <div class="chain">
+    <div class="node b">
+      <div class="k">输入 · 两份交接文件</div>
+      <div class="t">assembly_handoff/v2 + 实例识别场景交接</div>
+      <div class="d">52 个 USD 资产 · SAM3D 旋转 · 资产尺寸与可信度 · 扫描点云 · 每物体 1–3 张关键帧（RGB + mask + 相机）· 内参 · floor_z<br>
+        另有 500 帧 GT（只用于评估）和 ScanNet 房间剩余网格（支撑面）</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node g wide">
+      <div class="k">harness · 证据（只读）</div>
+      <div class="t">物体卡 · 候选对比图 · 资产转台 · 精确相机渲染 · 测量</div>
+      <div class="d">
+        <ul>
+          <li>每个物体 5 个候选位姿：SAM3D + 4 个 yaw 起点的锁竖直配准</li>
+          <li>所有渲染都在关键帧的真实相机下（真实内参 + camera_to_world），和照片逐像素对齐</li>
+          <li>确定性的东西在这里一次算好，不重算、也不靠模型记</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node y wide">
+      <div class="k">agent · 判断与决定</div>
+      <div class="t">起点 · 正反 · 倒置 · 支撑 · 缩放 · 资产问题 · 顺序</div>
+      <div class="d">
+        <ul>
+          <li>每个物体的起点：选 SAM3D、选某个配准候选，或直接给绝对值</li>
+          <li>正反、倒置、90° 翻转；支撑、贴墙、挂墙关系；该调用哪个执行器</li>
+          <li>缩放幅度；资产接受、标记还是要求重生成</li>
+          <li>处理顺序、何时重开已接受的物体；每次调用附理由，逐条回应警告</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node g">
+      <div class="k">harness · 执行</div>
+      <div class="t">直接操作 · 执行器（窗口由 agent 给）</div>
+      <div class="d">位姿精确执行；落到支撑面、局部配准不会跳出 agent 给的窗口，所以不会把已判定的正面翻到背面</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node r">
+      <div class="k">harness · 提交关口</div>
+      <div class="t">propose → 核验渲染 + 警告（只警告，不否决）</div>
+      <div class="d">穿插 · 悬空 · 离扫描底面太远 · 缩放过大 · 超出扫描范围</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node p">
+      <div class="k">harness · 状态与日志</div>
+      <div class="t">不可变版本链 · 关系图 · stale 传播 · 调用日志</div>
+      <div class="d">每次 commit 写 <code>states/vNNNN.json</code>，旧版本不改；每轮的思考摘要、调用和看过的图全部存档</div>
+    </div>
+    <div class="arrow"></div>
+
+    <div class="node b">
+      <div class="k">流程末端 · Isaac Sim</div>
+      <div class="t">物理沉降 · 导出 scene.usd</div>
+      <div class="d">漂移量交回 agent。循环内的渲染全部离线（trimesh + embree），Isaac 只在最后用。</div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">为什么离线</div><div>循环内每个物体要看几十次图。离线渲染直接用 ScanNet 内参和 camera_to_world，逐像素对齐、能直接算 IoU；单资产全幅 0.16 s，52 个资产（214 万面）整场景全幅约 1 s，可并行、可复现，不依赖 Isaac 进程。</div></div>
+    <div class="mark w"><div class="who">为什么还要 Isaac</div><div>真正起碰撞作用的是凸包 / 凸分解碰撞体，不是视觉网格。凸包会填满凹处（比如床头板和床面之间），只有物理沉降能发现"放上去会被弹开"。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 03 ============ -->
+<section id="batch">
+  <h2><span class="no">03</span>批次</h2>
+  <p class="sub">一次会话处理 4–6 个物体 · 整个场景 10–13 批</p>
+
+  <h3>三个时间尺度</h3>
+  <table>
+    <thead><tr><th>层级</th><th>单位</th><th>规模</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>工具调用</td><td>一个物体</td><td>1</td><td>一次看图、一次 propose</td></tr>
+      <tr><td><b>会话</b></td><td><b>一批物体</b></td><td><b>4–6，默认 5</b></td><td>同一上下文里连续做多轮工具调用。设计对象是这一层</td></tr>
+      <tr><td>一轮</td><td>整个场景</td><td>10–13 批</td><td>加一次整体复查和一次物理沉降</td></tr>
+    </tbody>
+  </table>
+
+  <h3>批次为什么夹在 4–6</h3>
+  <div class="flow">
+    <div class="step"><div class="dot">1</div><div class="body"><div class="name">关键帧天生是多物体视图</div><div class="io2">某个物体的主关键帧里，中位还能看见 6 个其他物体（最少 3、最多 16）。一次只处理一个物体，这些邻居的图就被浪费，下一批再取同一张图重新计费</div></div></div>
+    <div class="step"><div class="dot">2</div><div class="body"><div class="name">图像不能全量共享</div><div class="io2">145 个（物体, 关键帧）对只对应 116 张不同的图；贪心覆盖全部 52 个物体至少要 45 张关键帧，一次会话塞不下</div></div></div>
+    <div class="step"><div class="dot">3</div><div class="body"><div class="name">token 预算</div><div class="io2">整帧 1296×968 约 1670 token，768² 环绕图约 790，512² 裁剪块约 350。5 个物体 × 约 4 张图 ≈ 20–25k，加目录、约定和状态约 10k，一次会话约 35k。到 8 个物体就会出现"后一个物体的决定要重开前一个"</div></div></div>
+  </div>
+  <div class="warn">这个场景没有自然分区：按质心单链接聚类，1.0 m 阈值切出的簇大小是 22/13/6/3/2/2/2/1/1；按"同帧共现"做弱连通，52 个物体连成一块。所以切批必须按规则算。</div>
+
+  <h3>切批规则（按优先级）</h3>
+  <div class="flow">
+    <div class="step"><div class="dot">1</div><div class="body"><div class="name">支撑依赖先行</div><div class="io2">同一支撑连通支尽量进同一批；切开时，支撑物所在的批严格在前。实测 11 条支撑边，最长链 2 层：toaster / dish rack / toaster oven → kitchen counter → cabinet obj_0042</div></div></div>
+    <div class="step"><div class="dot">2</div><div class="body"><div class="name">共享关键帧</div><div class="io2">同批物体在主关键帧里互相可见；一批 5 个物体通常只要 3–5 张新图</div></div></div>
+    <div class="step"><div class="dot">3</div><div class="body"><div class="name">同批不超过 6 个</div><div class="io2">支撑物 + 依赖物的一组通常自然落在 5–6 个</div></div></div>
+  </div>
+
+  <h3>按规则粗切的示意批次<span class="h">运行时由支撑图 + 共视矩阵现场计算</span></h3>
+  <table>
+    <thead><tr><th>批</th><th>内容</th><th>数量</th><th>依赖</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>bed 0037、nightstand 0049、pillow 0016、obj_0061、obj_0062、tissue box 0048</td><td>6</td><td>先床与床头柜，再其上物 · <a href="scene-assembly-pilot-walkthrough-20261111.html">已试跑</a></td></tr>
+      <tr><td>2</td><td>kitchen counter 0003、cabinet 0042、kitchen cabinets 0043 / 0040、refrigerator 0033</td><td>5</td><td>骨架，必须早于第 3 批</td></tr>
+      <tr><td>3</td><td>toaster 0053、dish rack 0051、toaster oven 0045、microwave 0052</td><td>4</td><td>依赖第 2 批</td></tr>
+      <tr><td>4</td><td>cabinet 0008、tv 0015、couch 0032、coffee table 0034、table 0002</td><td>5</td><td>先柜后电视</td></tr>
+      <tr><td>5</td><td>4 个 stool、table 0035、guitar case 0066</td><td>6</td><td>无</td></tr>
+      <tr><td>6</td><td>shower 0004、sink 0010、toilet 0036、scale 0011、mirror 0064</td><td>5</td><td>无</td></tr>
+      <tr><td>7</td><td>door 0054、cabinet 0038、curtain 0005</td><td>3</td><td>无</td></tr>
+      <tr><td>8</td><td>desk 0007、cabinet 0039、clock 0017、3 个 trash can</td><td>6</td><td>无</td></tr>
+      <tr><td>9</td><td>obj_0044、laundry basket 0046、guitar 0047、bicycle 0057、obj_0059、obj_0060</td><td>6</td><td>无</td></tr>
+      <tr><td>10</td><td>backpack 0018、nightstand 0050、curtain 0006、shoes 0058</td><td>4</td><td>无</td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+<!-- ============ 04 ============ -->
+<section id="bundle">
+  <h2><span class="no">04</span>批输入</h2>
+  <p class="sub">共享层发一次 · 每个物体一个输入包 · 实例见 <a href="../scene-assembly-input-example.html">批 1 的输入</a></p>
+
+  <div class="chain">
+    <div class="split">
+      <div class="node b">
+        <div class="k">共享层 · 每批发一次</div>
+        <div class="t">初始事实 · 场景目录 · 约定登记表 · 证据表</div>
+        <div class="d">初始事实约 400 token：Z-up、米制、floor_z = 0.0544、内参 1170.188 / 647.75 / 483.75、1296×968、OpenCV 外参约定、资产约定；场景目录 52 行 ≈ 1k；同批状态摘要；已算好的配准候选、IoU、支撑点计数</div>
+      </div>
+      <div class="node b">
+        <div class="k">跨批 · 写进版本链</div>
+        <div class="t">约定登记表 · 支撑确认结果 · 资产标记</div>
+        <div class="d">例："正面 = 门的朝向"、"SAM3D up 偏差 &gt;30° 时 yaw 不可信"。一次判断摊到整场：第 1 批定下的事，第 7 批不该重新踩一遍</div>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g wide">
+      <div class="k">harness · 批输入组装</div>
+      <div class="t">按支撑深度切批 · 每物体图像 ≤5 张 · 复用同批共视帧</div>
+      <div class="d">
+        <ul>
+          <li>候选朝向拼成一张 1×5 对比图；资产转台 4 视角带坐标轴</li>
+          <li>画面占比 &lt;5% 的小物体裁到 bbox × 2</li>
+          <li>超预算先减视角数，主关键帧和文字卡最后才动</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node y wide">
+      <div class="k">每个物体的输入包 · 5 件 · 缺任何一件 agent 就会退化成猜</div>
+      <div class="t">① 主关键帧 · ② 资产转台 · ③ 候选对比图 · ④ 文字卡 · ⑤ 状态行</div>
+      <div class="d">
+        <ul>
+          <li><b>① 主关键帧</b> + mask 轮廓。18 个物体在最佳关键帧里不到 5%（mirror 0.95% 约 109 px、shoes 1.34%、nightstand 0050 1.78%、clock 2.10%），另给裁到 bbox × 2 的裁剪块；14 个超过 20%（shelf 66.6%、cabinet 0042 64.0%、couch 63.7%），原图就够</li>
+          <li><b>② 资产转台</b>：四面看资产并画出坐标轴。资产朝向与场景无关，这是判断"哪面是正面"的唯一独立证据</li>
+          <li><b>③ 候选对比图</b>：SAM3D 与 4 个配准候选在同一相机下渲染，一张图横向比</li>
+          <li><b>④ 文字卡</b> 200–300 token：尺寸、物理、残差、支撑点、稳健扫描高度，每条带可靠性注记</li>
+          <li><b>⑤ 状态行</b>：当前位姿、缩放、状态、已声明关系、agent 自己的 notes</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node p">
+      <div class="k">一个批会话</div>
+      <div class="t">4–6 个物体 · 先定支撑物再放其上物</div>
+      <div class="d">每物体：看图 → propose → 核验 → commit；批末写回约定登记表。<br>
+        批 1 实测：展示分辨率约 16k，原生约 24k 输入 token（低于 35k 估算）</div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark w"><div class="who">从不共享</div><div>其他批的图像（否则 116 张图会无限堆积）、其他批的完整对话、留出池的帧、完整调用日志（只给摘要和指针）。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 05 ============ -->
+<section id="state">
+  <h2><span class="no">05</span>状态</h2>
+  <p class="sub">沿用 InstanceRecognition 的不可变版本链 · 初始全部 unplaced</p>
+
+  <table>
+    <thead><tr><th>字段</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td><code>objects[oid].pose</code></td><td><code>(x, y, z, yaw_deg, up, scale_xy, scale_z)</code>。up 是 6 个正交朝向之一（倒放、侧放）；(x, y) 是占地中心，z 是最低点高度</td></tr>
+      <tr><td><code>objects[oid].status</code></td><td><code>unplaced</code> → <code>placed</code> → <code>accepted</code>；另有 <code>stale</code>（支撑物变动后）和 <code>flagged</code>（资产问题）</td></tr>
+      <tr><td><code>objects[oid].support</code></td><td>支撑物：<code>floor</code> 或另一个物体</td></tr>
+      <tr><td><code>relations</code></td><td><code>supported_by</code>、<code>against</code>（墙或物体）、<code>attached</code>（挂墙）</td></tr>
+      <tr><td><code>asset_flags</code></td><td>问题描述，以及处理请求：<code>regen</code> / <code>accept_scaled</code> / <code>drop</code></td></tr>
+      <tr><td><code>notes</code></td><td>agent 写的理由</td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">缩放拆分</div><div>原设计是"三轴缩放"。批 1 实测：资产高度都在真值 6% 以内，占地常常不对。只有统一缩放时，缩床修占地会把床面压低 16 cm，床上物体全部下沉（第 1 轮 0.342）。拆成 scale_xy / scale_z 后第 2 轮 0.532。占地仍是两轴同比例，批 1 的床说明两轴需要分开（见 <a href="#status">11</a>）。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 06 ============ -->
+<section id="tools">
+  <h2><span class="no">06</span>工具</h2>
+  <p class="sub">证据只读 · 动作分直接操作和执行器 · 关系与资产 · 提交</p>
+
+  <h3>证据（只读）</h3>
+  <table>
+    <thead><tr><th>工具</th><th>返回</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td><code>get_object_card(oid)</code></td><td>文字卡：标签、物理属性、资产与扫描尺寸、稳健扫描高度、5 个候选及残差、接触点、关键帧。每条注明可靠性，例如"残差不能区分正反"</td><td><span class="s done">已实现</span></td></tr>
+      <tr><td><code>view_candidates(oid, frame)</code></td><td>5 个候选在同一关键帧相机下的对比图 + 各自轮廓 IoU</td><td><span class="s done">已实现</span></td></tr>
+      <tr><td><code>view_asset(oid, up)</code></td><td>资产转台，画出资产自己的坐标轴</td><td><span class="s done">已实现</span></td></tr>
+      <tr><td><code>view_compare(oid, frame)</code></td><td>关键帧 + 同相机下当前渲染（已放物体灰色一起渲染，看得见遮挡）</td><td><span class="s done">已实现</span> 名为 view_pose</td></tr>
+      <tr><td><code>view_topdown(region)</code></td><td>扫描点云、已放物体轮廓、墙线</td><td><span class="s todo">未实现</span></td></tr>
+      <tr><td><code>view_scene(frame)</code></td><td>整场景渲染，供整体复查</td><td><span class="s todo">未实现</span></td></tr>
+      <tr><td><code>measure(a, b)</code></td><td>间隙、穿插深度、离地高度、接触面积</td><td><span class="s todo">未实现</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>动作</h3>
+  <table>
+    <thead><tr><th>类别</th><th>工具</th><th>说明</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td>直接操作</td><td><code>place</code> · <code>set_pose</code> · <code>nudge</code> · <code>flip</code> · <code>scale</code></td><td>nudge 支持视角相对方向（"在 kf454 视角里左移 8 cm"）；flip 做 90° / 180° 翻转修正倒置</td><td><span class="s part">部分</span> 合并为 propose_pose 的参数</td></tr>
+      <tr><td>执行器</td><td><code>snap(on_top_of=X|floor)</code></td><td>竖直落到支撑面上</td><td><span class="s done">已实现</span> propose 里 z 留空</td></tr>
+      <tr><td>执行器</td><td><code>refine_local(yaw_window, xy_window)</code></td><td>窗口内局部配准，不会跳出 agent 给的窗口</td><td><span class="s done">已实现</span> 名为 fit_to_scan</td></tr>
+      <tr><td>执行器</td><td><code>snap(against=wall|X)</code> · <code>align_with(Y)</code></td><td>贴墙、与另一物体对齐</td><td><span class="s todo">未实现</span></td></tr>
+      <tr><td>关系与资产</td><td><code>declare_relation</code> · <code>flag_asset</code></td><td>关系一经声明，就参与 stale 传播和物理检查</td><td><span class="s part">部分</span> 支撑写在 propose 里；flag 不带处理请求</td></tr>
+      <tr><td>提交</td><td><code>propose</code> · <code>commit</code> · <code>reopen</code></td><td>见 <a href="#commit">07</a></td><td><span class="s part">部分</span> 无独立 reopen，直接重新 propose</td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+<!-- ============ 07 ============ -->
+<section id="commit">
+  <h2><span class="no">07</span>提交与核验</h2>
+  <p class="sub">和 InstanceRecognition 的 propose_update / commit_update 同一套模式 · 预览是渲染图</p>
+
+  <div class="chain">
+    <div class="node y">
+      <div class="k">agent 选动作</div>
+      <div class="t">位姿 / 执行器 + 支撑物 + 理由</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g">
+      <div class="k">propose · harness 计算，不写状态</div>
+      <div class="t">执行动作 → 落到支撑面 → 算警告 → 渲染</div>
+      <div class="d">返回：最终位姿数值、警告列表、"照片 vs 提案"对比图、轮廓 IoU</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">核验轮 · 强制</div>
+      <div class="t">agent 看渲染和警告</div>
+      <div class="d">警告类型：穿插 &gt;2 cm · 声明的支撑面有空隙或陷入 · 无支撑却悬空 · 最低点离扫描底面 &gt;6 cm · 缩放偏离 1 超过 20% · 占地中心超出扫描范围</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="split">
+      <div class="node y">
+        <div class="k">不满意</div>
+        <div class="t">修改参数或换执行器，重新 propose</div>
+        <div class="d">设计：核验最多 2 轮，之后必须决断（提交、标记或放弃）。<br>实现：目前不限轮数</div>
+      </div>
+      <div class="node p">
+        <div class="k">满意 · commit</div>
+        <div class="t">写入 v(N+1)，旧版本不改</div>
+        <div class="d">理由必须逐条回应警告。这是要求解释，不是否决。<br>支撑物移动过的话，上面的物体标 stale，等复查</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks">
+    <div class="mark e"><div class="who">批 1 教训</div><div>"只要求解释、不否决"被一个错误理由钻了空子：穿插警告被解释成"碰撞体外扩"放行了四次，结果肉眼可见穿模。原因之一是物体卡给的扫描占地是轴对齐包围盒，房间转了约 18°，床被放大了。改进方向见 <a href="#status">11</a>。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 08 ============ -->
+<section id="schedule">
+  <h2><span class="no">08</span>调度</h2>
+  <p class="sub">每批新开短会话 · 批间串行 · 处理顺序由 agent 定</p>
+
+  <div class="chain">
+    <div class="node y">
+      <div class="k">① 规划会话</div>
+      <div class="t">读简表和支撑候选图 · 排顺序 · 写计划</div>
+      <div class="d">确认哪些点级支撑候选是真的支撑关系</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node g wide">
+      <div class="k">② 批会话 × 10–13 · 批内按支撑深度串行</div>
+      <div class="t">每批新开上下文：场景目录 + 约定 + 4–6 个物体的输入包</div>
+      <div class="d">新开短会话，避免图片在长上下文里堆积；批末把新确立的约定写回登记表，供后续批次使用</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node y">
+      <div class="k">③ 整体复查</div>
+      <div class="t">整场景渲染 · 俯视图 · stale / flagged 列表</div>
+      <div class="d">reopen 指定物体，回到 ②</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node r">
+      <div class="k">④ 物理会话 · Isaac Sim</div>
+      <div class="t">房间剩余网格作静态碰撞体 · 物理沉降</div>
+      <div class="d">漂移或穿插交回 agent，修正关系或位置</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="node b">
+      <div class="k">⑤ 导出 + 评估</div>
+      <div class="t">scene.usd：reference + xformOp（含缩放）+ PhysicsScene</div>
+      <div class="d">附带按照片内参校准的关键帧相机，可在 Isaac Sim 里按照片视角查看</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 09 ============ -->
+<section id="support">
+  <h2><span class="no">09</span>支撑图</h2>
+  <p class="sub">scene0000_00 实测候选 · 支撑物多数是其他物体，不是房间</p>
+
+  <div class="layers">
+    <div class="lv">层 0</div>
+    <div class="its"><span class="chip">地面（ScanNet 剩余网格）</span><span class="chip dash">墙面</span></div>
+    <div class="lv">层 1 · 立在地上</div>
+    <div class="its"><span class="chip">cabinet 0008</span><span class="chip">cabinet 0042</span><span class="chip w">refrigerator ⚠ 倒置</span><span class="chip">nightstand 0049</span><span class="chip">bed</span></div>
+    <div class="lv">层 2</div>
+    <div class="its"><span class="chip">tv → 0008</span><span class="chip w">kitchen counter ⚠ 薄板 → 0042</span><span class="chip">kitchen cabinets 0040 → refrigerator</span><span class="chip">tissue box → 0049</span><span class="chip">pillow · obj_0062 → bed</span></div>
+    <div class="lv">层 3</div>
+    <div class="its"><span class="chip">toaster → counter</span><span class="chip">obj_0061 → bed</span></div>
+    <div class="lv">贴墙</div>
+    <div class="its"><span class="chip dash">clock</span><span class="chip dash w">mirror ⚠ 资产不符</span><span class="chip dash">curtain 0006</span><span class="chip dash">obj_0043</span></div>
+  </div>
+
+  <div class="marks">
+    <div class="mark a"><div class="who">顺序</div><div>必须先放下层、再放上层；下层移动时上层标 stale。harness 只提供点级候选（例如 tv 下方有 250 个点属于 obj_0008），由 agent 在规划会话里确认。</div></div>
+    <div class="mark w"><div class="who">例外</div><div>nightstand 0050 和 stool 的扫描底面在 0.23 m 和 0.17 m，但实际立在地上，同属层 1。dish rack、obj_0060 落在未标注表面上，这些表面保留在房间剩余网格里。</div></div>
+    <div class="mark e"><div class="who">点级候选会骗人</div><div>批 1 里床的支撑候选是床头柜的 19 个点，那是床头柜的腿，不是床放在柜子上。点级检测只看"下方有点"，分不出方向。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 10 ============ -->
+<section id="eval">
+  <h2><span class="no">10</span>评估</h2>
+  <p class="sub">在 agent 从没见过的视角上打分 · 所有方法用同一套帧</p>
+
+  <div class="bar"><div style="background:#0f766e;flex:0 0 22%">agent 可见池</div><div style="background:#2563eb;flex:1">留出池：只用于评估，agent 永远看不到</div></div>
+  <p style="font-size:14px;color:var(--ink-3)">500 个采样帧都有 GT 位姿、RGB 和实例 mask。可见池 = 每个物体的关键帧；每个物体可见于 7–144 帧（中位 75），留出池足够大。</p>
+
+  <div class="flow">
+    <div class="step"><div class="dot e">1</div><div class="body"><div class="name">选帧</div><div class="io2">物体 mask 占画面 ≥1% 的帧，去掉关键帧，固定种子取 16 张</div></div></div>
+    <div class="step"><div class="dot e">2</div><div class="body"><div class="name">渲染并处理遮挡</div><div class="io2">真实相机下渲染；用传感器深度判断，真实表面比资产近 10 cm 以上的像素不计分</div></div></div>
+    <div class="step"><div class="dot e">3</div><div class="body"><div class="name">打分</div><div class="io2">和标注 mask 算 IoU，16 帧取平均。ScanNet 真值网格自评 0.77–0.91，是天花板</div></div></div>
+  </div>
+
+  <table>
+    <thead><tr><th>基线</th><th>做法</th><th>批 1 平均 IoU</th></tr></thead>
+    <tbody>
+      <tr><td>B0</td><td>扫描包围盒中心 + yaw 0</td><td>0.472</td></tr>
+      <tr><td>B1</td><td>SAM3D 姿态</td><td>0.477</td></tr>
+      <tr><td>B2</td><td>配准残差最小</td><td>0.436</td></tr>
+      <tr><td>B3</td><td>B2 + 贴支撑面</td><td>未实现</td></tr>
+      <tr><td>上界</td><td>拿着答案从 5 个候选里挑最好的</td><td>0.513</td></tr>
+      <tr><td><b>agent</b></td><td>第 2 轮（第 1 轮 0.342，失败原因见复盘页）</td><td><b>0.532</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="marks">
+    <div class="mark w"><div class="who">其它指标</div><div>设计里还有：与扫描点云的 chamfer 距离、物理沉降后的漂移、正反与倒置正确率（人工标注 15–20 个有明确正面的物体）、成本。目前只实现了留出帧 IoU 和成本记录。</div></div>
+    <div class="mark e"><div class="who">标注会出错</div><div>批 1 的床头柜 2D 标注把上面的纸巾盒和下层的包一起圈了进去，agent 判断对也只拿 0.208。单个物体的低分要先看照片再下结论。</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 11 ============ -->
+<section id="status">
+  <h2><span class="no">11</span>实现进度</h2>
+  <p class="sub">截至 2026-11-11 · 批 1 跑通两轮</p>
+
+  <table>
+    <thead><tr><th>部分</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>交接加载</td><td><span class="s done">已实现</span></td><td><code>handoff.py</code>：两份交接按 object_id 拼合、校验哈希</td></tr>
+      <tr><td>候选与证据</td><td><span class="s done">已实现</span></td><td>5 个候选、物体卡、候选对比图、转台、对比渲染</td></tr>
+      <tr><td>状态与提交</td><td><span class="s done">已实现</span></td><td>propose / commit / accept / flag、版本链、stale 标记、6 类警告</td></tr>
+      <tr><td>批会话循环</td><td><span class="s done">已实现</span></td><td>claude-opus-5-5，单批跑通，批 1 第 2 轮 0.532</td></tr>
+      <tr><td>评估</td><td><span class="s done">已实现</span></td><td>留出帧遮挡感知 IoU + B0 / B1 / B2 / 上界</td></tr>
+      <tr><td>USD 导出 + Isaac 渲染</td><td><span class="s done">已实现</span></td><td>按照片内参校准的相机，Isaac 无界面渲染约 10 秒</td></tr>
+      <tr><td>批输入组装（目录、约定、去重）</td><td><span class="s part">部分</span></td><td>批 1 的输入页是一次性生成的；会话里 agent 按需调工具取证据，没有预先打包</td></tr>
+      <tr><td>规划会话、切批、批间续作</td><td><span class="s todo">未实现</span></td><td>目前手动指定一批</td></tr>
+      <tr><td>整体复查、物理会话</td><td><span class="s todo">未实现</span></td><td>Isaac 只做了渲染，没有跑物理沉降</td></tr>
+      <tr><td>墙面、贴墙、房间壳体</td><td><span class="s todo">未实现</span></td><td>地面只用 floor_z 一个高度</td></tr>
+    </tbody>
+  </table>
+
+  <h3>最小闭环：原定先跑的 5 个物体<span class="h">实际先跑的是批 1，这 5 个还没跑</span></h3>
+  <table>
+    <thead><tr><th>物体</th><th>要验证的能力</th></tr></thead>
+    <tbody>
+      <tr><td>toaster oven、shelf</td><td>几何分不出正反（IoU 只差 0.01）时，agent 能否看图选对正面</td></tr>
+      <tr><td>refrigerator</td><td>能否发现倒置并用翻转修正；它的 SAM3D yaw 还需要另加 180°</td></tr>
+      <tr><td>tv</td><td>能否声明它放在 obj_0008 上；obj_0008 移动后，tv 能否被标 stale 并跟着移动</td></tr>
+      <tr><td>nightstand obj_0050</td><td>扫描缺下半截时能否让它贴地；能否判断资产高度（0.467 m）偏小</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:14px;color:var(--ink-2)">批 1 已经覆盖了支撑链、倒置物体（头盔 0061）和倾斜物体（毛绒玩具 0016）；正反面、冰箱倒置、stale 传播还要靠这 5 个物体验证。</p>
+
+  <h3>批 1 暴露、待改的问题</h3>
+  <div class="flow">
+    <div class="step"><div class="dot e">1</div><div class="body"><div class="name">扫描占地给错了口径</div><div class="io2">物体卡给的是轴对齐包围盒，房间转了约 18°，斜放的床被撑大（1.98×2.32 vs 真实 2.02×1.53）。应改给定向最小外接矩形和每条边需要的缩放</div></div></div>
+    <div class="step"><div class="dot e">2</div><div class="body"><div class="name">占地两轴只能同比例</div><div class="io2">床要放下需要 0.73 和 0.66 两个比例。占地缩放要拆成两个方向</div></div></div>
+    <div class="step"><div class="dot e">3</div><div class="body"><div class="name">穿插警告被错误理由放行</div><div class="io2">穿插只测单向（报 4 / 5 cm，实际 7 / 8 cm）；理由不核实。应双向测，超过阈值时要求"已修正"或给出照片证据</div></div></div>
+    <div class="step"><div class="dot w">4</div><div class="body"><div class="name">没有物理沉降</div><div class="io2">头盔悬空 6 cm 的理由是"物理会把它放下"，但流程里没有这一步</div></div></div>
+    <div class="step"><div class="dot w">5</div><div class="body"><div class="name">只看一张关键帧选朝向</div><div class="io2">包按关键帧 IoU 选了 icp90，在其他视角上 icp270 更好</div></div></div>
+  </div>
+</section>
+
+
+<!-- ============ 12 ============ -->
+<section id="open">
+  <h2><span class="no">12</span>待决问题</h2>
+  <p class="sub">需要你拍板</p>
+
+  <table>
+    <thead><tr><th>问题</th><th>选项</th><th>现状</th></tr></thead>
+    <tbody>
+      <tr><td>模型与网关</td><td>Claude 网关，还是 GPT 网关（gpt-6-sol，与 InstanceRecognition 一致）</td><td>试验用了 Claude 网关的 claude-opus-5-5。该网关的提示词缓存只写不读，每轮都按完整上下文计费</td></tr>
+      <tr><td>重新生成</td><td><code>flag_asset(request=regen)</code> 是真的回调 ObjectGeneration，还是只记录交给人处理</td><td>目前只记录。批 1 的纸巾盒、床头柜资产都需要</td></tr>
+      <tr><td>房间壳体</td><td>直接用 ScanNet 剩余网格，还是拟合成平面</td><td>建议用剩余网格：dish rack 等物体要靠其中的未标注表面支撑。目前只用 floor_z</td></tr>
+      <tr><td>帧划分</td><td>按 <a href="#eval">10</a> 的两池划分是否可以；可见池每个物体再给几帧</td><td>目前可见池只有关键帧（每物体 1–3 张）</td></tr>
+      <tr><td>警告是否升级为否决</td><td>保持"只要求解释"，还是对穿插等硬约束直接拦截</td><td>批 1 显示"只解释"会被错误理由钻空子</td></tr>
+    </tbody>
+  </table>
+
+  <p style="font-size:13.5px;color:var(--ink-3)">相关页面：<a href="scene-assembly-pilot-walkthrough-20261111.html">批 1 试验复盘</a> · <a href="../scene-assembly-input-example.html">一个批会话的输入 · 第 1 批</a></p>
+</section>
+
+<footer>
+  <p>SceneAssembly · Harness Design · 方案草案 2026-11-10 · 按批 1 试验更新 2026-11-11</p>
+</footer>
+</main>
+</div>
+<script>
+  const rail=document.getElementById('rail');
+  if(rail){
+    const links=[...rail.querySelectorAll('a')];
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){
+          links.forEach(l=>l.classList.remove('on'));
+          const a=rail.querySelector(`a[href="#${e.target.id}"]`);
+          if(a)a.classList.add('on');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section[id]').forEach(s=>obs.observe(s));
+  }
+</script>
+</body>
+</html>

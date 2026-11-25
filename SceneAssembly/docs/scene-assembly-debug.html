@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>场景组装 · Debug 记录</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px; margin:0 auto; padding:0 28px 120px}
+  header.top{padding:52px 0 28px; border-bottom:1px solid var(--line)}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:12px}
+  h1{margin:0 0 12px; font-size:32px; line-height:1.25; letter-spacing:-.02em}
+  .lede{margin:0; color:var(--ink-2); max-width:68ch}
+  .meta{margin-top:18px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+  h2{margin:48px 0 12px; font-size:21px; display:flex; align-items:baseline; gap:10px; border-bottom:1px solid var(--line); padding-bottom:8px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600}
+  p{margin:0 0 12px}
+  a{color:var(--accent)}
+  ul,ol{margin:0 0 12px; padding-left:22px}
+  li{margin:4px 0}
+  code{font-family:var(--mono); font-size:.86em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  table{width:100%; border-collapse:collapse; margin:12px 0 16px; font-size:14px; background:var(--card)}
+  th,td{text-align:left; padding:8px 12px; border:1px solid var(--line); vertical-align:top}
+  th{background:var(--line-2); font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); font-weight:650; white-space:nowrap}
+  td code{font-size:12.4px}
+  .small{font-size:13.5px; color:var(--ink-3)}
+
+  .pill{display:inline-block; font-family:var(--mono); font-size:11px; border-radius:4px; padding:0 7px; border:1px solid; white-space:nowrap; line-height:1.8}
+  .pill.found{color:var(--stop); background:var(--stop-soft); border-color:#f3c9c9}
+  .pill.plan{color:var(--warn); background:var(--warn-soft); border-color:#f2ddb4}
+  .pill.done{color:#15803d; background:#ecfbf0; border-color:#bfe3c9}
+  .pill.none{color:var(--ink-3); background:var(--line-2); border-color:var(--line)}
+
+  /* One record per point. The three blocks are always in the same order,
+     so a reader can jump straight to "what did we actually change". */
+  .entry{background:var(--card); border:1px solid var(--line); border-radius:10px; margin:20px 0; overflow:hidden; scroll-margin-top:20px}
+  .entry-head{display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; padding:13px 18px; background:var(--line-2); border-bottom:1px solid var(--line)}
+  .entry-head .id{font-family:var(--mono); font-size:12.5px; color:var(--accent); font-weight:700}
+  .entry-head .title{font-weight:650; font-size:16px}
+  .entry-head .date{margin-left:auto; font-family:var(--mono); font-size:11.5px; color:var(--ink-3)}
+  .blk{padding:16px 18px 6px}
+  .blk+.blk{border-top:1px solid var(--line)}
+  .blk>.h{display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); font-weight:700; margin-bottom:10px}
+  .blk p,.blk li{font-size:14.5px}
+  .blk h4{margin:16px 0 6px; font-size:14.5px; font-weight:650}
+  .blk.empty{color:var(--ink-3); background:#f7f9fa}
+  .blk.empty p{font-size:14px; margin-bottom:10px}
+
+  .loops{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:12px 0 16px}
+  @media (max-width:760px){ .loops{grid-template-columns:1fr} }
+  .loop{border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:#f7f9fa}
+  .loop .cap{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:700; margin-bottom:8px}
+  .loop .row{display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:13.5px; line-height:2}
+  .st{border:1.5px solid #9aa4b2; border-radius:6px; padding:0 9px; background:#fff; white-space:nowrap}
+  .st.v{border-color:#dc2626; background:#fdeeee}
+  .st.x{border-style:dashed; color:var(--ink-3)}
+  .ar{color:#9aa4b2}
+  .loop .n{font-size:13px; color:var(--ink-2); margin-top:8px; line-height:1.65}
+
+  figure.ev{margin:12px 0 14px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--card); max-width:580px}
+  figure.ev img{display:block; width:100%; height:auto}
+  figure.ev figcaption{padding:9px 13px; font-size:13px; color:var(--ink-2); line-height:1.6; border-top:1px solid var(--line-2)}
+  footer{margin-top:56px; padding-top:20px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+
+  details.fold{margin:22px 0; border:1px solid var(--line); border-radius:10px; background:#f7f9fa}
+  details.fold>summary{cursor:pointer; list-style:none; padding:12px 18px; font-family:var(--mono); font-size:14px; font-weight:700; color:var(--accent); display:flex; align-items:baseline; gap:12px}
+  details.fold>summary::-webkit-details-marker{display:none}
+  details.fold>summary::before{content:"▸"; color:var(--ink-3); transition:transform .15s}
+  details.fold[open]>summary::before{content:"▾"}
+  details.fold>summary .cnt{font-family:-apple-system,"PingFang SC",sans-serif; font-weight:400; font-size:13px; color:var(--ink-3)}
+  details.fold>.inner{padding:0 14px 6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">SceneAssembly · Debug Log</div>
+  <h1>场景组装：Debug 记录</h1>
+  <p class="lede">
+    每个改进点一条记录，固定三栏：发现的问题、改动计划、实际改动。
+    没有动代码之前，"实际改动"一栏留空。
+  </p>
+  <div class="meta">
+    <span class="tag">条目 <b id="entryCount">—</b></span>
+    <span class="tag">更新 <b>2026-11-24</b></span>
+    <span class="tag">基准运行 <b>harness-v1-opus55-batch1-20261111-r2</b></span>
+  </div>
+</header>
+
+
+<h2><span class="no">00</span>怎么用这一页</h2>
+
+<table>
+  <thead><tr><th>栏</th><th>写什么</th><th>什么时候填</th></tr></thead>
+  <tbody>
+    <tr><td>发现的问题</td><td>现象、证据（运行记录里的数字）、涉及的代码位置</td><td>确认问题时</td></tr>
+    <tr><td>改动计划</td><td>打算怎么改、依赖哪些其他条目、还没定的事项。讨论定下来之前标"待确认"</td><td>讨论时；定下来后更新状态</td></tr>
+    <tr><td>实际改动</td><td>改了哪些文件、和计划的出入、改完后的实测结果</td><td>代码改完并验证之后</td></tr>
+  </tbody>
+</table>
+<p class="small">代码路径相对 <code>SceneAssembly/</code>；行号是写这条记录时的位置，代码改动后可能偏移。<b>2026-11-20 起</b>测试实验版代码移到了 <code>src/legacy/</code>，D01–D06 里的 <code>src/scene.py</code>、<code>src/agent.py</code> 等指的是 <code>src/legacy/</code> 下的同名文件；新代码按功能分包（<code>src/inputs/</code>、<code>src/isaac/</code>），见 <code>src/README.md</code>。</p>
+
+
+<h2><span class="no">01</span>条目索引</h2>
+
+<details class="fold" open>
+<summary>2026-11-24 <span class="cnt">D13 · 未改动 1</span></summary>
+<div class="inner">
+<table>
+  <thead><tr><th>编号</th><th>标题</th><th>发现的问题</th><th>改动计划</th><th>实际改动</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><a href="#D13"><code>D13</code></a></td>
+      <td>交接里缺了支撑物：床实际立在地毯上，agent 只能声明 floor</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill plan">待确认</span></td>
+      <td><span class="pill none">未改动</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="fold">
+<summary>2026-11-12 <span class="cnt">D01–D12 · 已完成 7 · 已实现待整场景验证 3 · 部分完成 1 · 未改动 1</span></summary>
+<div class="inner">
+<table>
+  <thead><tr><th>编号</th><th>标题</th><th>发现的问题</th><th>改动计划</th><th>实际改动</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><a href="#D01"><code>D01</code></a></td>
+      <td>Verify 之后没有打回</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定（见 D06）</span></td>
+      <td><span class="pill done">已完成</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D02"><code>D02</code></a></td>
+      <td>批次是手写的，没有切批规则</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定</span></td>
+      <td><span class="pill done">已完成</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D03"><code>D03</code></a></td>
+      <td>朝向成了五选一：agent 在 harness 给的候选里挑</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定</span></td>
+      <td><span class="pill done">已完成</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D04"><code>D04</code></a></td>
+      <td>给 agent 的图是半透明叠加，难以分辨</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定</span></td>
+      <td><span class="pill done">已完成</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D05"><code>D05</code></a></td>
+      <td>观测全靠 agent 逐个调工具去要</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定</span></td>
+      <td><span class="pill done">已完成</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D06"><code>D06</code></a></td>
+      <td>位姿工具：两段式提交、贴点云、验证绑在提议里</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill plan">部分已定</span></td>
+      <td><span class="pill plan">部分完成</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D07"><code>D07</code></a></td>
+      <td>墙体交付后接入组装：渲染、贴墙定位、穿墙与出房间检查</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定</span></td>
+      <td><span class="pill done">已完成</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D08"><code>D08</code></a></td>
+      <td>渲染和物理统一交给常驻的 Isaac 服务</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定</span></td>
+      <td><span class="pill done">已完成</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D09"><code>D09</code></a></td>
+      <td>M7 agent：工具表、提示词、开局消息、对话循环</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定</span></td>
+      <td><span class="pill plan">已实现，待整场景验证</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D10"><code>D10</code></a></td>
+      <td>M8 编排：11 批连续、断点恢复、全局物理、导出</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定</span></td>
+      <td><span class="pill plan">已实现，待整场景验证</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D11"><code>D11</code></a></td>
+      <td>M9 评估：留出帧 IoU、基线、几何物理、过程指标、报告</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill done">已定</span></td>
+      <td><span class="pill plan">已实现，待整场景验证</span></td>
+    </tr>
+    <tr>
+      <td><a href="#D12"><code>D12</code></a></td>
+      <td>批 3 实测：五个物体均值 0.568，obj_0061 掉到 0.126</td>
+      <td><span class="pill found">已确认</span></td>
+      <td><span class="pill plan">待确认</span></td>
+      <td><span class="pill none">未改动</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</details>
+<p class="small">状态于 2026-11-24 按代码现状统一更新。"已实现，待整场景验证"：代码和单模块验收都做了，真实模型只跑过批 3，11 批连续、全局物理、导出还没在真模型上跑过。</p>
+
+
+<h2><span class="no">02</span>记录</h2>
+
+<details class="fold" open id="fold-20261124">
+<summary>2026-11-24 <span class="cnt">D13 · 批 3 复盘</span></summary>
+<div class="inner">
+<!-- ============ D13 ============ -->
+<div class="entry" id="D13">
+  <div class="entry-head">
+    <span class="id">D13</span>
+    <span class="title">交接里缺了支撑物：床实际立在地毯上，agent 只能声明 floor</span>
+    <span class="date">记录于 2026-11-24</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+    <p>复盘批 3 时（用户 2026-11-24 指出）：关键帧 45 里床脚下铺着一块地毯，床真实的支撑物是地毯，不是地板。但组装链路里没有地毯这个物体。</p>
+
+    <figure class="ev"><img src="assets/assembly-batch3/s02_bed_final.jpg" alt="帧 45">
+      <figcaption>批 3 轮 3 之后的拼接图（帧 45）。左边照片里床脚下是花纹地毯；右边的渲染里只有地砖，因为地毯不在任何交接里。</figcaption></figure>
+
+    <h4>agent 当时怎么判断的</h4>
+    <ul>
+      <li>床只用了 4 轮（轮 2–5）。轮 3 <code>set_pose</code> 参数 <code>support: {"kind": "floor"}</code>，推理摘要只有 "Shrinking the bed"，reason："Reduce oversized footprint to match bed edges and place base on floor."</li>
+      <li>轮 5 <code>finish</code> 的 note："Bed footprint aligned with photographed sides; floor support checked."</li>
+      <li>整个对话里没有出现 rug、carpet、mat 这类词，没有调 <code>check_scene</code>，也没有任何文字输出。<b>agent 没有意识到地毯，也没有要求查看有没有地毯。</b></li>
+    </ul>
+
+    <h4>就算 agent 想查，也没有途径</h4>
+    <table>
+      <thead><tr><th>环节</th><th>现状</th></tr></thead>
+      <tbody>
+        <tr><td>物体清单</td><td>assembly_handoff/v2 的 52 个物体里没有 rug / carpet / mat。场景交接（67 个实例）里也没有：帧 45 床脚下那片地毯在 ScanNet 2D 标注里属于 <code>floor</code>（obj_0009），floor 实例没有资产，不进组装</td></tr>
+        <tr><td>工具</td><td>10 个工具里没有"问 harness 某样东西在不在"的工具；文字卡、已放物体清单、<code>check_scene</code> 都只涉及 52 个物体</td></tr>
+        <tr><td>支撑类型</td><td>只有 floor / object / wall（D06），object 必须是 52 个物体之一。认出了地毯，也只能声明 floor</td></tr>
+        <tr><td>地板高度</td><td>floor 是一个高度：墙体交接的地板顶面 0.054，全房间一样</td></tr>
+      </tbody>
+    </table>
+
+    <h4>这次的影响（实测）</h4>
+    <p>用场景交接里 floor（obj_0009）的扫描点，10,234 个点：</p>
+    <table>
+      <thead><tr><th>位置</th><th>floor 扫描点高度中位数</th></tr></thead>
+      <tbody>
+        <tr><td>床的扫描范围外扩 0.6 m 内（地毯所在）</td><td>0.061 m（p90 0.092）</td></tr>
+        <tr><td>房间其他地方</td><td>0.053 m</td></tr>
+        <tr><td>墙体交接的地板顶面</td><td>0.054 m</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>地毯约高出地板 0.7–0.8 cm。床按 floor 落到 0.054，比实际低不到 1 cm，在验证的 1 cm 容差内，对留出帧 IoU 基本没有影响。</li>
+      <li>床的扫描底面 0.106 比地面高 5 cm，原因不是地毯，是床底一圈被床罩挡住没扫到。agent 选 floor、不按扫描底面放，是对的。</li>
+    </ul>
+
+    <h4>为什么要记</h4>
+    <p>这次没出问题只因为地毯薄。问题是一类：<b>照片里有、交接里没有的支撑物</b>（地毯、地垫、门口脚垫、桌上的托盘、书本垫着的东西）。现在的设计里：</p>
+    <ul>
+      <li>agent 没有渠道说出"我看到它立在一个清单里没有的东西上"，只能选 floor 或某个已有物体，这个信息就丢了。</li>
+      <li>floor 只有一个高度，局部抬高（厚地毯、门槛）落 z 会偏低。</li>
+    </ul>
+    <p class="small">数据：<code>runs/assembly-batch3-20261123/batch_03/calls.jsonl</code> 轮 2–5；<code>InstanceRecognition/artifacts/handoff/scene0000_00/gt/clouds/obj_0009.ply</code>；ScanNet 2D 标注帧 45。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill plan">待确认</span></div>
+    <p>几个方向，还没讨论：</p>
+    <ol>
+      <li><b>让 agent 能说出来（只记录）</b>：在 <code>set_pose</code> 的 support 里加一个可选字段，例如 <code>unlisted_support: "rug"</code>，或要求 reason 写明照片里支撑物是什么。harness 不据此改任何东西，只记录、在批末汇总给人看。不影响 z。</li>
+      <li><b>提示词</b>：说明物体清单不全；看到清单里没有的支撑物时，按最接近的类型声明（通常是 floor），并写明它实际是什么。</li>
+      <li><b>局部地板高度</b>：floor 落 z 时用 floor 扫描点在物体占地内的局部高度，而不是全房间一个 0.054。代价是让扫描数据参与定 z，和"z 只由支撑决定、不读扫描"（D06、D12 讨论中）有冲突。</li>
+      <li><b>上游补资产</b>：让上游把地毯这类薄层作为物体交付（需要和 InstanceRecognition / ObjectGeneration 商量），组装这边就能声明 <code>object on rug</code>。</li>
+    </ol>
+    <p class="small">关联：D06（支撑类型）、D07（只用上游交付的结构，不读真值）、D12（小物体落 z 的取舍）。</p>
+  </div>
+
+  <div class="blk empty">
+    <div class="h">实际改动 <span class="pill none">未改动</span></div>
+    <p>尚未改动。</p>
+  </div>
+</div>
+</div>
+</details>
+
+<details class="fold" id="fold-20261112">
+<summary>2026-11-12 <span class="cnt">D01–D12 · 记录于 2026-11-12 至 2026-11-23</span></summary>
+<div class="inner">
+<!-- ============ D01 ============ -->
+<div class="entry" id="D01">
+  <div class="entry-head">
+    <span class="id">D01</span>
+    <span class="title">Verify 之后没有打回</span>
+    <span class="date">记录于 2026-11-12</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+
+    <p>harness 的循环应该是 Observe → Reason → Act → Verify，Verify 不通过就回到 Observe 重来。
+      现在有两层 Verify，结果都只是信息，没有一处能把结果打回去。</p>
+
+    <div class="loops">
+      <div class="loop">
+        <div class="cap">现在 · 提议层</div>
+        <div class="row">
+          <span class="st">看证据</span><span class="ar">→</span>
+          <span class="st">判断</span><span class="ar">→</span>
+          <span class="st">propose</span><span class="ar">→</span>
+          <span class="st v">警告 + 渲染</span><span class="ar">→</span>
+          <span class="st">commit</span>
+        </div>
+        <div class="n">警告回到 agent，但 agent 写一句理由就能提交。是否重来由它自己决定，理由不被核对。</div>
+      </div>
+      <div class="loop">
+        <div class="cap">现在 · 批次层</div>
+        <div class="row">
+          <span class="st">批会话结束</span><span class="ar">→</span>
+          <span class="st v">留出帧评分</span><span class="ar">→</span>
+          <span class="st x">写 eval.json，结束</span>
+        </div>
+        <div class="n">评分时会话已经结束，分数不回到任何地方。要重来只能由人改代码后整批重跑。</div>
+      </div>
+    </div>
+
+    <h4>涉及的代码</h4>
+    <table>
+      <thead><tr><th>位置</th><th>现状</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/scene.py:192</code> <code>warnings()</code></td><td>算出 6 种警告，只返回文字列表</td></tr>
+        <tr><td><code>src/scene.py:240</code> <code>commit()</code></td><td>只检查提议编号存在。不看这个提议带了什么警告，也不看理由的内容</td></tr>
+        <tr><td><code>src/scene.py:258</code> <code>accept()</code></td><td>只检查物体已放置。带着未解决警告的物体也能被接受</td></tr>
+        <tr><td><code>src/agent.py:242</code> <code>finish_batch()</code></td><td>只检查每个物体都已接受或已标记。查的是"处理完没有"，不是"摆得对不对"</td></tr>
+        <tr><td><code>src/run_experiment.py:58–68</code></td><td>顺序是：agent 会话 → 评分 → 写文件。评分之后没有任何步骤</td></tr>
+      </tbody>
+    </table>
+    <p class="small">唯一间接起作用的约束：支撑物被移动后，它上面的物体被标为 <code>stale</code>，agent 不重新接受就过不了 <code>finish_batch</code>。</p>
+
+    <h4>证据：批 1 第二次运行（r2）</h4>
+    <p>8 次提交里 6 次带警告，全部提交成功。其中 4 次带穿插警告：</p>
+    <table>
+      <thead><tr><th>版本</th><th>物体</th><th>警告</th><th>agent 的理由（摘要）</th></tr></thead>
+      <tbody>
+        <tr><td><code>v0002</code></td><td>床头柜 <code>obj_0049</code></td><td>穿入床 4 cm</td><td rowspan="3">"来自床的凸包碰撞体（或床罩）外扩；怎么平移都还在；轻微，接受"</td></tr>
+        <tr><td><code>v0003</code></td><td>床头柜 <code>obj_0049</code></td><td>穿入床 4 cm</td></tr>
+        <tr><td><code>v0004</code></td><td>床头柜 <code>obj_0049</code></td><td>穿入床 4 cm；高度缩放 0.73</td></tr>
+        <tr><td><code>v0005</code></td><td>纸巾盒 <code>obj_0048</code></td><td>穿入床 5 cm；占地缩放 0.55</td><td>"床的凸包碰撞体外扩到了床头柜这一侧"</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><b>理由不成立。</b>穿插检查（<code>src/scene.py:171</code>）用的是视觉网格，这条链路里没有凸包碰撞体。四次都用同一个错误理由通过。</li>
+      <li><b>后果看得见。</b>床 × 床头柜、床 × 纸巾盒各重叠约 1.5 L，实际深度 7–8 cm。Isaac 同机位渲染里肉眼可见穿模。</li>
+      <li><b>评分发现不了。</b>r2 的留出帧 IoU 是 0.532，高于最好的基线 0.513。轮廓 IoU 不测穿插。</li>
+      <li>另外两次带警告的提交：床的占地缩放 0.78（<code>v0001</code>）、<code>obj_0061</code> 与床之间有 6 cm 空隙（<code>v0007</code>）。</li>
+    </ul>
+    <p class="small">数据来源：<code>runs/harness-v1-opus55-batch1-20261111-r2/states/v0001–v0008.json</code> 和 <code>eval.json</code>。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定（见 D06）</span></div>
+
+    <p>下面是我提出的方向，还没有讨论定下来。</p>
+    <p class="small">2026-11-12 更新：<a href="#D06">D06</a> 已定取消"提议 / 提交"两段式，改为每次改动立即生效并自动验证；检查要有拦截和自动撤回，并和指标对应。所以下面第 1 条"拒绝提交"改由 D06 的"验证不过 → 自动撤回"来实现，具体对应关系在 D06 里待定；第 2、3 条（批次层）仍待定。</p>
+
+    <h4>1. 提议层：硬性问题拒绝提交</h4>
+    <ul>
+      <li>穿插超过阈值、悬空、陷入支撑物：<code>commit</code> 直接拒绝，返回原因和能解除它的移动量。</li>
+      <li>缩放偏大、离扫描底面偏远这类：仍然只警告。</li>
+      <li>配套两样东西，否则 agent 会为了过关把物体推离原位：
+        <ul>
+          <li>允许名单：物体与它声明的支撑物之间放宽（如枕头压在床上）。</li>
+          <li>相对扫描点云的改动上限。</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h4>2. 批次层：批末检查，不合格的重开</h4>
+    <ul>
+      <li>帧分成三份：关键帧（摆放时看）、验证帧（批末打分，可以反馈）、测试帧（始终不反馈，只报最终数字）。</li>
+      <li>批末检查项：验证帧 IoU、穿插量、物理沉降前后的位移。</li>
+      <li>不合格的物体连同证据（对比图、数值）交回去重开。</li>
+    </ul>
+
+    <h4>3. 轮数上限</h4>
+    <ul>
+      <li>重开有次数上限。到上限仍不过的物体标记出来交给人，不无限循环。</li>
+    </ul>
+
+    <h4>依赖</h4>
+    <ul>
+      <li>穿插测量现在是单向的，报 4–5 cm 而实际 7–8 cm。要用它做拒绝的依据，得先把测量改准。这一点另立条目。</li>
+      <li>物理沉降目前没有实现（Isaac 只用来渲染）。</li>
+    </ul>
+
+    <h4>还没定的事</h4>
+    <ul>
+      <li>哪些算硬性、阈值各是多少。</li>
+      <li>批末检查由代码规则做，还是另开一个不看摆放过程的独立会话来做。</li>
+      <li>重开的轮数上限。</li>
+      <li>参考实现的两种做法选哪种或怎么组合：LiteReality 是"不变好就丢弃并回传原因"，scenesmith 是"独立 critic + 评分下降回滚"。见 <a href="reference-agents-lessons.md">可借鉴经验</a> 的 L4、S1、S2。</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill done">已完成</span></div>
+    <p><b>2026-11-24 更新状态</b>：这条的方向已在 D06（每次改动自动检查、变差就撤回、连续 3 次撤回标失败）和 D02 / M6（批末绝对阈值检查，不过重开一次，再不过标失败）里定下并实现，实现记录见这两条。批 3 实跑里批末检查重开了吊柜 0041（D12）。</p>
+    <p>没有做的一项：把帧分成关键帧 / 验证帧 / 测试帧三份、批末用验证帧打分回传。这项一直没讨论，现在批末检查只用几何和物理，不用 IoU（用户 11-20：不给 agent 处理过的分数）。</p>
+  </div>
+</div>
+
+<!-- ============ D02 ============ -->
+<div class="entry" id="D02">
+  <div class="entry-head">
+    <span class="id">D02</span>
+    <span class="title">批次是手写的，没有切批规则</span>
+    <span class="date">记录于 2026-11-12</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+
+    <ul>
+      <li><b>批次写死在代码里。</b><code>src/run_experiment.py:27</code> 的 <code>BATCH_1</code> 是一个手写的 6 个物体的列表，也可以用 <code>--objects</code> 传别的列表。整个代码库只定义过这一个批次，其余 46 个物体没有分过批，也没有跑过。</li>
+      <li><b>这 6 个是人工挑的。</b>依据是我看标签和照片认定的支撑关系（床、床头柜，以及它们上面的东西），加上"照片里互相看得见"和"数量在 4–6 个以内"。没有任何程序在推导。</li>
+      <li><b>方案页 §03 的切批规则没有实现。</b>规则是：支撑关系优先、同批共享关键帧、每批不超过 6 个。它需要的两样输入都不存在：确认过方向的支撑关系，和全场景的共视数据。页面上那张 10 批的表是手工粗切的示意。</li>
+      <li><b>支撑关系只能决定少数物体。</b>实测的支撑候选只有约 10 条，大多数物体直接立在地上，靠它分不了批。</li>
+    </ul>
+
+    <h4>关键帧数据（交接文件实测）</h4>
+    <table>
+      <thead><tr><th></th><th>（物体, 帧）对</th><th>合并相同帧后</th><th>只属于 1 个物体</th><th>2 个共用</th><th>3 个共用</th><th>4 个共用</th></tr></thead>
+      <tbody>
+        <tr><td>全部关键帧</td><td>145</td><td>116</td><td>92</td><td>20</td><td>3</td><td>1</td></tr>
+        <tr><td>首个关键帧</td><td>52</td><td>44</td><td>37</td><td>6</td><td>1</td><td>0</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>52 个物体里 43 个有 3 张关键帧，7 个有 2 张，2 个只有 1 张。</li>
+      <li>同一个物体的几张关键帧，序号跨度中位数 33，有 16 个物体超过 100：同一个物体在拍摄中被多次路过。</li>
+      <li>交接文件记录的是"这一帧是谁的关键帧"，不是"这一帧里能看到谁"。一张关键帧通常只被 1 个物体列为关键帧，但按 ScanNet 的 2D 标注，画面占比 ≥ 1% 的物体中位数是 5 个。</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定</span></div>
+
+    <p>规则由用户在 2026-11-12 定下：</p>
+    <ol>
+      <li>每个物体只用<b>首个关键帧</b>，即它的关键帧里序号最小的那张。</li>
+      <li>把 44 张首个关键帧按序号（拍摄顺序）排列。</li>
+      <li>沿这个顺序每次取 <b>5 个物体</b>作为一批。</li>
+      <li>这一批的帧就是这 5 个物体的首个关键帧，合并相同的：5 个物体对应 4 张就用 4 张。</li>
+      <li><b>不考虑依赖关系。</b></li>
+    </ol>
+    <p class="small">"这一帧有哪些物体"按交接文件的关键帧归属来定，不用 2D 标注。</p>
+
+    <h4>按这个规则切出的批次（模拟结果，代码未改）</h4>
+    <table>
+      <thead><tr><th>批</th><th>物体</th><th>帧</th><th>首个关键帧序号</th><th>物体（标签 + 编号）</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>5</td><td>4</td><td>0、3、13、<b>16</b></td><td>table 0035、cabinet 0039、shoes 0058、clock 0017、desk 0007</td></tr>
+        <tr><td>2</td><td>5</td><td>4</td><td><b>16</b>、20、26、27</td><td>object 0059、trash can 0014、tissue box 0048、curtain 0006、nightstand 0049</td></tr>
+        <tr><td>3</td><td>5</td><td>4</td><td>45、53、55、<b>58</b></td><td>bed 0037、object 0061、object 0062、pillow 0016、cabinet 0041</td></tr>
+        <tr><td>4</td><td>5</td><td>4</td><td><b>58</b>、84、89、95</td><td>nightstand 0050、object 0060、laundry basket 0046、guitar 0047、mirror 0064</td></tr>
+        <tr><td>5</td><td>5</td><td>5</td><td>122、124、141、143、157</td><td>door 0054、cabinet 0038、trash can 0012、trash can 0013、kitchen cabinets 0040</td></tr>
+        <tr><td>6</td><td>5</td><td>5</td><td>162、170、174、211、217</td><td>stool 0028、table 0002、cabinet 0008、curtain 0005、backpack 0018</td></tr>
+        <tr><td>7</td><td>5</td><td>5</td><td>223、225、250、252、262</td><td>bicycle 0057、tv 0015、shelf 0056、coffee table 0034、guitar case 0066</td></tr>
+        <tr><td>8</td><td>5</td><td>5</td><td>264、338、339、354、<b>357</b></td><td>couch 0032、toilet 0036、sink 0010、scale 0011、shower 0004</td></tr>
+        <tr><td>9</td><td>5</td><td>5</td><td><b>357</b>、390、393、400、<b>401</b></td><td>object 0044、refrigerator 0033、kitchen cabinets 0043、toaster 0053、cabinet 0042</td></tr>
+        <tr><td>10</td><td>5</td><td>5</td><td><b>401</b>、402、409、419、437</td><td>dish rack 0051、toaster oven 0045、microwave 0052、kitchen counter 0003、stool 0030</td></tr>
+        <tr><td>11</td><td>2</td><td>2</td><td>439、448</td><td>stool 0031、stool 0029</td></tr>
+      </tbody>
+    </table>
+    <p class="small">共 11 批：前 4 批各 4 张帧，第 5–10 批各 5 张，最后一批 2 个物体 2 张。加粗的序号是被两个批同时用到的帧。</p>
+
+    <h4>两个细节（用户 2026-11-12 确认）</h4>
+    <ul>
+      <li><b>同一帧里多个物体的先后</b>：按物体编号从小到大。</li>
+      <li><b>一帧的物体跨了两批时</b>：不为了凑整而调整批的边界，这张帧在两批里各出现一次。实际有 4 张：16、58、357、401。</li>
+    </ul>
+    <p class="small">这里的先后只用来决定物体落在哪一批。批内实际的处理顺序由 agent 自己选，见 <a href="#D04">D04</a>。</p>
+
+    <h4>不考虑依赖关系带来的情况</h4>
+    <p>用方案页上的 10 条支撑候选对照（这些候选是点级检测加人工判断，方向没有确认过）：</p>
+    <table>
+      <thead><tr><th>情况</th><th>条数</th><th>具体</th></tr></thead>
+      <tbody>
+        <tr><td>支撑物和被支撑物同批</td><td>6</td><td>床上的 3 件、纸巾盒与床头柜、台面上的沥水架和烤箱。批内先后由 agent 自己定</td></tr>
+        <tr><td>支撑物在更早的批</td><td>2</td><td>电视（批 7）在柜子 0008（批 6）上；台面（批 10）在柜子 0042（批 9）上</td></tr>
+        <tr><td>支撑物在更晚的批</td><td>2</td><td>吊柜 0040（批 5）在冰箱（批 9）上；烤面包机（批 9）在台面（批 10）上</td></tr>
+      </tbody>
+    </table>
+    <p>最后一类的 2 个物体放置时支撑物还不在场，只能按扫描高度定 z，不能落到支撑面上。</p>
+
+    <h4>穿插检查必须是全局的（用户 2026-11-12 确认）</h4>
+    <p>批只决定"这一轮放哪几个物体"，不是检查的范围。任何一个物体放置时，都要对<b>场景里所有已放的物体</b>做穿插检查，不管它们是哪一批放的。</p>
+    <table>
+      <thead><tr><th>位置</th><th>现状</th><th>要改成</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/scene.py:76</code></td><td>每次运行只加载本批物体的资产和扫描点云</td><td>之前各批已放的物体也要在场（资产 + 已提交的位姿）</td></tr>
+        <tr><td><code>src/scene.py:194</code></td><td>穿插检查只遍历本批已放的物体</td><td>遍历全场景已放的物体</td></tr>
+        <tr><td><code>src/run_experiment.py</code></td><td>一次运行就是一个批，运行之间不传状态</td><td>11 批连续跑，后一批从前一批的最终状态开始</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>不做的话查不到的情况：相邻但分在不同批的物体，例如床头柜 0049 在批 2、床 0037 在批 3。批 1 试验里穿模的正是这一对。</li>
+      <li>顺带的好处：支撑物在更早的批时（电视与柜子 0008、台面与柜子 0042），后一批可以直接落到它上面。</li>
+      <li>渲染对比图同样要画出之前各批已放的物体，agent 才看得到遮挡和相邻关系。</li>
+    </ul>
+
+    <h4>其他配套</h4>
+    <ul>
+      <li>穿插测量本身目前是单向的、偏小（见 <a href="#D01">D01</a> 的依赖）。全局检查用的是同一个测量，测量的修正另立条目。</li>
+      <li>方案页 §03 的规则和示意表要在实现后同步改掉。</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill done">已完成</span></div>
+    <h4>2026-11-23 · M6 批次（<code>src/batch/</code>）</h4>
+    <p class="small">用户 2026-11-23 定（6 条按建议）：剩下没处理的部分可以改顺序；一批最多拉进 3 个物体；更晚批的支撑物可以提前拉进来（它从原批里移除）；批末检查不过的物体重开一次，第二次还不过标失败；每批一个新对话，开局附已放物体的文字清单、不附旧图；拉进来的物体若没有一张共享帧看得见，自动加入它的首个关键帧。</p>
+    <table>
+      <thead><tr><th>文件</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>plan.py</code></td><td><code>cut_batches</code>：按首个关键帧（最小序号）排序、同帧按编号、每 5 个一批；每批的共享帧</td></tr>
+        <tr><td><code>session.py</code></td><td><code>BatchSession</code>：<code>open</code>（52 个物体写入起点；本批物体保持"未处理"，开局材料 + 已放物体清单）、<code>set_order</code>、<code>start</code> / <code>finish</code>、<code>bring_in</code>、<code>check_view</code>（只允许共享帧）、<code>end</code>（全局接触 + 墙 / 房间 + 15 s 物理；重开一次）、<code>close</code>（写断点版本号）</td></tr>
+      </tbody>
+    </table>
+    <p><b>验收</b>（<code>runs/batch-test-20261123/</code>，24 项全部通过）：</p>
+    <ul>
+      <li>切批与本条目的表完全一致：11 批（10×5 + 2）、成员、共享帧；跨两批的帧正好是 16、58、357、401。</li>
+      <li>开批后、agent 开始处理前，场景里没有任何物体；处理枕头时场景里只有已完成的床和枕头。</li>
+      <li>没定顺序不能开始；顺序必须是整批；已处理的物体不能挪位置，剩下的可以。</li>
+      <li>换视角：共享帧可以，批外的帧（如床的 primary 63）拒绝。</li>
+      <li>拉进来：之前批的床头柜 0049 带着文字卡和四面图进来；之后批的柜子 0042 进来并从批 9 移除，它没有一张共享帧看得见，自动加入帧 401；第 4 个被拒。</li>
+      <li>批末检查在起点位姿上发现 6 个物体有问题（接触、穿墙、出房间、物理），第一次全部重开；没修就再结束，第二次全部标失败、不再重开。</li>
+      <li>断点写入版本号；批 9 开局时跳过已提前处理的 0042，并带上之前放好的 8 个物体的文字清单。</li>
+    </ul>
+    <p><b>用户 2026-11-23：批末检查保持绝对阈值</b>（最终场景要能在 Isaac 里用，起点带来的穿墙、出房间也必须修）。</p>
+    <p><b>需要注意</b>：批末检查用的是<b>绝对阈值</b>（不是"不比改动前差"）。起点本身就穿墙、出房间的物体（如床，墙穿透 0.25 m），agent 不修的话批末一定会被打回，再不修就标失败。这符合 D01"批末不合格要打回"的意图，但意味着 agent 必须真的处理起点带来的问题。</p>
+  </div>
+</div>
+<!-- ============ D03 ============ -->
+<div class="entry" id="D03">
+  <div class="entry-head">
+    <span class="id">D03</span>
+    <span class="title">朝向成了五选一：agent 在 harness 给的候选里挑</span>
+    <span class="date">记录于 2026-11-12</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+
+    <p>harness 给每个物体预先算好 5 个候选位姿，写在文字卡里，并拼成一张 5 格的对比图。
+      机制上 agent 可以填任意数值，但实际行为是先挑一个候选，再小幅修改。朝向的判断被框在这 5 个答案里。</p>
+
+    <h4>5 个候选怎么来的</h4>
+    <ul>
+      <li><b>猜 5 种摆法</b>：1 个来自 SAM3D 生成资产时估计的朝向；另外 4 个假设资产正放，水平转 0°、90°、180°、270°。</li>
+      <li><b>每种都往扫描点云上贴一下</b>：只允许微调（最多转 ±20°、挪 25 cm），量出贴合后的残差。</li>
+      <li>配准纠正不了朝向：起点朝哪边，结果就朝哪边。</li>
+    </ul>
+    <p class="small">代码：<code>src/scene.py:88</code> <code>candidates()</code>、<code>src/icp.py</code> <code>refine()</code>、<code>src/pose.py</code> <code>nearest_upright()</code>。</p>
+
+    <h4>证据：批 1 第二次运行（r2）最终位姿与最接近的候选</h4>
+    <table>
+      <thead><tr><th>物体</th><th>最接近的候选</th><th>水平偏移</th><th>yaw 偏差</th><th>朝上轴</th><th>占地缩放</th><th>高度缩放</th></tr></thead>
+      <tbody>
+        <tr><td>床 0037</td><td>sam3d</td><td>4.8 cm</td><td>6.9°</td><td>+Z</td><td>0.78</td><td>1.00</td></tr>
+        <tr><td>床头柜 0049</td><td>icp180</td><td>0.2 cm</td><td>7.0°</td><td>+Z</td><td>0.85</td><td>0.73</td></tr>
+        <tr><td>纸巾盒 0048</td><td>icp0</td><td>5.9 cm</td><td>0°</td><td>+Z</td><td>0.55</td><td>1.00</td></tr>
+        <tr><td>object 0062</td><td>icp90</td><td>0</td><td>0°</td><td>+Z</td><td>1.00</td><td>1.00</td></tr>
+        <tr><td>object 0061</td><td>icp270</td><td>0</td><td>0°</td><td>+Z</td><td>1.00</td><td>1.00</td></tr>
+        <tr><td>枕头 0016</td><td>icp90</td><td>8.3 cm</td><td>0°</td><td>+Z</td><td>1.00</td><td>1.00</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><b>朝向是选出来的。</b>6 个物体的 yaw 都在某个候选的 7° 以内，4 个完全照抄。朝上轴没有一个换过。</li>
+      <li><b>位置大多也是候选的。</b>2 个完全照抄，其余偏移 0.2–8 cm。</li>
+      <li><b>agent 自己定的只有缩放和支撑。</b>3 个物体改了缩放；z 多数是指定支撑物后由工具落下去算的。</li>
+    </ul>
+
+    <h4>连带的问题</h4>
+    <ul>
+      <li><b>候选都不对时很难跳出去。</b>4 个配准候选都假设资产的 +Z 朝上；全场景有 8 / 52 个物体 SAM3D 判为倒置或侧躺。</li>
+      <li><b>候选是按原始尺寸配准的。</b>资产占地偏大时候选的位置本身不准（床的残差约 32 cm）。缩放后要重新配准，这一步靠 agent 自己想起来调 <code>fit_to_scan</code>，6 个物体只用了 3 次。</li>
+      <li><b>残差分不出正反。</b>全场景 18 / 52 个物体，残差最小和第二小的候选相差不到 20%，朝向却差 45° 以上。</li>
+    </ul>
+    <p class="small">全场景数字是 2026-11-12 对 52 个物体各算 5 个候选得到的；批 1 的数字来自 <code>runs/harness-v1-opus55-batch1-20261111-r2/</code>。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定</span></div>
+
+    <h4>已定（用户 2026-11-12）</h4>
+    <ol>
+      <li><b>只给一个初始位姿</b>，不再给 5 个候选。之后的调整在这一个位姿上进行。</li>
+      <li><b>起点用 SAM3D 的朝向</b>：按 SAM3D 判断的朝上轴和 yaw 摆好，再往扫描点云上配准一次。</li>
+      <li><b>多朝向并排对比图暂时不保留。</b></li>
+    </ol>
+
+    <h4>已知的风险：单个结果的朝向不可信</h4>
+    <p>只给一个结果，朝向就由 SAM3D 先定了，而配准改不了它。对照数据：</p>
+    <table>
+      <thead><tr><th>范围</th><th>现象</th><th>数量</th></tr></thead>
+      <tbody>
+        <tr><td>全场景</td><td>SAM3D 起点的朝向与残差最小的朝向差 45° 以上（只看 SAM3D 判为正放的 44 个）</td><td>9 个，其中 6 个约差 180°</td></tr>
+        <tr><td>批 1 的 6 个物体</td><td>SAM3D 起点的朝向与 agent 看图后最终选定的朝向差 60° 以上</td><td>4 个</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>批 1 物体</th><th>床</th><th>床头柜</th><th>纸巾盒</th><th>object 0062</th><th>object 0061</th><th>枕头</th></tr></thead>
+      <tbody>
+        <tr><td>SAM3D 起点与 agent 最终朝向的差</td><td>7°</td><td>12°</td><td>116°</td><td>68°</td><td>151°</td><td>67°</td></tr>
+      </tbody>
+    </table>
+    <p class="small">留出帧评分是同一个结论：SAM3D 起点 0.477，agent 看图后 0.532。agent 的朝向不一定都对（枕头这类物体朝向本来就模糊），但差距说明初始朝向不能直接当结果用。</p>
+
+    <h4>待确认：后续的调整怎么做</h4>
+    <p>下面是我的建议，还没有讨论定下来。</p>
+    <ul>
+      <li><b>明说初始朝向不可信。</b>初始位姿的作用是告诉 agent 物体大概在哪、多高，不是告诉它朝哪。</li>
+      <li><b>朝向由 agent 看图判断，不从列表里挑。</b>它看照片和资产转台图，决定哪面朝上、正面朝哪。</li>
+      <li><b>调整要包括大角度转动。</b></li>
+      <li><s>转向或缩放之后由工具自动重新贴合点云。</s> <b>已撤回</b>（2026-11-12）：这会悄悄改掉 agent 给的位置和朝向。点云不再用来贴合，只作为验证指标，见 <a href="#D06">D06</a>。</li>
+    </ul>
+    <p>没有并排对比图之后，agent 判断正反能用的图只剩两种：资产转台图，和"照片 | 当前位姿渲染"对比图。它要比较两个朝向，只能提议两次、各看一张。</p>
+
+    <h4>M3 初始位姿：细化（用户 2026-11-20）</h4>
+    <table>
+      <thead><tr><th>#</th><th>事项</th><th>定下的做法</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>开局的 z</td><td>取扫描点底面（2% 分位，低于地面按地面），<b>不声明支撑</b>（用 M2 内部的 <code>height</code> 类型）。文字卡注明"未声明支撑，高度取自扫描底面"。agent 第一次改这个物体时必须声明支撑。实测扫描底面离地 3–10 cm 的有 13 个、10–30 cm 的 3 个（凳子 0031 15 cm、床头柜 0050 20 cm、obj_0059 25 cm），初始渲染里会悬空，由 agent 看图处理</td></tr>
+        <tr><td>2</td><td>SAM3D 的朝上轴为 −Z</td><td><b>改用 +Z</b>，yaw 不变。只涉及 6 个物体（SAM3D 竖直轴偏离 169°–179°）。生成的资产都是正立的，−Z 只能是 SAM3D 整个转倒了。<code>runs/sam3d-flip-check-20261120/flip_check.jpg</code> 逐个对照：窗帘 0006、洗衣篮、微波炉改后与照片一致；冰箱竖直对了但 yaw 仍要转（之前记录要 +180°）；obj_0061 照片看不出上下；镜子资产本身不匹配。最接近 ±X/±Y 的（枕头、吉他盒，资产躺着生成）照用 SAM3D 的轴。这 6 个的 yaw 不可信，文字卡标"朝向未确认"。agent 仍可自己设 −Z</td></tr>
+        <tr><td>3</td><td>初始倾斜</td><td><b>一律为 0</b>。SAM3D 取整到最近的轴后残余倾斜中位 6.3°、超过 15° 的 6 个，多为误差；真斜的物体由 agent 设置</td></tr>
+      </tbody>
+    </table>
+
+    <h4>涉及的代码</h4>
+    <table>
+      <thead><tr><th>位置</th><th>现状</th><th>要改成</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/scene.py:88</code> <code>candidates()</code></td><td>算 5 个候选</td><td>只算 SAM3D 起点的那一个</td></tr>
+        <tr><td><code>src/agent.py:147</code> 文字卡</td><td>列出 5 个候选及残差</td><td>列出一个初始位姿，注明朝向未经确认</td></tr>
+        <tr><td><code>src/agent.py:61</code>、<code>:163</code> <code>view_candidates</code></td><td>5 格对比图工具</td><td>去掉</td></tr>
+        <tr><td><code>src/views.py:151</code> <code>candidate_sheet()</code></td><td>拼 5 格对比图</td><td>去掉</td></tr>
+        <tr><td><code>src/agent.py:35–42</code> 系统提示词</td><td>多处提到"候选"和"先看候选对比图"</td><td>按新的输入改写</td></tr>
+        <tr><td><code>src/evaluate.py:100</code> <code>baselines()</code></td><td>4 个基线里 2 个依赖 5 个候选（残差最小、事后挑最好）</td><td>待定：基线是评估用的，不给 agent 看，可以保留现有算法单独算</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill done">已完成</span></div>
+    <h4>2026-11-20 · M3 初始位姿（<code>src/initial/</code>）</h4>
+    <table>
+      <thead><tr><th>文件</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>sam3d.py</code></td><td>SAM3D 的旋转（资产坐标轴 → 场景，3×3，无位置无尺度）→ 朝上轴、yaw、是否翻转、偏离角。−Z 改 +Z 并标记翻转；±X/±Y 照用；倾斜置 0</td></tr>
+        <tr><td><code>icp.py</code></td><td>有界配准，<b>从 legacy 复制而非导入</b>（用户：legacy 只作参考，之后会删）。改成在摆正、缩放后的顶点上工作，返回绕中心的 yaw 和位移；yaw ±20°、位移 25 cm（按欧氏距离限幅）、高度不动；结果比起点差就保留起点</td></tr>
+        <tr><td><code>plan.py</code></td><td><code>InitialPoses</code>：52 个物体一次算完，缓存 <code>&lt;run&gt;/initial_poses.json</code>（按交接 manifest 指纹失效）；<code>apply()</code> 用 <code>Support('height')</code> 写进 M2 状态作为第一个版本；<code>card()</code> 给 M5 文字卡；<code>summary()</code> 给复盘</td></tr>
+      </tbody>
+    </table>
+    <p><b>实测</b>（<code>runs/initial-test-20261120/</code>，17 项全部通过）：</p>
+    <ul>
+      <li>52 个物体全部算出起点；倾斜全为 0，缩放全为 1。</li>
+      <li>翻转的正好是那 6 个（窗帘 0006、冰箱、洗衣篮、微波炉、obj_0061、镜子），标为"朝向未确认"；枕头和吉他盒保留 −Y；没有物体以 −Z 起步。</li>
+      <li>配准全在窗口内、没有一次变差；顶点到扫描点的中位残差 25.8 cm、p90 129 cm（缩放为 1 时资产占地普遍偏大，和 D03 记的"床约 32 cm"同量级；床实测 44 cm）。yaw 被配准改动超过 10° 的：0 个。</li>
+      <li>重算完全一致，第二次读缓存。</li>
+      <li>层高故意设成 1.00 m 时，更高的物体被下移并标记，不打回。</li>
+      <li>写进状态后：版本 1、支撑为 <code>height</code>（未声明任何支撑）、状态"未处理"；撤回到不了起点之前；场景直接交给 Isaac 渲染正常。</li>
+    </ul>
+    <p><b>起点的悬空高度</b>（底部相对地面）：正好在地面 5 个、0–3 cm 14 个、3–10 cm 13 个、10 cm 以上 20 个，中位 6.1 cm。10 cm 以上的基本是放在别的东西上的（枕头、纸巾盒、床上的物件、吊柜、挂钟、镜子、微波炉等）——因为按 D03 M3-1 不声明支撑。这正好由 agent 在第一次改动时声明支撑来解决。</p>
+  </div>
+</div>
+<!-- ============ D04 ============ -->
+<div class="entry" id="D04">
+  <div class="entry-head">
+    <span class="id">D04</span>
+    <span class="title">给 agent 的图是半透明叠加，难以分辨</span>
+    <span class="date">记录于 2026-11-12</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+
+    <p>agent 现在能拿到 3 种图，其中两种带照片的（候选对比图、位姿对比图）都是把资产渲染<b>半透明叠在照片上</b>。
+      没有一张是"在仿真里、用同一个相机位姿单独渲染出来"的干净图。</p>
+
+    <table>
+      <thead><tr><th>图</th><th>工具</th><th>做法</th></tr></thead>
+      <tbody>
+        <tr><td>候选对比图</td><td><code>view_candidates</code></td><td>5 格，每格是照片裁剪上叠加一个候选</td></tr>
+        <tr><td>位姿对比图</td><td><code>propose_pose</code>、<code>view_pose</code></td><td>左：照片裁剪；右：同一裁剪上叠加当前位姿</td></tr>
+        <tr><td>资产转台图</td><td><code>view_asset</code></td><td>资产单独从四个方向看，不含照片</td></tr>
+      </tbody>
+    </table>
+
+    <figure class="ev">
+      <img src="assets/assembly-pilot/r2_017_prop_obj_0048_p009.jpg" alt="位姿对比图：左为照片裁剪，右为资产半透明叠加在照片上">
+      <figcaption>r2 的一张位姿对比图（纸巾盒 0048，提议 p009）。右半边里纸巾盒、床头柜、床的渲染和照片混在一起，分不清哪条边属于渲染、哪条属于照片。</figcaption>
+    </figure>
+
+    <h4>为什么难分辨</h4>
+    <ul>
+      <li><b>渲染和照片混色。</b>资产占 80%、照片占 20%（<code>src/views.py:105</code> <code>tile()</code>）。两者对不齐的地方会出现重影。</li>
+      <li><b>已放的其他物体是纯灰色</b>，和目标物体的渲染叠在一起，看不出谁在前。</li>
+      <li><b>绿色轮廓线又压在最上面。</b></li>
+      <li><b>只有物体周围的一小块裁剪</b>，看不到它放在什么上面、旁边是什么。</li>
+    </ul>
+    <p class="small">之前给人看的 Isaac 同机位渲染（<code>runs/…-r2/isaac/seq_0027.png</code>、<code>seq_0063.png</code>）是干净的，穿模一眼可见；但那两张图没有进过 agent 的输入。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定</span></div>
+
+    <h4>已定（用户 2026-11-12）</h4>
+    <ol>
+      <li><b>去掉位姿对比图。</b>候选对比图已在 <a href="#D03">D03</a> 去掉。</li>
+      <li><b>保留资产转台图。</b></li>
+      <li><b>新的图是拼接图</b>：左边是关键帧照片，右边是 Isaac Sim 里同一相机位姿的渲染。两者并排，不混色。</li>
+      <li><b>物体还没被 agent 操作时，按初始位姿渲染。</b>初始位姿就是 <a href="#D03">D03</a> 的那一个（SAM3D 起点 + 一次配准），所以任何时候都有图可看。</li>
+      <li><b>轮廓 IoU 继续返回。</b></li>
+      <li><b>物体排好处理序号，渲染里只出现"正在处理的那个"和"已经处理好的那些"。</b>第 1 个物体的图里只有它自己；处理到第 k 个时，带上前面 k−1 个处理好的位姿。还没轮到的物体不渲染。</li>
+    </ol>
+
+    <h4>留到过流程时再定</h4>
+    <ul>
+      <li>拼接图什么时候给（每次提议后，还是提交后）。</li>
+    </ul>
+
+    <h4>预览一：全部物体同时渲染（已否定，太乱）</h4>
+    <p>52 个物体全部放在各自的初始位姿，导出成 USD，用 Isaac Sim 按批 3 的 4 张首个关键帧（45、53、55、58）渲染后与照片拼接。</p>
+    <figure class="ev" style="max-width:none">
+      <img src="assets/assembly-debug/d04_stitched_seq0045.jpg" alt="关键帧 45 的照片与 Isaac Sim 同机位渲染并排">
+      <figcaption>关键帧 45（床 0037 的首个关键帧）。右边能直接看出：床比照片里大得多，床头柜陷在床里，纸巾盒的资产过大，垃圾桶歪着穿进床头柜。</figcaption>
+    </figure>
+    <figure class="ev" style="max-width:none">
+      <img src="assets/assembly-debug/d04_stitched_seq0058.jpg" alt="关键帧 58 的照片与 Isaac Sim 同机位渲染并排">
+      <figcaption>关键帧 58（吊柜 0041、床头柜 0050、object 0060 的首个关键帧）。吊柜和照片对得上；床上棕色那件的朝向明显不对。</figcaption>
+    </figure>
+    <table>
+      <thead><tr><th>关键帧</th><th>物体</th><th>初始位姿的轮廓 IoU</th></tr></thead>
+      <tbody>
+        <tr><td>45</td><td>床 0037</td><td>0.591</td></tr>
+        <tr><td rowspan="2">53</td><td>object 0061</td><td>0.613</td></tr>
+        <tr><td>object 0062</td><td>0.767</td></tr>
+        <tr><td>55</td><td>枕头 0016</td><td>0.475</td></tr>
+        <tr><td rowspan="3">58</td><td>吊柜 0041</td><td>0.836</td></tr>
+        <tr><td>床头柜 0050</td><td>0.139</td></tr>
+        <tr><td>object 0060</td><td>0.390</td></tr>
+      </tbody>
+    </table>
+    <p class="small">文件在 <code>runs/initial-pose-preview-20261112/</code>：<code>stitched/seq_00NN.jpg</code>（原始 2604×1012）、<code>isaac/</code>、<code>export/scene.usda</code>、<code>make_preview.py</code>。</p>
+
+    <h4>预览二：按处理顺序逐个渲染（用户 2026-11-12 定的做法）</h4>
+    <p>用户看过预览一后认为太乱，改为按处理序号逐个渲染。下面两张假设床排第 1、枕头排第 2，并假设床处理好后的位姿就是它的初始位姿。</p>
+    <figure class="ev" style="max-width:none">
+      <img src="assets/assembly-debug/d04_step1_seq0045.jpg" alt="第 1 步：关键帧 45 的照片与只渲染床的 Isaac Sim 图并排">
+      <figcaption>第 1 步 · 床 0037 · 关键帧 45。右边只有床。能看出床的资产比照片里宽，右边缘伸到了照片中床头柜的位置。轮廓 IoU 0.543。</figcaption>
+    </figure>
+    <figure class="ev" style="max-width:none">
+      <img src="assets/assembly-debug/d04_step2_seq0055.jpg" alt="第 2 步：关键帧 55 的照片与渲染了床和枕头的 Isaac Sim 图并排">
+      <figcaption>第 2 步 · 枕头 0016 · 关键帧 55。右边是已处理好的床加上初始位姿的枕头。枕头的位置大致对，但它是立着的，照片里是平躺在床头。轮廓 IoU 0.463。</figcaption>
+    </figure>
+    <ul>
+      <li>每个物体用它自己的首个关键帧：床是 45，枕头是 55。</li>
+      <li>和预览一相比，同一个物体的问题更容易看出来，因为没有别的物体挡着或干扰。</li>
+      <li>IoU 随"渲染了哪些物体"变化：床在预览一里是 0.591，这里是 0.543。预览一里别的物体挡住了床超出照片轮廓的那部分，那部分不计入床自己的轮廓。</li>
+    </ul>
+    <p class="small">文件在 <code>runs/sequential-preview-20261112/</code>：<code>step1_seq_0045.jpg</code>、<code>step2_seq_0055.jpg</code>、每步的 <code>export/scene.usda</code> 和 <code>isaac/</code>、<code>make_preview.py</code>。</p>
+
+    <h4>逐个处理带出的三个问题，以及方向（用户 2026-11-12，具体设计未定）</h4>
+    <p class="small">用户原话里做选择的一方叫"harness"，下面按我的理解写成 agent（在 harness 里借助工具做判断的模型）。</p>
+    <table>
+      <thead><tr><th>问题</th><th>方向</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>批内的处理顺序怎么排。</b>逐个渲染之后，排在后面的物体才能看到前面的；被支撑的物体排在支撑物前面时，渲染出来是悬空的。</td>
+          <td><b>批内顺序由 agent 自己选。</b>这是它拿到一个批的输入之后要做的第一件事。</td>
+        </tr>
+        <tr>
+          <td><b>处理后面的物体时，发现前面的物体有问题。</b>例如放床头柜时才发现床太宽。</td>
+          <td><b>加一个"扩展批次"的工具。</b>把之前那个物体的信息拿进当前批次，在当前批次里修。</td>
+        </tr>
+        <tr>
+          <td><b>已处理好的物体换一个关键帧看可能不对。</b>床是在关键帧 45 下处理的，第 2 步在关键帧 55 下看到的是它的另一个角度。</td>
+          <td><b>批内的关键帧是共享的。</b>物体一个一个处理，但这一批的关键帧对批内每个物体都可用。<br><b>允许 agent 要求换视角渲染</b>：处理某个物体时，可以要求在批内其他关键帧的视角下渲染。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>具体设计时要回答的问题（我列的，未讨论）</h4>
+    <ul>
+      <li><b>排顺序之前 agent 能看到什么。</b>它要先知道批里有哪些物体、各自大概在哪，才排得出顺序。是否在开头把这一批的关键帧照片和物体清单一起给它。</li>
+      <li><b>顺序定了之后能不能改。</b>处理到一半发现顺序不对时怎么办。</li>
+      <li><b>"扩展批次"拿进来的是什么。</b>资产、已提交的位姿、文字卡是必需的；那个物体自己的首个关键帧要不要一起加入当前批的共享关键帧。</li>
+      <li><b>改了之前的物体之后，谁要重看。</b>它原来所在批里和它相邻、或放在它上面的物体，位置是相对它定的。</li>
+      <li><b>扩展有没有上限。</b>一个批最多拿进来几个，避免一批越滚越大。</li>
+      <li><b>换视角渲染的范围。</b>只限当前批的 4–5 张首个关键帧，还是也包括扩展进来的物体的关键帧。</li>
+      <li><b>换视角时轮廓 IoU 怎么算。</b>关键帧归属只记录了"这一帧是谁的关键帧"；在别的物体的关键帧下，当前物体没有对应的 mask（见 <a href="#D02">D02</a> 的关键帧数据）。</li>
+    </ul>
+
+    <h4>两个预览共同的、需要定的事</h4>
+    <ul>
+      <li><b>渲染里没有房间。</b>只有一块灰色地面，没有墙，背景是 Isaac 的网格。照片里的墙、地毯、海报在右边都没有对应物。</li>
+      <li><b>不在物体清单里的东西不会出现。</b>例如照片里的办公椅，52 个物体里没有它。</li>
+      <li><b>IoU 是离线渲染器算的，不是从 Isaac 的图算的。</b>两者用同一套相机和位姿（之前核对过逐像素一致），但要从 Isaac 直接出数，需要它另外输出实例分割。</li>
+      <li><b>图的尺寸。</b>两张全幅并排是 2604×1012。发给模型时要不要缩小、缩到多少，会影响 token 用量和小物体能不能看清。</li>
+      <li><b>渲染速度。</b>现在的脚本每次都要启动 Isaac（约 10 秒），只适合一次性出图；放进循环里要改成常驻进程。</li>
+    </ul>
+
+    <h4>涉及的代码</h4>
+    <table>
+      <thead><tr><th>位置</th><th>现状</th><th>要改成</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/views.py:130</code> <code>compare()</code></td><td>拼"照片 | 叠加渲染"</td><td>去掉</td></tr>
+        <tr><td><code>src/views.py:105</code> <code>tile()</code></td><td>把渲染混进照片裁剪</td><td>去掉（候选对比图也用它）</td></tr>
+        <tr><td><code>src/agent.py:200</code> <code>propose_pose</code></td><td>返回位姿对比图</td><td>不再返回这张图</td></tr>
+        <tr><td><code>src/agent.py:67</code> <code>view_pose</code></td><td>位姿对比图工具</td><td>去掉，或换成新的同机位渲染</td></tr>
+        <tr><td><code>src/isaac_render.py</code></td><td>一次性脚本：启动、渲染、退出，只给人看</td><td>改成可在循环里调用，并负责出拼接图的右半边</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill done">已完成</span></div>
+    <p><b>2026-11-24 更新状态</b>：已由 M1（Isaac 服务渲染）和 M5（<code>observe/observer.py</code> 的 <code>stitched</code>、<code>after_change</code>）实现，记录见 D05、D08。半透明叠加图、位姿对比图、候选对比图都已去掉；拼接图左边是关键帧原图，右边是 Isaac 同相机渲染，只含当前物体和已在场的物体，带墙和地板；每次改动生效后自动返回一张，view 可换本批其他共享帧。</p>
+    <p>和原计划的出入：原计划里"轮廓 IoU 继续返回"，后来用户定为不给 agent（D08）。</p>
+  </div>
+</div>
+<!-- ============ D05 ============ -->
+<div class="entry" id="D05">
+  <div class="entry-head">
+    <span class="id">D05</span>
+    <span class="title">观测全靠 agent 逐个调工具去要</span>
+    <span class="date">记录于 2026-11-12</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+
+    <p>agent 和场景之间的一切交互都只经过 10 个工具。会话开头只有文字：系统提示词、工具定义、一条 3 行的消息（场景编号、地面高度、本批物体的编号和标签）。<b>开头不给任何图，也不给物体的具体信息。</b></p>
+
+    <table>
+      <thead><tr><th>观测</th><th>现在怎么拿到</th><th>测试实验 r2 的调用次数</th></tr></thead>
+      <tbody>
+        <tr><td>文字卡</td><td>调 <code>get_object_card</code>，一次一个物体</td><td>6（第 1 轮把 6 个物体全要了一遍）</td></tr>
+        <tr><td>资产四面图</td><td>调 <code>view_asset</code>，一次一个物体</td><td>3（另外 3 个物体没看过资产就摆了）</td></tr>
+        <tr><td>候选对比图</td><td>调 <code>view_candidates</code></td><td>8</td></tr>
+        <tr><td>关键帧原图</td><td>拿不到。只有围绕目标物体的裁剪，且都混着渲染</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><b>必看的东西也要花一轮去要。</b>文字卡每个物体都必须看，第 1 轮整轮只用来取 6 张文字卡。</li>
+      <li><b>可看可不看的东西会被跳过。</b>资产四面图 6 个物体只看了 3 个。</li>
+      <li><b>看不到这一批的全貌。</b>没有整张关键帧，agent 不知道批里的物体在照片里各自在哪、彼此什么关系。<a href="#D04">D04</a> 定了"批内顺序由 agent 先选"，没有全貌它排不出顺序。</li>
+    </ul>
+    <p class="small">代码：<code>src/agent.py:57</code> 工具定义；<code>src/agent.py:267</code> 开场消息。数据来源：<code>runs/harness-v1-opus55-batch1-20261111-r2/calls.jsonl</code>。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定</span></div>
+
+    <h4>已定（用户 2026-11-12）</h4>
+    <table>
+      <thead><tr><th>观测</th><th>怎么给</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>文字卡</td><td><b>开头直接给</b></td><td>批内每个物体一张，不再靠工具去要</td></tr>
+        <tr><td>资产四面图</td><td><b>开头直接给</b></td><td>批内每个物体一张</td></tr>
+        <tr><td>关键帧（带框）</td><td><b>开头直接给</b></td><td>这一批的关键帧，把<b>本批次要处理的物体用颜色框框出来，不同物体用不同颜色</b></td></tr>
+        <tr><td>拼接图</td><td><b>新增一个工具</b></td><td>关键帧原始观测 + Isaac Sim 同相机位姿渲染，并排。见 <a href="#D04">D04</a></td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>开头给的关键帧和拼接图左半边的关键帧不是同一张图：<b>开头的带颜色框，拼接图里的是原始照片</b>。</li>
+      <li>"拼接图"之后都指：关键帧原始观测和 Isaac Sim 同相机位姿渲染的拼接图。</li>
+      <li>其余工具（配准、提议、提交、收尾）另行讨论。</li>
+    </ul>
+
+    <h4>与之前条目的衔接</h4>
+    <ul>
+      <li>文字卡里原来的"5 个候选"按 <a href="#D03">D03</a> 改成一个初始位姿。</li>
+      <li><code>view_candidates</code>、<code>view_pose</code> 已在 <a href="#D03">D03</a>、<a href="#D04">D04</a> 去掉；<code>get_object_card</code>、<code>view_asset</code> 的内容改为开头直接给。</li>
+      <li>这一批的关键帧按 <a href="#D02">D02</a> 是 4–5 张首个关键帧。</li>
+    </ul>
+
+    <h4>具体设计时要回答的问题（我列的，未讨论）</h4>
+    <ul>
+      <li><b>框从哪来。</b>交接文件里每个物体在自己的关键帧上有 mask，可以直接取外接框。但 mask 只存在于"这个物体自己的关键帧"上：按 D02 的 11 批模拟，每张批内关键帧上平均只能框出 1–2 个本批物体（共 56 个框，其中 52 个是物体在自己的首个关键帧上）。同一张照片里其他本批物体即使看得见也没有 mask。要都框出来，得把扫描点云投影到这一帧来算。</li>
+      <li><b>框旁边要不要标物体编号。</b>只有颜色时，agent 要靠一张"颜色 → 物体"的对照表。</li>
+      <li><b>资产四面图用哪个朝上轴。</b>现在的工具要 agent 指定朝上轴。开头直接给时，是按资产原始的 +Z，还是按初始位姿里 SAM3D 判断的朝上轴。</li>
+      <li><b>开头的图量。</b>每批约 5 张资产四面图加 4–5 张整帧关键帧。整帧 1296×968 约 1670 token 一张；要不要缩小、缩到多少。</li>
+      <li><b>已处理的物体信息变了之后怎么更新。</b>文字卡里的"当前状态"在提交后会变；开头给的那份是不是只当初始信息，之后的状态靠别的途径返回。</li>
+      <li><b>"扩展批次"拿进来的物体</b>（<a href="#D04">D04</a>）是不是也按同样的三样给：文字卡、资产四面图、带框关键帧。</li>
+    </ul>
+
+    <h4>涉及的代码</h4>
+    <table>
+      <thead><tr><th>位置</th><th>现状</th><th>要改成</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/agent.py:267</code> 开场消息</td><td>3 行文字</td><td>加上每个物体的文字卡、资产四面图，以及带框的关键帧</td></tr>
+        <tr><td><code>src/agent.py:133</code> <code>get_object_card</code></td><td>工具</td><td>内容并入开场</td></tr>
+        <tr><td><code>src/agent.py:173</code> <code>view_asset</code>、<code>src/views.py:171</code> <code>turntable()</code></td><td>工具</td><td>渲染保留，改为开场时生成</td></tr>
+        <tr><td><code>src/views.py</code></td><td>没有整帧输出，没有画框</td><td>新增：整张关键帧上画本批物体的颜色框</td></tr>
+        <tr><td>新工具</td><td>不存在</td><td>拼接图（见 D04）</td></tr>
+        <tr><td><code>src/agent.py:27</code> 系统提示词</td><td>"先用 get_object_card""先看候选对比图"</td><td>按新的输入改写</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill done">已完成</span></div>
+    <h4>2026-11-20 · M5 观测（<code>src/observe/</code>）</h4>
+    <p class="small">用户定：框用扫描点投影（B），自己的 mask 兜底；角上画图例；关键帧原尺寸 1296×968，四面图四格 210 px，拼接图两半各 648×484；四面图按初始朝上轴摆正；每次改动生效后自动返回一张拼接图。</p>
+    <table>
+      <thead><tr><th>文件</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>boxes.py</code></td><td>扫描点投影到关键帧，用传感器深度去掉被挡住的点（容差 10 cm），取 2%–98% 分位框；看得见的点少于 30 个就不框，退回本物体自己的 mask</td></tr>
+        <tr><td><code>render.py</code></td><td>四面图的离线渲染（embree），<b>从 legacy 复制</b></td></tr>
+        <tr><td><code>observer.py</code></td><td><code>Observer</code>：文字卡、四面图、带框关键帧（图例放在遮挡最少的角）、拼接图（照片｜Isaac 同相机渲染，只含当前物体 + 已在场物体）、<code>after_change</code>、<code>batch_opening</code>（开局三样一起写盘）</td></tr>
+      </tbody>
+    </table>
+    <p><b>验收</b>（<code>runs/observe-test-20261120/</code>，D02 的批 3：床、obj_0061、obj_0062、枕头、柜子 0041；帧 45、53、55、58；10 项全部通过）：</p>
+    <ul>
+      <li>开局材料 1.8 s 生成；拼接图一张 0.46 s。</li>
+      <li>框：4 张帧上共框出 17 个，只用本物体 mask 只能框 6 个。每个物体在自己的首个关键帧上都被框到，扫描框和 mask 框的框 IoU 0.69–0.80。</li>
+      <li>拼接图的渲染里只有当前物体（枕头）、已处理的床、墙、地板，未处理的另外 3 个都不在。</li>
+      <li>枕头的四面图按 −Y 朝上摆正。</li>
+    </ul>
+    <p><b>改动中修掉的两处</b>：</p>
+    <ul>
+      <li><b>"首个关键帧"取错了</b>：一开始用的是 <code>primary</code>（生成资产用的那一帧），但 D02 定义的首个关键帧是序号最小的那张。例如床的 primary 是 63、首个是 45；枕头 81 对 55。<code>after_change</code> 改成用首个关键帧，这样自动返回的图落在本批共享的帧上。</li>
+      <li><b>图例挡住了框</b>：第 55 帧里柜子 0041 只露出左上角，正好被图例盖住。图例改成放在遮挡最少的角。</li>
+    </ul>
+  </div>
+</div>
+<!-- ============ D06 ============ -->
+<div class="entry" id="D06">
+  <div class="entry-head">
+    <span class="id">D06</span>
+    <span class="title">位姿工具：两段式提交、贴点云、验证绑在提议里</span>
+    <span class="date">记录于 2026-11-12</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+
+    <p>现在负责位姿的是三个工具：<code>fit_to_scan</code>（在 agent 给的位姿附近重新贴点云，返回 x、y、yaw 和残差）、
+      <code>propose_pose</code>（试放一次，返回警告和对比图，不落盘）、<code>commit_pose</code>（把某次提议写入新版本）。</p>
+    <ul>
+      <li><b>两段式没有起到作用。</b>测试实验 r2 里 16 次提议、8 次提交，6 次带着警告提交（见 <a href="#D01">D01</a>）。</li>
+      <li><b>验证绑在提议里。</b>警告和图都是 <code>propose_pose</code> 的返回值，agent 不能单独问"现在场景里有什么问题"。</li>
+      <li><b>警告只说现象。</b>例如"穿入床 5 cm"，不说往哪挪多少能分开；也不说和上一次相比变好还是变差。</li>
+      <li><b>贴点云会替 agent 定位置。</b><code>fit_to_scan</code> 的结果虽然不落盘，但 r2 里 3 次调用的结果都被直接采用。扫描只覆盖相机看到的部分，贴合会把资产往有点的一侧拉。</li>
+      <li><b>高度可以由 agent 直接填。</b>r1 里支撑面被压低后，上面的物体跟着下沉。</li>
+      <li><b>缩放只有占地和高度两个系数。</b>床的两个水平方向需要约 0.73 和 0.66，表达不了。</li>
+      <li><b>没有回撤。</b>只能再提议一个新位姿盖过去。</li>
+    </ul>
+
+    <h4>两套参考实现的做法（只读代码）</h4>
+    <table>
+      <thead><tr><th></th><th>我们现在</th><th>scenesmith</th><th>LiteReality</th></tr></thead>
+      <tbody>
+        <tr><td>改位姿的方式</td><td>提议 → 提交</td><td>调工具立即生效</td><td>改文件立即生效；布局 agent 是回一个动作</td></tr>
+        <tr><td>高度谁定</td><td>agent 给，或落到支撑物上</td><td>工具定（地面或支撑面）</td><td>落地由代码做；台面上读支撑物顶面</td></tr>
+        <tr><td>缩放</td><td>占地一个、高度一个</td><td>一个等比系数</td><td>三个轴各自的尺寸</td></tr>
+        <tr><td>贴点云的工具</td><td>有</td><td>没有</td><td>没有；点云只做成测量工具给 agent 读数</td></tr>
+        <tr><td>验证怎么触发</td><td>绑在提议里</td><td>单独的 <code>check_physics</code></td><td>单独的 <code>check_collisions</code></td></tr>
+        <tr><td>验证返回什么</td><td>现象</td><td>现象，带物体编号</td><td>现象 + 解除它的移动量</td></tr>
+        <tr><td>做错了怎么撤</td><td>不提交</td><td>评分下降回滚检查点</td><td>不变好就丢弃；文件有检查点</td></tr>
+      </tbody>
+    </table>
+    <p class="small">LiteReality 的修复向量怎么来：先用真实网格判断有没有接触；有接触时取两个物体的包围盒，在水平两个方向里挑重叠较短的那个，沿它推出去，距离等于重叠长度。"撞没撞"用网格，"推多远"用包围盒，因为生成的网格不封闭、量出的穿插深度不可信。代码：<code>agent/tools/check_collisions/source/collision_mesh.py:182</code>。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill plan">部分已定</span></div>
+
+    <h4>已定（用户 2026-11-12）</h4>
+
+    <h4>1. 不做"提议 / 提交"两段式</h4>
+    <ul>
+      <li>改位姿是一个动作，调用后立即生效。</li>
+    </ul>
+
+    <h4>2. 验证独立成一部分；每次改动也自动验证并返回结果</h4>
+    <table>
+      <thead><tr><th>验证项</th><th>内容</th><th>备注</th></tr></thead>
+      <tbody>
+        <tr><td>穿插</td><td>物体之间互相穿入的深度</td><td>改成双向；查全场景已放的物体（<a href="#D02">D02</a>）</td></tr>
+        <tr><td>支撑接触</td><td>相对支撑面是悬空还是陷入</td><td></td></tr>
+        <tr><td>支撑声明是否成立</td><td>落点在不在声明的支撑物上面</td><td></td></tr>
+        <tr><td>轮廓 IoU</td><td>渲染轮廓与照片里物体轮廓的重合度</td><td><a href="#D04">D04</a> 已定继续返回</td></tr>
+        <tr><td>点云重叠率</td><td>两个指标，见第 4 点</td><td></td></tr>
+        <tr><td>出房间、穿墙</td><td>物体超出房间范围或穿过墙体</td><td>依赖墙面；墙面由上游提供，开发中</td></tr>
+        <tr><td>物理稳定</td><td>物体在重力下能不能待住</td><td>借鉴 scenesmith，做法见下</td></tr>
+        <tr><td>缩放幅度</td><td>三个缩放系数各自偏离 1 多少</td><td>缩放很大说明资产本身和实物不符</td></tr>
+      </tbody>
+    </table>
+    <p><b>不加的两项</b>（用户 2026-11-12）：</p>
+    <ul>
+      <li><b>相对初始位姿的改动幅度</b>：不加。</li>
+      <li><b>相对扫描的偏离</b>：不加。其中"物体底面高度与扫描点云底面的差"也先不加，因为扫描点云的底面本身可能不准。</li>
+    </ul>
+    <p><b>检查要有拦截和自动撤回</b>（用户 2026-11-12）：不是每一项都只报告。哪些指标到什么程度触发拦截或自动撤回，要和上面的指标一一对应起来。具体对应关系待定。</p>
+
+    <p><b>参考：两家各验证哪些因素</b>（只读代码）</p>
+    <table>
+      <thead><tr><th>因素</th><th>scenesmith</th><th>LiteReality</th><th>我们现在</th><th>改后</th></tr></thead>
+      <tbody>
+        <tr><td>物体互相穿插</td><td>碰撞体的有符号距离，阈值 1 mm</td><td>真实网格接触</td><td>有，单向、偏小、只查同批</td><td>做</td></tr>
+        <tr><td>与地面 / 支撑面的接触</td><td>地面放宽 5 cm；物体与自己的支撑物放宽 2 cm</td><td>悬空 &gt; 8 cm、下陷 &gt; 5 cm；验收时查真实接触（5 mm 内）</td><td>有</td><td>做</td></tr>
+        <tr><td>支撑声明是否成立</td><td>小物件必须落在支撑面内</td><td>支撑图无环、能追到地面；底面接触比例；中心是否在接触范围内</td><td>没有</td><td>做</td></tr>
+        <tr><td>出房间 / 穿墙</td><td>有</td><td>有</td><td>没有</td><td>做，等上游的墙面</td></tr>
+        <tr><td>物理稳定</td><td>重力仿真后是否倒下、掉落</td><td>可选的"摇晃"测试，默认关闭，只是测量</td><td>没有</td><td>做</td></tr>
+        <tr><td>与照片的吻合</td><td>没有（它没有照片）</td><td>独立看图评审</td><td>轮廓 IoU</td><td>轮廓 IoU</td></tr>
+        <tr><td>与扫描的吻合</td><td>没有（它没有扫描）</td><td>相对扫描的累计改动上限</td><td>两条（底面高度、出扫描范围）</td><td>两个点云指标</td></tr>
+        <tr><td>缩放</td><td>critic 看尺寸是否合理</td><td>尺寸变化的累计上限</td><td>有</td><td>缩放幅度</td></tr>
+        <tr><td>朝向</td><td>有，单独的工具</td><td>没有</td><td>没有</td><td>不做</td></tr>
+      </tbody>
+    </table>
+    <p class="small">scenesmith 的"物体与自己的支撑物之间放宽 2 cm，其他任何一对都不放宽"是一条可以直接用的规则，比按类别写允许名单简单。LiteReality 的"摇晃"测试：先不加扰动放一会儿量漂移（毫米级说明已经放稳，厘米级说明是悬空后掉下来的，很大说明有穿插被弹开），再水平晃动量位移（<code>room_ops/export/mujoco_shake.py</code>）。</p>
+
+    <h4>3. z 由支撑关系确定</h4>
+    <table>
+      <thead><tr><th>类别</th><th>z 怎么来</th><th>场景里的例子</th></tr></thead>
+      <tbody>
+        <tr><td>立在地面</td><td>工具：地面高度</td><td>床、柜子、凳子</td></tr>
+        <tr><td>放在物体上</td><td>工具：落到支撑物上</td><td>枕头、纸巾盒、烤面包机</td></tr>
+        <tr><td>挂在墙上</td><td>agent 给高度</td><td>吊柜 0041、镜子、挂钟、窗帘</td></tr>
+        <tr><td>固定在天花板</td><td>待定</td><td>这个场景的 52 个物体里暂时没有</td></tr>
+        <tr><td>靠墙（附加属性，不是支撑）</td><td>不影响 z</td><td>靠墙立在地上的柜子</td></tr>
+      </tbody>
+    </table>
+    <p class="small">"靠墙"和"挂墙"分开：靠墙的物体仍由地面承重，墙只约束水平位置；挂墙的物体由墙承重，不落地。</p>
+    <p><b>支撑关系只由 agent 声明（用户 2026-11-20）。</b>harness 不根据点云推断、也不替 agent 预填支撑关系；agent 在位姿工具里声明，验证负责检查声明是否成立。</p>
+
+    <h4>4. 点云不用来贴合，改为验证指标</h4>
+    <ul>
+      <li>去掉 <code>fit_to_scan</code>。</li>
+      <li>验证里加两个指标：</li>
+    </ul>
+    <table>
+      <thead><tr><th>指标</th><th>含义</th><th>低（或高）的时候说明</th></tr></thead>
+      <tbody>
+        <tr><td>点云被覆盖的比例</td><td>扫描点里，离摆好的资产表面足够近的占比</td><td>低：位置偏了，或资产太小</td></tr>
+        <tr><td>资产超出点云的程度</td><td>资产落在扫描范围之外的占比</td><td>高：资产太大，或位置偏了</td></tr>
+      </tbody>
+    </table>
+    <p class="small">两个要一起看：只看第一个的话，把资产放大覆盖率只升不降。扫描只覆盖相机看到的部分，第二个指标不可能为零，适合用来比较"这次改动后变好还是变差"。</p>
+
+    <h4>5. 缩放按三个轴各自缩放，由 agent 判断</h4>
+    <ul>
+      <li>位姿变成：位置 x、y，yaw，朝上轴，三个缩放系数，加上支撑关系。z 不再由 agent 直接给（挂墙除外）。</li>
+    </ul>
+
+    <h4>6. 回撤</h4>
+    <ul>
+      <li><b>agent 可以主动回撤。</b></li>
+      <li><b>粒度：撤单个物体的上一次改动。</b></li>
+      <li><b>回撤支撑物时，连同它上面被支撑的物体一起回撤。</b></li>
+      <li><b>检查也会触发自动撤回</b>（见第 2 点）。这一条是用户在同一天稍后补充的，取代了最初"只允许 agent 主动回撤"的说法。</li>
+      <li>返回里<b>暂时不带</b>"和上一版相比各项的变化"。</li>
+    </ul>
+
+    <h4>物理稳定验证：scenesmith 怎么做（只读代码）</h4>
+    <p>它不是"检查一下稳不稳"，而是真的跑一段重力仿真，再看物体动了多少。分两个阶段，先去穿插、再仿真。</p>
+    <table>
+      <thead><tr><th>阶段</th><th>做法</th></tr></thead>
+      <tbody>
+        <tr><td>1. 去穿插投影</td><td>带"最小距离"约束的优化，求让所有物体互不穿插的最小移动量。旋转固定，只动位置。物体很多时只把有碰撞的设成可动。失败时退一步：只把陷进地面的家具抬起来</td></tr>
+        <tr><td>2. 重力仿真</td><td>Drake，步长 1 ms，六个自由度都放开。仿真后的位姿直接写回场景</td></tr>
+        <tr><td>3. 清理</td><td>删除倒下的家具和掉落的小物件（判据见下表）</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>方面</th><th>做法</th></tr></thead>
+      <tbody>
+        <tr><td>物体属性</td><td>碰撞体是凸分解；质量由 VLM 估计，惯量从网格算，摩擦按材质查表</td></tr>
+        <tr><td>为什么先去穿插</td><td>带着穿插直接仿真，物体会在第一步被弹开</td></tr>
+        <tr><td>谁能动</td><td>可以把一部分物体固定（例如家具），只让其余的动</td></tr>
+        <tr><td>容错</td><td>任何一步出错都退回输入的场景，不中断流程</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>何时跑</th><th>范围</th><th>谁能动</th><th>时长</th></tr></thead>
+      <tbody>
+        <tr><td>家具 agent 结束后</td><td>整个房间</td><td>所有家具</td><td>15 秒</td></tr>
+        <tr><td>每件家具的小物件摆完后</td><td>墙 + 地面 + 这件家具 + 它上面的物体</td><td>只有小物件</td><td>5 秒</td></tr>
+        <tr><td>全部结束后</td><td>整个场景</td><td>只有小物件</td><td>15 秒</td></tr>
+        <tr><td>agent 调叠放工具时</td><td>被叠的那几个物体</td><td>这几个物体</td><td>5 秒</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>对象</th><th>判定为"不稳"的条件</th><th>处理</th></tr></thead>
+      <tbody>
+        <tr><td>家具</td><td>仿真后物体自己的竖直轴和世界竖直方向的夹角超过 45°</td><td>删除</td></tr>
+        <tr><td>小物件</td><td>仿真后底面离地不到 2 cm，且高度比仿真前下降超过 0.3 m（从家具上掉到地上）</td><td>删除</td></tr>
+        <tr><td>叠放的一摞</td><td>每个物体的位移不超过阈值才算稳</td><td>工具直接报错，告诉 agent 前几个是稳的，建议只叠这几个</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><b>分而治之</b>：单件家具那一次只涉及约 7 个物体，比整场景 300 多个物体容易求解。</li>
+      <li><b>大部分仿真不经过 agent</b>：前三个时机都是阶段结束后由代码跑，结果直接生效。只有叠放工具是在 agent 调用时当场仿真，并用结果拦截。</li>
+      <li><b>没有"轻微不稳"的概念</b>：只区分倒了、掉了和没事。小幅滑动或下沉不报告，直接接受仿真后的位姿。</li>
+      <li><b>一个负面结果</b>：让 agent 主动调用的"把重叠物体挤开"工具被禁用了，配置里写的是实验中成功率 0%。</li>
+    </ul>
+    <p class="small">代码（路径相对 <code>Submodule/scenesmith/scenesmith/</code>）：<code>agent_utils/physical_feasibility.py:761</code>（投影）、<code>:1327</code>（仿真）、<code>:86</code>（倾斜角）、<code>:1548</code>（两阶段组合）、<code>:1668</code>（单件家具）；<code>manipuland_agents/tools/stacking.py</code>（叠放稳定性）。</p>
+
+    <h4>物理稳定验证：我们怎么借鉴（用户 2026-11-12 确认）</h4>
+    <p>scenesmith 的做法大部分照用，改动四处：</p>
+    <table>
+      <thead><tr><th>问题</th><th>scenesmith</th><th>我们定下的做法</th><th>为什么不同</th></tr></thead>
+      <tbody>
+        <tr><td>用仿真结果的哪一部分</td><td>仿真后的位姿写回场景</td><td>只取<b>位移</b>和<b>倾斜角</b>当指标。不采用仿真后的位姿</td><td>写回会悄悄改掉 agent 摆的位置，和"点云不用来贴合"是同一个原则</td></tr>
+        <tr><td>什么时候跑</td><td>每件家具摆完、每个阶段结束、全部结束</td><td>三个时机：<b>一个物体处理完</b>；<b>一批处理完</b>；<b>所有批处理完</b></td><td>我们按物体和批次组织，没有"家具 / 小物件"两个阶段</td></tr>
+        <tr><td>谁能动</td><td>家具固定，只让小物件动</td><td>验证某个物体时，只让<b>它自己和它上面的东西</b>动，其余固定</td><td>同一思路</td></tr>
+        <tr><td>判定和处理</td><td>倒了或掉了就删除；小幅移动不管</td><td>位移超过几厘米：<b>报告</b>。倒下或掉落：<b>拦截</b></td><td>重建任务里物体不能删；小幅位移对我们是有用的信号</td></tr>
+      </tbody>
+    </table>
+    <p><b>照用的部分</b>：</p>
+    <ul>
+      <li>真跑重力仿真，而不是用几何规则估计稳不稳。</li>
+      <li>分而治之：每次只让少数物体动，其余固定。</li>
+      <li>倾斜角的算法：物体自己的竖直轴与世界竖直方向的夹角。</li>
+      <li>任何一步出错不中断流程。</li>
+    </ul>
+    <p><b>前提：仿真前不能有穿插。</b>否则量到的是"被弹开"而不是"不稳"。所以物理稳定排在穿插检查之后，穿插没过就不跑。scenesmith 是用投影自动挪开物体；我们不自动挪，由拦截规则保证。</p>
+    <p><b>我们已有的条件</b>（2026-11-12 查过资产文件）：</p>
+    <table>
+      <thead><tr><th>需要的东西</th><th>现状</th></tr></thead>
+      <tbody>
+        <tr><td>质量、质心、惯量</td><td>资产自带（例如床 55 kg，枕头 1.5 kg）</td></tr>
+        <tr><td>摩擦</td><td>资产自带（静摩擦 0.6，动摩擦 0.5，不反弹）</td></tr>
+        <tr><td>碰撞体</td><td>35 个资产是<b>单个凸包</b>，17 个是凸分解</td></tr>
+        <tr><td>刚体类型</td><td>37 个可动，12 个固定（柜子、台面、吊柜、淋浴间等），3 个只按指定运动（窗帘、门）。固定的物体在仿真里不会动，对它们量不出位移</td></tr>
+        <tr><td>地面和物理场景</td><td>导出的 USD 里有</td></tr>
+        <tr><td>仿真本身</td><td>从没跑过。Isaac 每次启动约 10 秒，脚本是一次性的</td></tr>
+      </tbody>
+    </table>
+    <p><b>单个凸包带来的问题</b>：凸包会把凹进去的地方填满，放在这类物体上面或里面的东西，仿真时会被顶起来或滑走，位移反映的是碰撞体不准，不是摆放不稳。scenesmith 全部用凸分解，没有这个问题。</p>
+    <p>对当支撑物的资产影响最大。支撑候选里的 6 个支撑物，5 个是单个凸包：</p>
+    <table>
+      <thead><tr><th>支撑物</th><th>碰撞体</th><th>上面的物体</th></tr></thead>
+      <tbody>
+        <tr><td>床 0037</td><td>单个凸包</td><td>枕头、object 0061、object 0062</td></tr>
+        <tr><td>台面 0003</td><td>单个凸包</td><td>烤面包机、沥水架、烤箱</td></tr>
+        <tr><td>柜子 0008</td><td>单个凸包</td><td>电视</td></tr>
+        <tr><td>柜子 0042</td><td>单个凸包</td><td>台面</td></tr>
+        <tr><td>冰箱 0033</td><td>单个凸包</td><td>吊柜 0040</td></tr>
+        <tr><td>床头柜 0049</td><td>凸分解</td><td>纸巾盒</td></tr>
+      </tbody>
+    </table>
+    <p>床是最明显的例子：凸包会把床头板和床面之间的空间填上，床面上方不再是平的。这一点决定了物理验证的结果能不能信，需要在实现前解决：让上游把当支撑物的资产改成凸分解，或在组装这边重新分解。</p>
+    <p><b>2026-11-20 可视化核对</b>（一次性脚本 <code>runs/collision-preview-20261120/</code>，<code>supporters_collision.png</code> 外观和俯视、<code>supporters_section.png</code> 竖直剖面）。PhysX 对 <code>convexHull</code> 用的是碰撞网格的凸包，脚本按这个形状比较：</p>
+    <table>
+      <thead><tr><th>支撑物</th><th>碰撞体</th><th>顶面被抬高（视觉和碰撞体都有面的位置）</th><th>结论</th></tr></thead>
+      <tbody>
+        <tr><td>床 0037</td><td>单个凸包</td><td>36% 超过 1 cm，18% 超过 3 cm，p99 17 cm，最大 31 cm（床面中部凹下去被填平）</td><td>有问题：枕头和床上的东西会被托高</td></tr>
+        <tr><td>柜子 0008</td><td>单个凸包</td><td>顶面基本一致</td><td><b>有问题，但俯视看不出</b>：电视（扫描 z 0.89–1.28 m）放在柜子中间的开放格里，柜高 2.35 m。剖面图显示凸包把整个格子填实了，电视放进去必然和碰撞体穿插</td></tr>
+        <tr><td>柜子 0042</td><td>单个凸包</td><td>顶面一致</td><td>能用：台面放在柜顶上</td></tr>
+        <tr><td>冰箱 0033</td><td>单个凸包</td><td>顶面一致</td><td>能用：吊柜在冰箱上方</td></tr>
+        <tr><td>台面 0003</td><td>单个凸包</td><td>一致</td><td>能用：本身是薄板，凸包几乎无损</td></tr>
+        <tr><td>床头柜 0049</td><td>凸分解</td><td>一致</td><td>能用</td></tr>
+      </tbody>
+    </table>
+    <p class="small">所有凸包在侧面都会外扩几厘米，边缘一圈"仅碰撞体有面"的格子占 5–7%，对放在顶面中间的物体影响不大，对紧挨着的邻居（例如床和床头柜）会表现为穿插。真正要处理的是床和柜子 0008 两个。</p>
+    <p><b>用户 2026-11-20：凸包侧面外扩几厘米可以接受。</b>穿插检查和物理验证照常用现有碰撞体，不为外扩做放宽。床面被填平、柜子 0008 中间格被填实这两处不属于外扩，处理方式待定。</p>
+    <p><b>用户 2026-11-23：床和柜子 0008 先保持单个凸包</b>，不重做凸分解。已知影响：床上的物体、柜格里的电视在仿真里可能被顶起或弹开；跑完一批看数据再定。</p>
+    <p class="small">还没定的细节：位移的阈值是几厘米；"倒下""掉落"的具体判据（scenesmith 用倾斜 45°、下落 0.3 m）；仿真时长（scenesmith 用 5 秒和 15 秒）；一批处理完和所有批处理完那两次谁能动；软的物体（枕头、被子）按刚体仿真是否合适。</p>
+
+    <h4>待定：指标与"拦截 / 自动撤回"的对应</h4>
+    <p>用户已定方向（要有拦截和自动撤回，并和指标对应），具体对应还没定。下面是我的初步建议，供讨论。</p>
+    <table>
+      <thead><tr><th>验证项</th><th>我建议的处理</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td>穿插</td><td>超过阈值：拦截</td><td>硬性几何错误，测试实验里的穿模就是这一项。需要配"物体与它声明的支撑物之间放宽"</td></tr>
+        <tr><td>支撑接触</td><td>z 由工具算，正常不会出问题；出了就是工具的错</td><td>只对"挂墙"这类 agent 给高度的情况有意义</td></tr>
+        <tr><td>支撑声明是否成立</td><td>不成立：拦截</td><td>落点不在支撑物上面，声明本身是错的</td></tr>
+        <tr><td>出房间、穿墙</td><td>拦截</td><td>等上游的墙面</td></tr>
+        <tr><td>物理稳定</td><td>倒下或掉落：拦截；位移超过几厘米：只报告</td><td>用户已确认；阈值待定</td></tr>
+        <tr><td>轮廓 IoU</td><td>只报告</td><td>受标注质量影响（r2 里床头柜 0.208 是标注问题，摆放是对的），不适合硬拦</td></tr>
+        <tr><td>点云重叠率（两项）</td><td>只报告</td><td>扫描不完整，不适合设硬阈值</td></tr>
+        <tr><td>缩放幅度</td><td>只报告；过大时提示考虑标记资产</td><td>大缩放可能是对的（资产本身尺寸不对）</td></tr>
+      </tbody>
+    </table>
+    <h4>拦截的三条规则（用户 2026-11-12 确认）</h4>
+    <ol>
+      <li><b>"拦截"和"自动撤回"是同一件事。</b>改动立即生效 → 自动验证 → 不过就撤回这次改动，并把原因告诉 agent。</li>
+      <li><b>判据是"不允许比改动前更差"，不是要求一步到位。</b>初始位姿本身常常带着问题（预览里床头柜一开始就陷在床里），只要这次改动没有让它变得更差，就不撤回。</li>
+      <li><b>连续被撤回有上限。</b>到了上限，这个物体标记为失败，不再循环。</li>
+    </ol>
+    <p class="small">上表里哪些项触发拦截、阈值多少、上限是几次，仍待定。</p>
+
+    <h4>墙面（用户 2026-11-12）</h4>
+    <p><b>墙面会在上游提供，目前开发中。</b>由另一个模块负责，不在场景组装里做，也不读真值。</p>
+    <p><b>2026-11-20 更新：墙面已交付</b>，接入方式见 <a href="#D07">D07</a>。</p>
+    <p class="small">组装这边依赖墙面的地方：验证里的"出房间、穿墙"；支撑关系里的"挂在墙上""靠墙"；拼接图右半边的背景（<a href="#D04">D04</a>）。墙面到位之前，这几项先不生效。</p>
+
+    <h4>具体设计时要回答的问题（我列的，未讨论）</h4>
+    <ul>
+      <li><b>各验证项的阈值。</b></li>
+      <li><b>验证结果里要不要带修复建议</b>（往哪个方向挪多少能解除穿插）。照 LiteReality 的做法可以给，但我们的房间相对坐标轴转了约 18°，要按物体自身朝向的盒子算，不能用轴对齐包围盒。</li>
+      <li><b>"放在物体上"要不要细到哪个面</b>：多层家具（书架、床头柜下层）默认会落到最高的面。</li>
+      <li><b>软的物体</b>（枕头、被子）的接触和穿插要不要放宽。</li>
+      <li><b>35 个资产的碰撞体是单个凸包</b>，其中包括大多数支撑物：物理验证前要先解决，见上面"物理稳定验证"。</li>
+      <li><b>挂墙和天花板</b>：上游的墙面到位之前，只能做成"不落地、高度由 agent 定"，没法检查是否真的贴着。</li>
+      <li><b>三轴缩放对应哪三个轴</b>：我的理解是资产按朝上轴摆正之后自己的长、宽、高，再转 yaw。</li>
+    </ul>
+
+    <h4>涉及的代码</h4>
+    <table>
+      <thead><tr><th>位置</th><th>现状</th><th>要改成</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/agent.py:70</code> <code>fit_to_scan</code>、<code>src/scene.py:118</code> <code>fit()</code></td><td>贴点云的工具</td><td>去掉</td></tr>
+        <tr><td><code>src/agent.py:77</code> <code>propose_pose</code>、<code>:87</code> <code>commit_pose</code></td><td>两段式</td><td>合并成一个立即生效的动作</td></tr>
+        <tr><td><code>src/scene.py:232</code> <code>propose()</code>、<code>:240</code> <code>commit()</code></td><td>待定提议表 + 提交</td><td>直接写入新版本；新增回撤</td></tr>
+        <tr><td><code>src/scene.py:192</code> <code>warnings()</code></td><td>6 种警告，只在提议时算</td><td>按上面的验证项重写；可单独调用</td></tr>
+        <tr><td><code>src/scene.py:171</code> <code>penetration()</code></td><td>单向，只查同批</td><td>双向，查全场景</td></tr>
+        <tr><td><code>src/scene.py:150</code> <code>rest_z()</code></td><td>支撑物只能是地面或物体</td><td>按五类支撑关系</td></tr>
+        <tr><td><code>src/pose.py</code> <code>Pose</code></td><td><code>scale_xy</code>、<code>scale_z</code></td><td>三个轴各一个缩放</td></tr>
+        <tr><td>新增</td><td>不存在</td><td>两个点云指标；独立的验证工具；回撤工具</td></tr>
+      </tbody>
+    </table>
+
+    <h4>M2 位姿与状态：细化（用户 2026-11-20）</h4>
+    <table>
+      <thead><tr><th>#</th><th>事项</th><th>定下的做法</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>朝向</td><td><b>不卡死在 6 个朝上方向</b>，允许倾斜放置。参数：<code>up</code>（资产自身哪个轴朝上，±X/±Y/±Z，默认 +Z）、<code>yaw_deg</code>，可选 <code>tilt_deg</code>（倒多少度，默认 0）和 <code>tilt_toward_deg</code>（往哪个水平方向倒，与 yaw 同一套角度）。顺序：朝上轴 → 三轴缩放（摆正后的长宽高）→ yaw → 倾斜（世界方向）。倾斜后仍由最低点落到支撑面；能不能放稳由 M4 物理验证判断</td></tr>
+        <tr><td>2</td><td>三轴缩放</td><td>资产摆正之后自身的长、宽、高；先缩放再转 yaw</td></tr>
+        <tr><td>3</td><td>"放在物体上"落 z 用的形状</td><td>视觉网格。床、柜子 0008 的碰撞体问题另议，解决前它们上面的仿真结果标为不可信</td></tr>
+        <tr><td>4</td><td>多层支撑物</td><td>agent 可给大致高度，harness 从那里往下找最近的支撑面。<b>找不到支撑面就打回</b>，不默认落到最高层。打回时说明原因</td></tr>
+        <tr><td>5</td><td>贴墙物体的参数</td><td>和其他物体一样给 <b>x、y</b>（沿墙位置在图里很难判断），挂墙另给离地高度；<b>可选给墙段名</b>（1 段，墙角给 2 段）。harness 只沿墙法向推物体，推到刚好贴住墙面（间隙 0），沿墙位置不动。
+        <ul>
+          <li>给了墙段名：贴到指定的墙。两段时分别沿两面墙的法向推，两面都贴住；两面墙的夹角不接近 90° 就打回。</li>
+          <li>没给：取最近的墙。最近的墙超过 0.3 m 就打回（坐标和"贴墙"对不上）；最近和次近相差不到 0.15 m（墙角）也打回，要求指明墙段。用扫描点核对过：镜子、窗帘、钟、门的最近墙都没有歧义；柜子 0041（2 cm 对 4 cm）、柜子 0039（8 对 10 cm）在墙角，会被要求指明。</li>
+          <li>挡在门洞前、挂墙超出层高：打回。</li>
+          <li>反馈里写明实际贴到哪面墙、推了多远。</li>
+          <li>墙段名从平面图上读（M5）：俯视图画墙段和名称、本批关键帧的相机位置和视野扇形。<b>不画物体占地框和编号</b>（用户：画上去太乱，暂时不给）。</li>
+        </ul></td></tr>
+        <tr><td>6</td><td>支撑物改动后上面的物体</td><td>跟着支撑物走（保持相对位置，重新落 z），和支撑物的改动算同一个版本。<b>不加"需要重看"标记</b>，而是在这次改动的反馈里列出所有被带动、位置变了的物体</td></tr>
+        <tr><td>7</td><td>撤回支撑物</td><td>上面的物体跟着支撑物回到原位，它们自己后来的改动保留</td></tr>
+        <tr><td>8</td><td>失败的物体</td><td>留在场景里，用最后一个没被拦截的位姿；参与渲染和穿插检查；导出时标出来</td></tr>
+        <tr><td>9</td><td>支撑物还没处理</td><td>不能声明放在它上面。支撑物必须已处理或在当前批里，否则先用扩展批次拉进来，或临时按"在地面"放</td></tr>
+      </tbody>
+    </table>
+    <p class="small">默认做法（不需要确认）：(x, y) 是物体自身包围盒中心，转 yaw 时绕它转；地面高度取墙体交接的地板顶面 0.054；每个版本存完整快照加动作日志；已处理的物体再改，会回到"处理中"。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill plan">部分完成</span></div>
+    <h4>2026-11-20 · M2 位姿与状态（<code>src/state/</code>）</h4>
+    <table>
+      <thead><tr><th>文件</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>pose.py</code></td><td><code>Pose</code>：x、y、yaw、朝上轴、三轴缩放、可选倾斜（<code>tilt_deg</code>、<code>tilt_toward_deg</code>）；转 4×4，(x, y) 是摆正后包围盒中心，转动绕它进行。<code>from_rotation</code> 把任意旋转（如 SAM3D）表示成朝上轴 + yaw + 倾斜。<code>Support</code>：floor / object（<code>on</code>，可选 <code>surface_z</code>）/ wall（<code>height</code>）/ height（只给 harness 自己的初始位姿用，agent 工具不提供），以及 <code>against</code>：空、auto、1 或 2 个墙段</td></tr>
+        <tr><td><code>resolve.py</code></td><td>位姿 + 支撑 → 4×4。在物体上：从 <code>surface_z</code> 上方 0.15 m 往下 0.30 m 内找朝上的面（视觉网格），找不到就打回。贴墙：只沿墙法向推到贴住；auto 时最近的墙超过 0.30 m、或次近的墙相差不到 0.15 m 就打回；两面墙必须成墙角；挡住洞口、超过层高打回。内墙两面都能贴</td></tr>
+        <tr><td><code>store.py</code></td><td><code>SceneState</code>：<code>set_pose</code> 立即生效，上面的物体（递归）跟着走并重新落 z，整个改动要么全部成功要么全部不变；返回本次位置变化的所有物体（被带动的注明 "rests on …"）。<code>undo</code>：撤单个物体的上一次改动，上面的物体跟着回去、保留它们自己的改动；如果撤回的物体的支撑物后来动过，按它在支撑物上的相对位置还原。状态 untouched / working / done / failed，failed 留在场景里。每个版本一份完整快照 <code>states/vNNNN.json</code> + <code>actions.jsonl</code>，可从任一版本恢复。支撑物不在场或成环就打回</td></tr>
+        <tr><td><code>assets.py</code></td><td>资产视觉网格缓存</td></tr>
+      </tbody>
+    </table>
+    <p><b>验收</b>（<code>runs/state-test-20261120/test.py</code>，真实资产和墙，起点取 r2 的位姿；27 项全部通过）：</p>
+    <ul>
+      <li>位姿数学：20 个随机位姿（含 6 种朝上轴和倾斜），底面高度、中心位置、<code>from_rotation</code> 往返都精确；缩放轴不随 yaw 变。</li>
+      <li>落 z：枕头落到床面 0.820 m（r2 是 0.819）；纸巾盒落到床头柜顶 0.624 m；<code>surface_z</code> 给低时落到床头柜下层 0.285 m；给的高度附近没有面、或不在支撑物上方时打回，状态不变。</li>
+      <li>带动：床挪 30 cm、转 10°，枕头跟着走（移动 0.42 m）、仍在床面上，反馈里列出并注明原因。之后枕头自己转 45°，再撤床：床回原位，枕头跟回去且保留 45°；再撤枕头：回到它在床上原来的位置，误差 0。</li>
+      <li>支撑：支撑物不在场、成环（床放到枕头上）都打回。</li>
+      <li>贴墙：镜子自动贴到 ext_E_1，间隙 0，沿墙位置不变，离地 1.30 m；放在房间中间（离最近墙 0.80 m）打回；放到 int_1 门洞前打回；墙角柜子 0041 自动选墙时打回（int_2 0.10 m 对 ext_S_2 0.11 m），指明 int_2 + ext_S_1 后两面都贴住；不成墙角的两面墙打回；挂太高超过层高打回；柜子 0039 立在地上靠 ext_W，贴住且仍在地面。</li>
+      <li>状态：failed 留在场景、untouched 不在；从快照恢复后完全一致；每个版本一份快照一行日志。</li>
+      <li>和 M1 联动：<code>isaac_objects()</code> 直接交给 Isaac 服务渲染，画面里有床和枕头，没有未处理的 obj_0003。</li>
+    </ul>
+    <h4>2026-11-20 · M4 验证与拦截（<code>src/verify/</code>）</h4>
+    <p class="small">用户定：穿插先用 <b>Isaac 接触报告，只回答"是否接触"</b>，不报距离；接口里留了穿插阈值的位置，以后有深度再填。</p>
+    <table>
+      <thead><tr><th>文件</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/isaac/server.py</code> 新增 <code>contacts</code></td><td>零重力一步，读 PhysX 接触报告，返回物体对（含 wall / floor）。实测：只查"有没有接触"，不给深度；两个运动学刚体之间不产生接触，所以必须保持动态</td></tr>
+        <tr><td><code>verify/rules.py</code></td><td><code>Config</code>：全部阈值（含 1 cm 容差、撤回上限 3 次），随运行写一份 <code>verify_config.json</code></td></tr>
+        <tr><td><code>verify/measure.py</code></td><td>测：接触对、穿墙深度（采样表面，解析计算）、出房间、支撑间隙与接触比例、贴墙间隙、缩放偏离、点云覆盖与溢出</td></tr>
+        <tr><td><code>verify/check.py</code></td><td><code>Verifier</code>：改动前后比较；新的接触对 → 撤回；穿墙/出房间/支撑按"违规量 + 1 cm 容差"；软项只报告；连续撤回 3 次标失败；<code>review_physics</code> 抓倒下和掉落并撤回</td></tr>
+      </tbody>
+    </table>
+    <p><b>验收</b>（<code>runs/verify-test-20261120/</code>，10 项全部通过）：接触对来自 Isaac；新接触对 → 撤回；声明支撑上的接触不算违规；墙内 15 cm → 撤回并报 0.30 m；房间外 → 撤回；连续 3 次 → 标失败；缩放 2.5 倍只报告不撤回；1.5 m 高放下 → 判"掉落"并撤回。</p>
+    <p><b>核对中发现的两件事</b>：</p>
+    <ul>
+      <li><b>M3 的初始位姿会嵌进墙</b>：床的墙面穿透 0.248 m、出房间 0.26 m（资产占地比扫描大，贴墙放时越过墙面）。按"不比改动前差"不会被撤，但会一直报在反馈里。</li>
+      <li><b>4 个物体在初始位姿就两两接触</b>（床×枕头、床×纸巾盒、床×床头柜、纸巾盒×床头柜），所以"新接触对"只能拿当前没有的配对来测，也说明初始状态本身是叠着的。</li>
+    </ul>
+    <p class="small">还没做：M5 观测、M6 批次、M7 agent 工具、M8 编排。M4 的阈值都在 <code>Config</code> 里，跑测试实验时按数据调。</p>
+    <p class="small">还没做：初始位姿（M3）、验证和自动撤回（M4）、连续撤回计数（M4）。</p>
+  </div>
+</div>
+
+<!-- ============ D07 ============ -->
+<div class="entry" id="D07">
+  <div class="entry-head">
+    <span class="id">D07</span>
+    <span class="title">墙体交付后接入组装：渲染、贴墙定位、穿墙与出房间检查</span>
+    <span class="date">记录于 2026-11-20</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+    <p>上游的墙体已经交付（2026-11-20）：<code>ObjectGeneration/output/scene0000_00/structuregen/structure_handoff_scannet_scan/</code>（<code>structure_handoff/v2</code>）。
+      D06 里依赖墙面的几项（出房间、穿墙、挂墙、靠墙、拼接图背景）可以接上了，但组装这边还没有接入的地方。</p>
+    <table>
+      <thead><tr><th>交接里有什么</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>坐标系</td><td><code>scannet_scan</code>，与 <code>gt/</code> 物体交接、<code>assembly_handoff/v2</code> 相同，墙底和地板顶面都在 z = 0.054（<code>gt/</code> 的 <code>floor_z</code> 是 0.0544），可以直接叠放</td></tr>
+        <tr><td><code>structure.usdc</code></td><td>9 段墙（6 外墙、3 内墙，高 2.55 m）、3 块地板（room_1 42.50 m²、room_2 3.76 m²（卫生间）、门槛 0.11 m²）、饰线；全部是三角网格静态碰撞体，没有 <code>PhysicsScene</code></td></tr>
+        <tr><td><code>structure.json</code></td><td>每段墙的 prim、长度、厚度、<code>base_z</code>、朝房间的法向 <code>normal_room</code>、洞口；每块地板的 <code>top_polygons</code></td></tr>
+        <tr><td>洞口</td><td>只有 <code>int_1</code> 一个（沿墙 0.22–0.93 m，高 0–1.988 m）。关着的门和窗处墙是实的</td></tr>
+        <tr><td>不含</td><td>天花板、门扇、窗、窗套、家具</td></tr>
+      </tbody>
+    </table>
+    <p><b>扫描点嵌在墙里的 9 个物体</b>（交接 <code>objects_in_walls</code>，判据：至少 20% 的扫描点在墙体内）。2026-11-20 对照 <code>assembly_handoff/v2</code>，其中 6 个有资产：</p>
+    <table>
+      <thead><tr><th>物体</th><th>墙段</th><th>点在墙内</th><th>嵌入 p95</th><th>资产</th></tr></thead>
+      <tbody>
+        <tr><td>door <code>obj_0054</code></td><td><code>ext_E_2</code></td><td>100%</td><td>12 cm</td><td>有</td></tr>
+        <tr><td>shower <code>obj_0004</code></td><td><code>int_2</code></td><td>36%</td><td>14 cm</td><td>有</td></tr>
+        <tr><td>mirror <code>obj_0064</code></td><td><code>ext_E_1</code></td><td>24%</td><td>8 cm</td><td>有</td></tr>
+        <tr><td>curtain <code>obj_0006</code></td><td><code>ext_S_1</code></td><td>36%</td><td>6 cm</td><td>有</td></tr>
+        <tr><td>curtain <code>obj_0005</code></td><td><code>ext_W</code></td><td>34%</td><td>6 cm</td><td>有</td></tr>
+        <tr><td>clock <code>obj_0017</code></td><td><code>ext_W</code></td><td>50%</td><td>2 cm</td><td>有</td></tr>
+        <tr><td>window <code>obj_0000</code></td><td><code>ext_N</code></td><td>98%</td><td>11 cm</td><td>无（skipped）</td></tr>
+        <tr><td>doorframe <code>obj_0065</code>、<code>obj_0063</code></td><td><code>ext_E_2</code>、<code>int_1</code></td><td>66%、49%</td><td>10、15 cm</td><td>无（skipped）</td></tr>
+      </tbody>
+    </table>
+    <p>贴墙物体的扫描点有一部分在墙面后面（墙面取的是标注墙点的平面），所以把它们正确地贴到墙上以后，"点云重叠"这一项反而会变差。</p>
+    <h4>涉及的代码</h4>
+    <table>
+      <thead><tr><th>位置</th><th>现状</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/views.py:85</code> <code>_render()</code></td><td>离线渲染只有当前物体和已放置的物体，没有墙和地面</td></tr>
+        <tr><td><code>src/export_usd.py:97–108</code></td><td>导出时在 <code>floor_z</code> 放一块平面当地面，注释写着"离线渲染没有地面"</td></tr>
+        <tr><td><code>src/scene.py:150</code> <code>rest_z()</code>、<code>:192</code> <code>warnings()</code></td><td>支撑只有地面和物体；没有墙相关的检查</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定</span></div>
+    <p class="small">用户 2026-11-20 逐条确认。</p>
+
+    <h4>0. 验证项的优先级（用户 2026-11-20）</h4>
+    <p>各项冲突时按这个顺序取舍：</p>
+    <ol>
+      <li><b>物理上没有错误</b>（穿插、穿墙、出房间）；</li>
+      <li><b>依赖关系正确</b>（支撑声明成立、贴墙的确贴着墙）；</li>
+      <li><b>视觉一致</b>（拼接图、轮廓 IoU）；</li>
+      <li><b>点云重叠</b>，排在最后。</li>
+    </ol>
+    <p>贴墙物体的点云重叠变差就是这一条的直接例子：只要不穿墙、确实贴着墙、看起来对，点云重叠变差可以接受。</p>
+
+    <h4>1. 墙进场景，拼接图里画墙</h4>
+    <ul>
+      <li>组装场景直接引用 <code>structure.usdc</code>（墙、地板、饰线），替换 <code>export_usd.py</code> 里那块临时平面地板。不改上游文件。</li>
+      <li>拼接图右半边（Isaac Sim / 离线渲染）要画墙和地板，和照片对照时有房间背景。</li>
+      <li>离线渲染器要能加载结构体网格，并参与遮挡。<b>2026-11-20 更新：</b>渲染改由常驻 Isaac 服务负责，见 <a href="#D08">D08</a>；离线渲染是否还保留（用于 IoU）在 D08 里待定。</li>
+    </ul>
+
+    <h4>2. 挂墙、靠墙的定位</h4>
+    <ul>
+      <li>agent 指定贴哪段墙（<code>structure.json</code> 里的段名），给沿墙位置；挂墙另给高度。</li>
+      <li>harness 用这段墙的 front 面和 <code>normal_room</code>，把物体沿法向推到刚好贴住墙面。</li>
+      <li>朝向仍由 agent 给。资产哪一面是背面没有可靠信息，harness 不替 agent 转。</li>
+      <li>点云重叠对这类物体照常报告，按第 0 条排在最后，不用于拦截。</li>
+    </ul>
+
+    <h4>3. 穿墙检查和例外</h4>
+    <table>
+      <thead><tr><th>物体</th><th>做法</th></tr></thead>
+      <tbody>
+        <tr><td>门 <code>obj_0054</code>（以及窗）</td><td>允许和墙相交，穿墙检查豁免。在墙上开洞是另一种做法，记作后续。这个场景的窗 <code>obj_0000</code> 没有资产，暂时只涉及门</td></tr>
+        <tr><td>淋浴间、镜子、两块窗帘、钟</td><td><b>不能和墙穿插</b>，照常拦截。它们可以声明"靠墙 / 挂墙"，由第 2 条贴到墙面上</td></tr>
+        <tr><td>其他物体</td><td>照常检查</td></tr>
+      </tbody>
+    </table>
+
+    <h4>4. 出房间检查</h4>
+    <p>用地板的 <code>top_polygons</code> 判断物体占地是否落在房间内。room_1、room_2、门槛三块合起来算房间。</p>
+
+    <h4>5. 天花板</h4>
+    <p>交接里没有天花板。"固定在天花板"这一类先不做，这个场景的物体里也没有。</p>
+
+    <h4>6. 坐标系</h4>
+    <p><code>gt/</code> 交接的资产一律在 GT 坐标系 <code>scannet_scan</code> 下组装，不迁到 amb3r_floor / handoff/v3。墙体交接也是这个坐标系，不用做变换。</p>
+
+    <h4>还没定的事</h4>
+    <ul>
+      <li>贴墙物体和墙之间允许多少间隙算"贴着"。</li>
+      <li>出房间按占地全部在内还是允许一点越界（贴墙物体的占地边缘就在墙面上）。</li>
+      <li>门要不要在墙上开洞，后续再定。</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill done">已完成</span></div>
+    <h4>2026-11-20 · M0 数据接入</h4>
+    <ul>
+      <li>新增 <code>src/inputs/structure.py</code>：读墙体交接。核对 manifest 里的 schema、两份文件的 sha256、导出检查是否通过；传入物体交接时再核对场景编号、坐标系、地面高度（允许差 1 cm，实际 0.054 对 0.0544）。</li>
+      <li>提供：每段墙的房间侧面线、法向、厚度、高度、洞口；墙坐标换算 <code>to_wall</code> / <code>from_wall</code>（沿墙、离墙面、离墙底）；地板多边形和 <code>in_room()</code>；交接里的嵌墙物体记录。</li>
+      <li>现有代码没有改。</li>
+    </ul>
+    <p><b>核对结果</b></p>
+    <ul>
+      <li>三块地板按多边形算的面积与交接一致（42.496 / 3.763 / 0.107 m²）。</li>
+      <li>用 <code>to_wall</code> 重算 6 个有资产的嵌墙物体：点在墙内的比例与交接逐个一致（镜子 0.245、门 1.0、窗帘 0.355 / 0.339、钟 0.5、淋浴间 0.36），说明坐标系和墙的约定读对了。</li>
+      <li>52 个物体的扫描点 92.9% 落在地板范围内。低于 95% 的 7 个：门 0%、钟 50%、淋浴间 64%、两块窗帘 65% / 66%、镜子 75%（都是嵌墙物体），马桶 94%。</li>
+    </ul>
+    <h4>2026-11-23 · 门窗的穿墙豁免（第 3 条）</h4>
+    <ul>
+      <li><code>verify/rules.py</code> 新增 <code>wall_exempt_labels = ('door', 'window')</code>；<code>verify/measure.py</code> 对标签匹配的物体跳过穿墙和出房间（门在墙里，必然也越出房间多边形）。按标签匹配，换场景也适用。批末检查用同一套测量，同样豁免。</li>
+      <li>实测：门 obj_0054 起点穿墙 0.170 m、出房间 0.173 m，豁免后都记 0；把门推进 ext_E_2 → 保留；同样推柜子 0038 → 穿墙、出房间撤回。M4 原有 10 项验收重跑全部通过。</li>
+      <li>淋浴间、镜子、窗帘、钟照常检查（第 3 条）。</li>
+    </ul>
+    <p class="small">贴墙定位、穿墙和出房间的检查本身属于 M2 / M4，已在 M2 / M4 实现（见 D06）。</p>
+  </div>
+</div>
+
+
+<!-- ============ D08 ============ -->
+<div class="entry" id="D08">
+  <div class="entry-head">
+    <span class="id">D08</span>
+    <span class="title">渲染和物理统一交给常驻的 Isaac 服务</span>
+    <span class="date">记录于 2026-11-20</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+    <p>拼接图要画墙和地板（<a href="#D07">D07</a>），物理稳定要在三个时间点跑仿真（<a href="#D06">D06</a>）。现在两套东西都不满足：</p>
+    <table>
+      <thead><tr><th>位置</th><th>现状</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/render.py</code>、<code>src/views.py:85</code></td><td>离线光线求交（trimesh + embree），只画物体，没有墙和地板，不支持贴图。agent 看的图和 IoU 都来自它</td></tr>
+        <tr><td><code>src/isaac_render.py</code></td><td>一次性脚本：每次启动 Isaac 约 10 秒，渲染完就退出；不跑物理</td></tr>
+        <tr><td>物理仿真</td><td>从没跑过</td></tr>
+      </tbody>
+    </table>
+    <p><b>2026-11-20 实测</b>（一次性探针 <code>runs/isaac-probe-20261120/probe.py</code>，Isaac Sim 5.1，RTX 5070 Ti；场景是初始位姿预览的 52 个物体加墙体交接）：</p>
+    <table>
+      <thead><tr><th>操作</th><th>耗时</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>启动 Isaac</td><td>8.2 s</td><td>常驻后只付一次</td></tr>
+        <tr><td>打开场景并引用 <code>structure.usdc</code></td><td>0.28 s</td><td>墙、踢脚线、地砖都渲染出来了</td></tr>
+        <tr><td>换相机位姿后渲染一帧 1296×968（RGB + 深度 + 实例分割）</td><td>0.03 / 0.05 / 0.16 s</td><td>RTX 子帧 1 / 4 / 16；1 和 16 肉眼几乎看不出差别</td></tr>
+        <tr><td>隐藏 50 个物体 / 停用 50 个物体</td><td>0.01 / 0.02 s</td><td>两种都能做到"只渲染当前和已处理的物体"</td></tr>
+        <tr><td>移动一个物体后重新渲染</td><td>0.06 s</td><td></td></tr>
+        <tr><td>重力仿真：枕头抬高 30 cm 后放下，床设为固定</td><td>5.2 s（240 次带渲染的更新）</td><td>枕头落回 z 1.088（起点 1.391，下落 0.30 m），停在床上。停止时间线后 USD 里的位姿自动恢复成仿真前的值，不会写回</td></tr>
+        <tr><td>不渲染、直接步进物理 240 步</td><td>0.13 s</td><td>结果和上一行完全相同，可能根本没有重新仿真，这个数字不可信。已在下面独立版的测试里重测</td></tr>
+      </tbody>
+    </table>
+    <p><b>2026-11-20 改用独立安装的 Isaac Sim（用户定）</b>：<code>/home/seer/isaacsim</code>（5.1.0-rc.19，自带 Python 3.11.13），用 <code>~/isaacsim/python.sh</code> 在干净环境里（<code>env -i</code>，不 source ROS 和 robot_sim）跑同一个探针，结果如下。第一次运行打开场景用了 48 s（编译着色器缓存），第二次起与上表一致：</p>
+    <table>
+      <thead><tr><th>操作</th><th>独立版（第二次）</th></tr></thead>
+      <tbody>
+        <tr><td>启动</td><td>5.4 s</td></tr>
+        <tr><td>打开场景</td><td>0.32 s</td></tr>
+        <tr><td>渲染一帧（子帧 1 / 4 / 16）</td><td>0.03 / 0.06 / 0.16 s</td></tr>
+        <tr><td>带渲染的仿真 240 次更新</td><td>5.1 s</td></tr>
+        <tr><td><b>不渲染、直接步进物理 600 步（5 s 仿真时间，120 Hz）</b></td><td><b>0.20 s</b>。这次重设了起点再步进，枕头从 z 1.376 落下，0.5 s 后到 1.086，1 s 后稳定在 1.088，是真实的仿真</td></tr>
+      </tbody>
+    </table>
+    <p>实例分割的 id 对应到 mesh 路径（<code>/World/Objects/obj_0037/Mesh</code>、<code>/World/Structure/Walls/…</code>），可以直接拿来算当前物体的可见像素。PhysX 对每个资产的视觉网格报一条警告（视觉网格挂了 <code>CollisionAPI</code> 但 <code>collisionEnabled = false</code>，回退成凸包）；按属性它不参与碰撞，需要确认。</p>
+    <p>当时比较过的其他选项：离线渲染补墙（快，但瓷砖只能画纯色）、pyrender / nvdiffrast、Blender（都没装）、MuJoCo / PyBullet / Drake（物理结果和最终交付的 Isaac 不一致）。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定</span></div>
+    <p class="small">用户 2026-11-20 定。</p>
+    <ul>
+      <li><b>Isaac 常驻成一个服务，拼接图渲染和物理仿真都交给它。</b>harness 进程通过请求调用，不再每次启动 Isaac。</li>
+      <li>场景就是组装出来的 USD：<code>structure.usdc</code>（墙、地板）+ 已处理的物体。渲染时只显示当前物体和已处理的物体（<a href="#D04">D04</a>）。</li>
+      <li>物理仿真按 <a href="#D06">D06</a> 的规则：只取位移和倾斜角，不把仿真后的位姿写回；验证某个物体时只让它和它上面的东西动。</li>
+    </ul>
+    <h4>还没定的事</h4>
+    <ul>
+      <li><s>轮廓 IoU 用哪个渲染器算。</s> 用户 2026-11-20：IoU 先不实现。</li>
+      <li>留出帧评估（<code>src/evaluate.py</code>）现在用离线渲染。是否跟着切到 Isaac：切了口径一致，但和测试实验的数字（r2 0.532 等）不能直接比。</li>
+      <li><s>服务接口、崩溃重启、仿真后恢复。</s> 已实现，见"实际改动"。</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill done">已完成</span></div>
+    <h4>2026-11-20 · M1 Isaac 服务</h4>
+    <p class="small">用户定：用独立安装的 Isaac Sim；轮廓 IoU 先不实现（让模型从图上看，不给处理过的数）；不加只参与渲染的天花板；12 个 static 资产不测稳定性。</p>
+    <table>
+      <thead><tr><th>文件</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/isaac/server.py</code>（新增）</td><td>常驻服务，用 <code>~/isaacsim/python.sh</code> 跑。启动时建空场景、引用 <code>structure.usdc</code>、建物理场景（CPU、增强确定性、120 Hz）。操作：<code>render</code>、<code>settle</code>、<code>raycast</code>（诊断用）、<code>ping</code>、<code>shutdown</code></td></tr>
+        <tr><td><code>src/isaac/client.py</code>（新增）</td><td>harness 这边的 <code>IsaacService</code>。干净环境启动子进程（只带 EULA 变量），Unix socket + 认证密钥通信，服务日志写文件。超时：渲染 30 s、仿真 60 s；超时或进程死掉就重启一次、重发同一请求</td></tr>
+        <tr><td><code>src/isaac/camera.py</code>（新增）</td><td>相机内外参转 USD 相机，服务和导出共用。从 <code>export_usd.py</code> 搬出来；用 r2 重新导出，结果和以前逐字节一致</td></tr>
+      </tbody>
+    </table>
+    <p><b>接口</b></p>
+    <ul>
+      <li>每个请求带上当前应在场的全部物体（资产路径 + 4×4 位姿）。不在列表里的物体被停用，不渲染也不参与碰撞。服务只改有变化的物体。</li>
+      <li><code>render</code>：按给定的关键帧相机出全幅 RGB（PNG）。可选深度和逐像素物体标签（物体编号 / wall / floor），存 npz，并返回每个物体的可见像素数。不算 IoU。</li>
+      <li><code>settle</code>：指定哪些物体可动，跑 N 秒重力。只有 dynamic 资产会动；请求里的 static / kinematic 资产列在 <code>fixed</code> 里返回；其余 dynamic 物体临时固定，结束后恢复。每个可动物体返回水平位移、竖直位移、倾斜角（自身竖直轴的变化）、总转角、前 0.1 s 位移、最后 0.5 s 是否静止、结束位姿、高度曲线。仿真后所有位姿恢复成请求里的值。服务不做任何判断。</li>
+    </ul>
+    <p><b>验收</b>（<code>runs/isaac-service-test-20261120/</code>）</p>
+    <table>
+      <thead><tr><th>项目</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>启动</td><td>约 6 s</td></tr>
+        <tr><td>渲染 4 个视角，52 个物体，RGB</td><td>0.42 s（每张渲染约 50 ms，加写文件约 100 ms）；加深度和标签 0.49 s</td></tr>
+        <tr><td>切换在场物体</td><td>52 → 2 个：0.12 s；2 → 52 个：0.22 s</td></tr>
+        <tr><td>只放床和枕头时</td><td>渲染里只剩床、枕头、墙、地板</td></tr>
+        <tr><td>枕头抬高 30 cm，5 s 重力</td><td>0.14–0.26 s。dz −0.303 m，0.5 s 内落回床面，倾斜 2.6°，静止</td></tr>
+        <tr><td>确定性</td><td>同一请求跑两次，结束位姿完全相同</td></tr>
+        <tr><td>枕头在初始位姿，5 s 重力</td><td>水平 4.3 cm、竖直 −0.3 cm、倾斜 2.6°</td></tr>
+        <tr><td>static 资产（柜子 0008）放进 movable</td><td>列为 fixed，不动；床被临时固定（held）</td></tr>
+        <tr><td>碰撞形状</td><td>穿过枕头和床的射线只命中 <code>CollisionMesh</code>（凸包）和墙、地板，视觉网格不参与碰撞。PhysX 那条警告无害</td></tr>
+        <tr><td>仿真后再渲染</td><td>和仿真前平均差 2.5（0–255），与"换个视角再换回来"的差一样，是 RTX 累积噪声，不是位姿变了</td></tr>
+        <tr><td>强杀服务后再请求</td><td>自动重启并成功，耗时 6.1 s</td></tr>
+      </tbody>
+    </table>
+    <p class="small">没做：IoU（用户决定先不做）。旧的 <code>src/isaac_render.py</code> 保留未动。</p>
+  </div>
+</div>
+
+
+<!-- ============ D09 ============ -->
+<div class="entry" id="D09">
+  <div class="entry-head">
+    <span class="id">D09</span>
+    <span class="title">M7 agent：工具表、提示词、开局消息、对话循环</span>
+    <span class="date">记录于 2026-11-23</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+    <p>M0–M6 是 harness 的内部模块，需要一层把它们变成 agent 能调用的工具、写清规则、给开局材料、驱动对话。测试实验的 agent（<code>src/legacy/agent.py</code>）是两段式提交、五选一候选、观测靠工具去要（D03–D06 已否定）。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定</span></div>
+    <p class="small">用户 2026-11-23 定：模型用 <code>七牛云/coding-openai/gpt-6-astra</code>，调用方式参考 <code>Gateway/key.json</code>（和 ObjectGeneration 的墙体 agent 一样走 OpenAI Responses API）；图片成本先不优化；其余按建议。</p>
+    <ul>
+      <li>工具全部 strict；<code>tool_choice: auto</code>，不并行；reasoning effort <code>high</code>，摘要写入日志。</li>
+      <li>历史只追加不改写；每批一个新对话。</li>
+      <li>10 个工具：<code>set_order</code>、<code>begin</code>、<code>set_pose</code>（立即生效 → M4 检查 → 不过自动撤回）、<code>undo</code>、<code>view</code>、<code>check_scene</code>、<code>finish</code>（5 s 物理）、<code>give_up</code>、<code>bring_in</code>、<code>end_batch</code>。<code>height</code> 支撑不对 agent 开放。</li>
+      <li>被撤回的改动附上那次位姿的渲染，标 "REFUSED"。</li>
+      <li>每批最多 80 轮或 300 万输入 token；没调工具就提醒，连续两次后停止；超限时剩下的物体按最后位姿标失败、收批。</li>
+      <li>开局消息：文字卡、已放物体清单、墙段表、平面图、带框关键帧、四面图。</li>
+      <li>平面图在 M7 补上（D06 第 5 条定过，M5 漏了）：墙段和 id、洞口、本批相机位置与视野扇形，不画物体。</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill plan">已实现，待整场景验证</span></div>
+    <h4>2026-11-23 · <code>src/agent/</code> + <code>src/observe/plan.py</code></h4>
+    <table>
+      <thead><tr><th>文件</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>agent/llm.py</code></td><td>网关 Responses 调用，从墙体 agent 的 <code>llm.py</code> <b>复制并改写</b>：重试、计价（$10 / $1 / $50 每百万）、日志里图片换成路径、密钥不落盘、推理摘要</td></tr>
+        <tr><td><code>agent/tools.py</code></td><td>10 个 strict 工具的 schema、系统提示词</td></tr>
+        <tr><td><code>agent/loop.py</code></td><td>工具实现（调 M2/M4/M5/M6）、开局消息、对话循环、上限与收批</td></tr>
+        <tr><td><code>observe/plan.py</code></td><td>平面图</td></tr>
+      </tbody>
+    </table>
+    <p><b>网关探测</b>（<code>runs/agent-probe-20261123/</code>）：strict 工具、用户消息里的图、<b>工具结果里直接带图</b>都能用；一张 1296×968 的图约 1.6k token；缓存读取仍是 0。</p>
+    <p><b>离线测试</b>（<code>runs/agent-test-20261123/test_fake.py</code>，脚本化假模型，不花钱）：10 个工具全部走通真实的状态、检查、Isaac 渲染和收批。修掉两处：</p>
+    <ul>
+      <li>批末检查会把 agent 主动放弃的物体也重开，导致 agent 不停 <code>end_batch</code> 被拒、直到用完 80 轮。改成只重开"已完成"的物体，放弃的保持失败。</li>
+      <li><code>end_batch</code> 的返回只列出批末检查新标的失败，漏了 agent 自己放弃的。改成列出本批全部失败物体。</li>
+    </ul>
+    <p><b>真模型试跑</b>（批 3，只跑 4 轮，<code>runs/agent-test-20261123/out_real/</code>）：开局 11.3k token；模型先定顺序（"床在床上的枕头、包、头盔之前，然后是吊柜"），开始床，把床缩到 0.65 × 0.76、声明在地面，检查通过保留，再要了帧 55 的视角。4 轮 60 s、$0.50。因为轮数被限制在 4，5 个物体都按"上限"标了失败——这是测试设置，不是结果。</p>
+    <p class="small">还没做：完整跑一批、M8 编排（11 批连续）、M9 评估。</p>
+  </div>
+</div>
+
+
+<!-- ============ D10 ============ -->
+<div class="entry" id="D10">
+  <div class="entry-head">
+    <span class="id">D10</span>
+    <span class="title">M8 编排：11 批连续、断点恢复、全局物理、导出</span>
+    <span class="date">记录于 2026-11-23</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+    <p>M6 只管单批、M7 只跑单批。整场景需要：按顺序跑完 11 批、中断后能接着跑、全部完成后再做一次全局物理（D06 的第三个时机）、导出最终场景（D07：引用 <code>structure.usdc</code>，替换旧的平面地板）。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定</span></div>
+    <p class="small">用户 2026-11-23 同意建议的 4 条。</p>
+    <ul>
+      <li>全局物理发现倒下或掉落：<b>标为失败、保留位姿、写进报告，不撤回</b>（此时已没有 agent 能接手）。</li>
+      <li>整次运行预算上限 $150（可改）。</li>
+      <li>断点恢复以批为单位：从中断那批的开头重跑，状态从上一批的断点版本载入。</li>
+      <li>导出：<code>structure.usdc</code> + 每个物体引用自己的 <code>physics.usdc</code> 和矩阵 + 关键帧相机 + 物理场景；失败物体也导出并标状态。</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill plan">已实现，待整场景验证</span></div>
+    <h4>2026-11-23 · <code>src/run/</code></h4>
+    <table>
+      <thead><tr><th>文件</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>main.py</code></td><td><code>Run</code>：配置快照（交接哈希、阈值、模型、切批；恢复时哈希或切批变了就拒绝）、11 批顺序、断点恢复（中断批的快照移到 <code>state/discarded_*</code>，不删）、预算上限、全局物理 15 s、导出。命令行 <code>src/run/main.py --name … [--batches …] [--max-usd …] [--export-only]</code></td></tr>
+        <tr><td><code>export.py</code></td><td>导出 <code>scene.usda</code>，从 legacy 复制改写；去掉临时平面地板</td></tr>
+        <tr><td><code>verify/check.py</code></td><td><code>review_physics(undo=False)</code>：只报告不撤回</td></tr>
+        <tr><td><code>observe/observer.py</code></td><td>出图编号跨恢复运行连续，不覆盖已有的图</td></tr>
+      </tbody>
+    </table>
+    <p><b>验收</b>（<code>runs/run-test-20261123/</code>，脚本化模型，不花钱；11 项全部通过）：批 1、2 结束（断点 70、90）；批 3 中途模拟崩溃；新进程恢复时计划 3–11，批 3 从版本 90 重来，崩溃批的快照移到 <code>discarded_*</code>；11 批全部结束；全局物理跑完；导出 52 个物体（均带状态），墙来自 <code>structure.usdc</code>，没有临时地板，相机和物理场景齐全；预算 $1 时批 1 后、批 2 前停下。</p>
+    <p><b>需要注意</b>：</p>
+    <ul>
+      <li>预算是在批开始前检查，最后一批会把花费带过上限（测试里 $1 上限花到 $1.7）。要严格不超需改成批内每轮检查。</li>
+      <li>脚本化模型从不移动物体，所以全局物理测的是 M3 起点本身：52 个里 15 个倒下或掉落，前 0.1 s 位移 9–72 cm，多数是起点就互相穿插被弹开；钟和微波炉（起点悬在 1.65 m、1.49 m、未声明支撑）掉出了房间（竖直位移约 −1000 m），原因未逐个核实。这些要靠 agent 声明支撑、挪开穿插来解决。</li>
+    </ul>
+  </div>
+</div>
+
+
+<!-- ============ D11 ============ -->
+<div class="entry" id="D11">
+  <div class="entry-head">
+    <span class="id">D11</span>
+    <span class="title">M9 评估：留出帧 IoU、基线、几何物理、过程指标、报告</span>
+    <span class="date">记录于 2026-11-23</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+    <p>测试实验的评估（<code>src/legacy/evaluate.py</code>）只覆盖 6 个物体，留出帧按"这一批有哪些物体、按什么顺序"抽取，换了分批方式就抽到不同的帧，分数不能和以前的数直接比。整场景还需要几何、物理和过程指标。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill done">已定</span></div>
+    <p class="small">用户 2026-11-23 同意 5 条建议：排除所有物体的首个关键帧；IoU 用视觉网格渲染；失败物体按最后位姿打分、单列；保留 r2 重打分；报告为 JSON + HTML。</p>
+    <ul>
+      <li>留出帧：ScanNet 2D 标注覆盖率 ≥1% 的帧，去掉全部 44 个首个关键帧，每个物体用自己的编号作种子抽 16 张（帧集不再随分批变化）。</li>
+      <li>基线：B0 扫描盒 + yaw 0、B1 原始 SAM3D 朝向、M3 起点。B2 和 oracle 随候选机制一起废弃。</li>
+      <li>几何与物理：最终状态跑 M4 的测量，读全局物理结果。</li>
+      <li>过程：每批轮数、花费、停因、物体状态；自动撤回次数。</li>
+      <li>报告：<code>eval.json</code> + <code>report.html</code>（逐物体表、每批表、每个物体最终位姿在首个关键帧上的轮廓图）。</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <div class="h">实际改动 <span class="pill plan">已实现，待整场景验证</span></div>
+    <h4>2026-11-23 · <code>src/eval/</code></h4>
+    <table>
+      <thead><tr><th>文件</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>frames.py</code></td><td>留出帧选择（流式读一遍标注，一次算出所有物体的覆盖）；传感器深度重采样到颜色相机、半分辨率；LRU 缓存</td></tr>
+        <tr><td><code>score.py</code></td><td>轮廓 IoU，从 legacy 复制改写：渲染距离与传感器深度比较，被真实表面挡住的像素不计</td></tr>
+        <tr><td><code>baselines.py</code></td><td>B0、B1（原始 SAM3D，含 6 个倒置）、M3 起点</td></tr>
+        <tr><td><code>run.py</code></td><td><code>evaluate(run_dir)</code>：打分、汇总、r2 重打分、写 <code>eval.json</code> + <code>report.html</code> + 52 张轮廓图</td></tr>
+      </tbody>
+    </table>
+    <p><b>校验</b>（<code>runs/eval-test-20261123/</code>）：</p>
+    <ul>
+      <li><b>先用测试实验自己的帧集重打 r2</b>：0.532，和它当时报的 0.532 完全一致——说明打分实现是对的。</li>
+      <li><b>换成新帧集</b>（排除全部首个关键帧、按物体编号播种）：同样 6 个物体上 B0 0.469（原 0.472）、B1 0.503（原 0.477）、r2 0.541（原 0.532）。口径变化带来的差在 ±0.03 内，可以直接和以前的数比。</li>
+      <li>在 M8 的脚本化运行上端到端跑通：<code>eval.json</code>、<code>report.html</code>（71 行表格）、52 张轮廓图；因为脚本模型从不移动物体，最终分数与 M3 起点完全相同（0.502），符合预期。</li>
+      <li>52 个物体里 51 个有留出帧（1 个没有可见帧，IoU 记空）。</li>
+    </ul>
+    <p><b>写代码时修掉的一个错误</b>：传感器深度是沿光轴的深度，而渲染端算的是相机到表面的欧氏距离，两者直接比较会把大量正确像素误判为"被挡住"，所有方法的分数被系统性压低约 0.2（r2 从 0.532 掉到 0.334）。改成 <code>depth × sqrt(1+x²+y²)</code> 换算成射线距离后与 legacy 完全一致。</p>
+    <p class="small">还没做：跑真实的一批后给出第一份有意义的报告。</p>
+  </div>
+</div>
+
+
+<!-- ============ D12 ============ -->
+<div class="entry" id="D12">
+  <div class="entry-head">
+    <span class="id">D12</span>
+    <span class="title">批 3 实测：五个物体均值 0.568，obj_0061 掉到 0.126</span>
+    <span class="date">记录于 2026-11-23</span>
+  </div>
+
+  <div class="blk">
+    <div class="h">发现的问题 <span class="pill found">已确认</span></div>
+    <p>新链路（M0–M9）第一次真实运行，批 3：床 0037、obj_0061、obj_0062、枕头 0016、吊柜 0041。运行目录 <code>runs/assembly-batch3-20261123/</code>。31 轮、$3.7、5 个物体全部完成、0 次自动撤回；批末检查重开吊柜一次（撞墙 + 出房间），agent 改成同时贴 int_2 和 ext_S_1 后通过。自动选墙在 0.02 m 对 0.17 m 时按歧义打回，符合设计。</p>
+    <table>
+      <thead><tr><th>物体</th><th>最终 IoU</th><th>起点（M3）</th><th>r2 重打分</th><th>B1</th></tr></thead>
+      <tbody>
+        <tr><td>床 0037</td><td>0.623</td><td>0.497</td><td>0.672</td><td>0.516</td></tr>
+        <tr><td>枕头 0016</td><td>0.627</td><td>0.509</td><td>0.508</td><td>0.541</td></tr>
+        <tr><td>包 0062</td><td>0.719</td><td>0.691</td><td>0.671</td><td>0.701</td></tr>
+        <tr><td><b>obj_0061</b></td><td><b>0.126</b></td><td>0.452</td><td>0.665</td><td>0.659</td></tr>
+        <tr><td>吊柜 0041</td><td>0.746</td><td>0.769</td><td>—</td><td>0.844</td></tr>
+      </tbody>
+    </table>
+    <p>五个物体均值 0.568；和 r2 共有的 4 个物体上 0.524 对 r2 的 0.629。几何检查全部干净（没有未声明支撑的接触、穿墙、出房间）；每次 finish 的 5 s 物理都通过。</p>
+    <h4>obj_0061 掉分的拆解</h4>
+    <p>同一个评估器，逐项替换参数：</p>
+    <table>
+      <thead><tr><th>位姿</th><th>IoU</th></tr></thead>
+      <tbody>
+        <tr><td>起点：yaw 60.7°，底面 0.826，未声明支撑</td><td>0.452</td></tr>
+        <tr><td>yaw 241°、起点 x/y（180° 翻转，其余不动）</td><td><b>0.647</b></td></tr>
+        <tr><td>agent 的 x/y（4.10, 2.48）、起点 yaw</td><td>0.073</td></tr>
+        <tr><td>agent 的 x/y + yaw 241，底面仍 0.826</td><td>0.267</td></tr>
+        <tr><td>实际最终：底面 0.774（落到床资产表面）</td><td>0.126</td></tr>
+      </tbody>
+    </table>
+    <ol>
+      <li><b>180° 翻转是对的</b>（0.452 → 0.647），但 agent 随后按照片把它往床头挪了约 0.15 m，把收益全部抵消（→ 0.267）。这个资产只有 0.12 m 高，小物体对位移极敏感。</li>
+      <li><b>声明支撑在床以后，按床的视觉网格表面落 z</b>：床资产顶面 0.775，扫描底面 0.826，下沉 5 cm，再掉到 0.126。这是 D06 M2-3"按视觉网格落 z"的直接代价。</li>
+    </ol>
+    <p>过程中检查两次报"点云吻合变差"（覆盖 0.956 → 0.593 → 0.425，溢出 0.489），但点云是只报告项，agent 仍然 finish。</p>
+  </div>
+
+  <div class="blk">
+    <div class="h">改动计划 <span class="pill plan">待确认</span></div>
+    <p>几个方向，等讨论定：</p>
+    <ol>
+      <li><b>小物体的 z</b>：支撑物表面与扫描底面差得远时（这里 5 cm），是否让 agent 二选一——落到支撑面，或保持扫描高度并声明"垫高"。或者落 z 时取两者中较高的那个。</li>
+      <li><b>点云变差要不要升级成拦截</b>：本例里点云指标是唯一发出警告的信号。可考虑"变差超过某阈值 + 小物体"时自动撤回，或至少要求 agent 给理由。</li>
+      <li><b>提示词</b>：告诉 agent 小物体（最短边 < 0.2 m）不要轻易离开扫描位置；照片只决定朝向和支撑，位置以扫描为准。</li>
+      <li><b>吊柜</b>：0.746 低于起点 0.769 和 B1 0.844，但它修好了物理错误；是否值得回看它为什么比起点差。</li>
+    </ol>
+  </div>
+
+  <div class="blk empty">
+    <div class="h">实际改动 <span class="pill none">未改动</span></div>
+    <p>尚未改动。运行与评估的数据已在 <code>runs/assembly-batch3-20261123/</code>。</p>
+  </div>
+</div>
+</div>
+</details>
+
+
+<footer>
+  <p>相关页面：<a href="scene-assembly-design.html">场景组装 harness 设计框架</a> · <a href="scene-assembly-pilot-walkthrough.html">以一个批次为例的复盘</a> · <a href="archive/scene-assembly-pilot-walkthrough-20261111.html">测试实验批 1 复盘（存档）</a> · <a href="reference-litereality-assembly.html">LiteReality-Agent 的组装</a> · <a href="reference-scenesmith-assembly.html">scenesmith 的组装</a></p>
+</footer>
+</div>
+<script>
+  document.getElementById('entryCount').textContent = document.querySelectorAll('.entry').length;
+  // a link to an entry inside a closed fold opens that fold first
+  function openFor(hash){
+    const el = hash && document.getElementById(hash.slice(1));
+    if(!el) return;
+    const d = el.closest('details');
+    if(d && !d.open){ d.open = true; }
+    el.scrollIntoView();
+  }
+  document.querySelectorAll('a[href^="#"]').forEach(a => a.addEventListener('click', e => {
+    const el = document.getElementById(a.getAttribute('href').slice(1));
+    if(el && el.closest('details')){ e.preventDefault(); history.pushState(null,'',a.getAttribute('href')); openFor(a.getAttribute('href')); }
+  }));
+  window.addEventListener('load', () => openFor(location.hash));
+</script>
+</body>
+</html>
