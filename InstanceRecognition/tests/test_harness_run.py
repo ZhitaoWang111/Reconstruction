@@ -165,6 +165,60 @@ def test_resume_legacy_config_with_new_retry_options(runner):
     assert len(runner.publications) == 1
 
 
+def _stop_after_first_window(runner):
+    runner.faults['fatal_second_window'] = True
+    with pytest.raises(RuntimeError):
+        runner.invoke()
+    runner.faults['fatal_second_window'] = False
+    assert json.loads((runner.out/'checkpoint.json').read_text()) == {'version': 1, 'cutoff': 0}
+
+
+def test_resume_max_calls_raises_the_cap_only_for_the_remaining_windows(runner, capsys):
+    _stop_after_first_window(runner)
+    config = (runner.out/'config.json').read_bytes()
+    budgets = []
+    original = run.build_window_content
+    run.build_window_content = lambda data, tools, first, cutoff, budget: (
+        budgets.append(budget), original(data, tools, first, cutoff, budget))[1]
+    try:
+        runner.invoke('--resume-max-calls', '9')
+    finally:
+        run.build_window_content = original
+    # The resumed window ran under the raised cap; the stored config still says 4,
+    # so the resume identity is unchanged.
+    assert budgets == [9]
+    assert (runner.out/'config.json').read_bytes() == config
+    assert 'RESUME BUDGET: windows after frame 0 get 9 calls (config max_calls 4)' in capsys.readouterr().out
+    options = [json.loads(p.read_text()) for p in sorted((runner.out/'run_options').glob('*.json'))]
+    assert options[-1]['resume_max_calls'] == 9 and options[-1]['resume_from_cutoff'] == 0
+    summary = json.loads((runner.out/'summary.json').read_text())
+    assert summary['completed']
+    assert summary['max_calls_config'] == 4
+    assert summary['resume_budget_raises'] == [{'from_cutoff': 0, 'max_calls': 9}]
+
+
+def test_a_plain_run_records_no_budget_raise(runner):
+    runner.invoke()
+    summary = json.loads((runner.out/'summary.json').read_text())
+    assert 'resume_budget_raises' not in summary and 'max_calls_config' not in summary
+
+
+def test_resume_max_calls_needs_a_checkpoint(runner):
+    with pytest.raises(SystemExit):
+        runner.invoke('--resume-max-calls', '9')
+    assert not (runner.out/'checkpoint.json').exists()
+    assert runner.requests == []
+
+
+def test_resume_max_calls_must_exceed_the_configured_cap(runner):
+    _stop_after_first_window(runner)
+    count = len(runner.requests)
+    for value in ('4', '3'):
+        with pytest.raises(SystemExit):
+            runner.invoke('--resume-max-calls', value)
+    assert len(runner.requests) == count
+
+
 def test_run_completes_under_the_accepted_policy(runner):
     """The one buildable policy drives the whole two-window path."""
     manifest = json.loads((runner.source/'manifest.json').read_text())

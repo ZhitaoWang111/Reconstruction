@@ -198,6 +198,13 @@ def main():
     parser.add_argument('--model',default='openai/gpt-6-sol')
     parser.add_argument('--reasoning-effort',choices=['none','low','medium','high'],default=None,
                         help='Default: none for GPT-6 Sol; Astra requires low or higher')
+    # --max-calls is part of the resume identity, so a stuck window cannot get more
+    # rounds by changing it. This raises the per-window cap for the windows still
+    # to run in a resumed output only; it is recorded in run_options and in the
+    # summary so the windows that ran under it stay identifiable.
+    parser.add_argument('--resume-max-calls',type=int,default=None,
+                        help='Resume only: per-window call cap for the remaining windows '
+                             '(must exceed --max-calls; recorded in run_options and summary)')
     mode=parser.add_mutually_exclusive_group()
     mode.add_argument('--prepare-only',action='store_true')
     mode.add_argument('--skip-publish',action='store_true', help='Save results only; build pages later with --publish-only')
@@ -269,7 +276,7 @@ def main():
         parser.error(f'No geometry description for lifting_policy {lifting_policy!r}; '
                      'add one so the audit trail cannot misdescribe the source')
     config={k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()
-            if k not in {'prepare_only','publish_only','skip_publish','run_dir','site_dir'}}
+            if k not in {'prepare_only','publish_only','skip_publish','run_dir','site_dir','resume_max_calls'}}
     # Record where the two output trees actually are. These participate in the
     # resume comparison below, so a run cannot silently resume into a different
     # pair of directories.
@@ -284,10 +291,18 @@ def main():
         if ({k:v for k,v in existing.items() if k not in operational} !=
                 {k:v for k,v in config.items() if k not in operational}):
             raise ValueError('Resume config changed; use new output')
+    if args.resume_max_calls is not None:
+        if not (out/'checkpoint.json').exists():
+            parser.error('--resume-max-calls only applies when resuming an output with a checkpoint')
+        if args.resume_max_calls <= args.max_calls:
+            parser.error(f'--resume-max-calls must exceed --max-calls ({args.max_calls})')
     save(out/'config.json',config)
     save(out/'run_options'/f'{time.time_ns()}.json', {
         'network_retries':args.network_retries, 'window_network_retries':args.window_network_retries,
-        'retry_backoff':args.retry_backoff, 'publish_policy':'manual' if args.skip_publish else 'on_completion'})
+        'retry_backoff':args.retry_backoff, 'publish_policy':'manual' if args.skip_publish else 'on_completion',
+        **({'resume_max_calls':args.resume_max_calls,
+            'resume_from_cutoff':json.loads((out/'checkpoint.json').read_text())['cutoff']}
+           if args.resume_max_calls is not None else {})})
     print(f'PREPARING {args.frames} frames ({math.ceil(args.frames/args.window)} windows); '
           f'model={args.model}; output={out}',flush=True)
     prior_audit=json.loads((out/'input_audit.json').read_text()) if (out/'input_audit.json').exists() else None
@@ -306,6 +321,10 @@ def main():
                   network_retries=args.network_retries,retry_backoff=args.retry_backoff)
     checkpoint=json.loads(checkpoint_path.read_text()) if checkpoint_path.exists() else {'version':0}
     state=json.loads((out/'versions'/f'{checkpoint["version"]:04d}'/'state.json').read_text()) if checkpoint['version'] else initial()
+    if args.resume_max_calls is not None:
+        print(f'RESUME BUDGET: windows after frame {state["cutoff"]} get {args.resume_max_calls} calls '
+              f'(config max_calls {args.max_calls})',flush=True)
+        args.max_calls=args.resume_max_calls
     for first in range(state['cutoff']+1,args.frames,args.window):
         cutoff=min(first+args.window,args.frames)-1
         print(f'WINDOW {state["version"]+1}/{math.ceil(args.frames/args.window)} START: frames {first}-{cutoff}',flush=True)
@@ -336,6 +355,14 @@ def main():
              'api_calls_in_abandoned_attempts':abandoned_calls,'retried_windows':retried,
              'usage':usage,'cost_currency':None,'cost_note':'Gateway price not configured; tokens recorded, no fabricated cost',
              'accuracy_evaluated':False,'geometry_policy':config['geometry_policy']}
+    # Every resume that raised the cap, from all invocations of this output, so a
+    # summary written by a later plain resume still says which windows had more rounds.
+    raised=[o for o in (json.loads(p.read_text()) for p in sorted((out/'run_options').glob('*.json')))
+            if o.get('resume_max_calls') is not None]
+    if raised:
+        summary['max_calls_config']=config['max_calls']
+        summary['resume_budget_raises']=[{'from_cutoff':o['resume_from_cutoff'],'max_calls':o['resume_max_calls']}
+                                         for o in raised]
     save(out/'summary.json',summary);print(json.dumps(summary,ensure_ascii=False),flush=True)
     if args.skip_publish:
         print('PROCESSING COMPLETE; pages not built (--skip-publish). Use --publish-only --output to build later.',flush=True)
