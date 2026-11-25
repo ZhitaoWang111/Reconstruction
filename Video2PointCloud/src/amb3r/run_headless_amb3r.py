@@ -21,6 +21,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--num-frames", type=int, default=4)
+    parser.add_argument("--sdpa-attention", action="store_true",
+                        help="Use PyTorch SDPA for PTv3 packed attention on newer CUDA environments")
     parser.add_argument(
         "--frontend-only",
         action="store_true",
@@ -79,6 +81,10 @@ def main() -> None:
         raise RuntimeError("CUDA is required by the official AMB3R implementation")
     args.output.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(args.repo.resolve()))
+    if args.sdpa_attention:
+        sys.path.insert(0, str(args.repo.resolve() / "thirdparty"))
+        from runtime_compat import enable_sdpa_attention
+        enable_sdpa_attention()
 
     from amb3r.model import AMB3R
     from amb3r.datasets import Demo
