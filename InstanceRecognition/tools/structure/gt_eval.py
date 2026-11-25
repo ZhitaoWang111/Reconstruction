@@ -267,13 +267,23 @@ def eval_room(C: dict) -> dict:
         a = (G - p0) @ d; q = (G - p0) @ n
         m = (a > 0.1 * L) & (a < 0.9 * L) & (np.abs(q) < NEAR)
         # n points into the room: GT outside our side has q < 0, so + = our side sits inside the GT wall
+        if L < 0.30:                       # a connector: too short to say anything
+            sides.append({"side": sd["side"], "from": sd["from"], "gt_m2": 0.0, "inward_cm": None}); continue
         sides.append({"side": sd["side"], "from": sd["from"], "gt_m2": round(m.sum() / gs["per_m2"], 2),
                       "inward_cm": round(float(-np.median(q[m]) * 100), 1) if m.sum() > 50 else None})
-    by = {x["side"]: x for x in sides}
+    # Room size along the main axis and across it: the outermost edge facing each way. With a
+    # polygon outline a direction can have several edges (a step); the outermost is the room's extent.
     size = []
     for a, b, ours in (("W", "E", C["rectangle"]["width_m"]), ("S", "N", C["rectangle"]["depth_m"])):
-        if by[a]["inward_cm"] is not None and by[b]["inward_cm"] is not None:
-            gt = ours + (by[a]["inward_cm"] + by[b]["inward_cm"]) / 100
+        def outer(name):
+            cand = [(sd, x) for sd, x in zip(C["sides"], sides)
+                    if sd["side"].rstrip("0123456789") == name and x["inward_cm"] is not None]
+            if not cand:
+                return None
+            return min(cand, key=lambda t: t[0]["offset"])[1]
+        ra, rb = outer(a), outer(b)
+        if ra is not None and rb is not None:
+            gt = ours + (ra["inward_cm"] + rb["inward_cm"]) / 100
             size.append({"axis": f"{a}-{b}", "ours_m": round(ours, 4), "gt_m": round(gt, 4), "diff_cm": round((ours - gt) * 100, 2)})
     return {"sides": sides, "size": size, "area_m2": round(C["rectangle"]["area_m2"], 3),
             "seen_outside_share": round(C["rectangle"]["seen_outside_share"], 4)}

@@ -33,6 +33,7 @@ import json
 import numpy as np
 from scipy import ndimage
 
+from . import outline as ol
 from . import walls as wl
 from .frames import RAYS, Rays, run_dir
 
@@ -46,6 +47,16 @@ SNAP_DEG = 10.0
 MAX_EXT = 1.5          # m; how far an interior wall may be extended at one end
 PARALLEL_DEG = 20.0    # lines closer to parallel than this do not meet
 SIDES = ("W", "S", "E", "N")                    # side k has inward normal axes[k]: +s, +t, -s, -t
+
+
+def edge_name(e: dict, axes) -> str:
+    """W/S/E/N for an edge on the main axis (inward normal axes[0..3], as the rectangle named its
+    sides), D for a slanted edge, C for a connector. Made unique by the caller's numbering."""
+    if e["from"] == "connector":
+        return "C"
+    if e["axis"] is not None:
+        return SIDES[e["axis"]]
+    return "D"
 
 
 def seen_space(P, C):
@@ -136,29 +147,48 @@ def close(run: str, storey: float = STOREY) -> dict:
         r["snap_deg"] = -dev if r["axis"] is not None else 0.0
         n1 = axes[k] if r["axis"] is not None else n0
         u1 = np.array([-n1[1], n1[0]])
-        mid = np.median(r["pts"], 0)
+        # the line's position is the median of the points' depth along n1 - the estimator the
+        # outline uses - placed at the median along the wall. The coordinate-wise median used
+        # before is not on that line in general (3.4 cm off it for W3).
+        mid = float(np.median(r["pts"] @ n1)) * n1 + float(np.median(r["pts"] @ u1)) * u1
         al = (r["pts"] - mid) @ u1
         r["line"] = {"c": mid, "n": n1, "u": u1, "a": [float(np.percentile(al, 0.5)), float(np.percentile(al, 99.5))]}
 
-    # ---- 4. rectangle
-    ex, ey = axes[0], axes[1]
+    # ---- 4. outline: the exterior walls closed into a polygon (src.structure.outline)
+    # Not a rectangle: walls near the main axis are turned onto it, clearly slanted ones keep their
+    # own direction, collinear stretches with something between them stay apart, and steps get a
+    # connecting edge. A direction no exterior wall faces is closed at the edge of the seen space.
     fi, fj = np.nonzero(seen); F = lo + (np.stack([fi, fj], 1) + 0.5) * CELL
+    ext = [r for r in walls if r["role"] == "exterior"]
+    edges = ol.edges_from_walls([{"id": r["id"], "normal": r["normal"], "pts": r["pts"], "length_m": r["length_m"],
+                                  "rms_cm": r["rms_cm"]} for r in ext], axes)
+    edges = ol.add_missing_sides(edges, axes, F)
+    poly = ol.close_polygon(edges, F.mean(0))
+    # The outline must hold the seen space. Where seen space reaches past an unobserved stretch of
+    # an edge, that stretch becomes its own edge, parallel and pushed out to the seen-space edge;
+    # closing again turns the two ends into steps. Only outward, only off observed stretches.
+    obs_of = {}
+    for e in poly["edges"]:
+        p0, p1 = np.asarray(e["p0"]), np.asarray(e["p1"]); L = float(np.linalg.norm(p1 - p0))
+        if L < 0.01:
+            continue
+        dv = (p1 - p0) / L
+        obs_of[id(e)] = [(float(np.percentile(np.clip((r["pts"] - p0) @ dv, 0, L), 0.5)),
+                          float(np.percentile(np.clip((r["pts"] - p0) @ dv, 0, L), 99.5)))
+                         for r in walls if r["id"] in e["walls"]]
+        e["observed"] = obs_of[id(e)]
+    ol.push_out(poly["edges"], F)
+    extra = ol.pushed_edges(poly["edges"])
+    beyond = {tuple(e["walls"]): e.get("seen_beyond", []) for e in poly["edges"] if e["walls"]}
+    if extra:
+        poly = ol.close_polygon([e for e in poly["edges"] if e["from"] != "connector"] + extra, F.mean(0))
     sides = []
-    for k in range(4):
-        on = [r for r in walls if r["role"] == "exterior" and r["axis"] == k]
-        pos = (float(np.median(np.concatenate([r["pts"] @ axes[k] for r in on]))) if on
-               else float(np.percentile(F @ axes[k], 0.5)))
-        sides.append({"k": k, "side": SIDES[k], "normal": axes[k].tolist(), "offset": pos,
-                      "from": "observed" if on else "seen_space", "walls": [r["id"] for r in on]})
-    s0, t0 = sides[0]["offset"], sides[1]["offset"]
-    s1, t1 = -sides[2]["offset"], -sides[3]["offset"]
-    corners = [s0 * ex + t0 * ey, s1 * ex + t0 * ey, s1 * ex + t1 * ey, s0 * ex + t1 * ey]   # SW SE NE NW
-    seg_of = {0: (corners[3], corners[0]), 1: (corners[0], corners[1]), 2: (corners[1], corners[2]), 3: (corners[2], corners[3])}
-    for sd in sides:                                # each side runs with the room on its left
-        p0, p1 = seg_of[sd["k"]]; dv = p1 - p0; L = float(np.linalg.norm(dv)); dv = dv / L
+    for k, e in enumerate(poly["edges"]):
+        p0, p1 = np.asarray(e["p0"]), np.asarray(e["p1"])
+        L = float(np.linalg.norm(p1 - p0)); dv = (p1 - p0) / max(L, 1e-9)
         cover = []
         for r in walls:
-            if r["id"] in sd["walls"]:
+            if r["id"] in e["walls"]:
                 t = np.clip((r["pts"] - p0) @ dv, 0, L)
                 cover.append((float(np.percentile(t, 0.5)), float(np.percentile(t, 99.5))))
         cover.sort(); merged = []
@@ -167,22 +197,48 @@ def close(run: str, storey: float = STOREY) -> dict:
                 merged[-1] = (merged[-1][0], max(merged[-1][1], c[1]))
             else:
                 merged.append(c)
-        sd.update({"p0": p0.tolist(), "p1": p1.tolist(), "length_m": L, "observed": merged,
-                   "observed_m": float(sum(b - a for a, b in merged))})
-    ins = (F @ ex >= s0 - CELL) & (F @ ex <= s1 + CELL) & (F @ ey >= t0 - CELL) & (F @ ey <= t1 + CELL)
+        sides.append({"k": k, "side": edge_name(e, axes), "normal": np.asarray(e["n"]).tolist(), "offset": e["offset"],
+                      "from": e["from"], "walls": e["walls"], "axis": e["axis"], "direction": e["direction"],
+                      "dev_deg": round(float(e["dev_deg"]), 2),
+                      "p0": p0.tolist(), "p1": p1.tolist(), "length_m": L, "observed": merged,
+                      "observed_m": float(sum(b - a for a, b in merged))})
+    # one name per outline edge: W/S/E/N on the main axis as the rectangle had, numbered only when a
+    # direction has more than one edge (W1, W2 ...); D1.. for slanted edges, C1.. for connectors
+    count = {}
+    for sd in sides:
+        count[sd["side"]] = count.get(sd["side"], 0) + 1
+    seen_n = {}
+    for sd in sides:
+        b = sd["side"]
+        if count[b] > 1 or b in ("D", "C"):
+            seen_n[b] = seen_n.get(b, 0) + 1
+            sd["side"] = f"{b}{seen_n[b]}"
+    for e, sd in zip(poly["edges"], sides):
+        sd["pushed_out_m"] = e.get("pushed_by")
+        # seen space that reached past this edge by less than the merge threshold: kept as a note,
+        # the wall is not moved (it is within one surface's depth drift)
+        sd["seen_beyond"] = beyond.get(tuple(e["walls"]), []) if e["walls"] else []
+    corners = [np.asarray(sd["p0"]) for sd in sides]
+    ins = ol.inside(corners, F, grow=CELL)
     I, J = np.meshgrid(np.arange(seen.shape[0]), np.arange(seen.shape[1]), indexing="ij")
     G = lo + (np.stack([I, J], -1) + 0.5) * CELL
-    inside = (G @ ex >= s0) & (G @ ex <= s1) & (G @ ey >= t0) & (G @ ey <= t1)
+    inside = ol.inside(corners, G.reshape(-1, 2)).reshape(G.shape[:2])
     unseen, k_ = ndimage.label(inside & ~seen)
     big = max([(unseen == k).sum() for k in range(1, k_ + 1)] or [0]) * CELL ** 2
-    rect = {"corners": [c.tolist() for c in corners], "width_m": s1 - s0, "depth_m": t1 - t0, "area_m2": (s1 - s0) * (t1 - t0),
+    C2 = np.array(corners)
+    ext_s, ext_t = C2 @ axes[0], C2 @ axes[1]
+    rect = {"shape": "polygon" if len(corners) != 4 or any(sd["axis"] is None for sd in sides) else "rectangle",
+            "corners": [c.tolist() for c in corners], "n_corners": len(corners),
+            "width_m": float(ext_s.max() - ext_s.min()), "depth_m": float(ext_t.max() - ext_t.min()),
+            "area_m2": float(poly["area_m2"]),
             "axis_deg": float(np.degrees(theta)), "seen_outside_m2": float((~ins).sum() * CELL ** 2),
-            "seen_outside_share": float((~ins).mean()), "inside_seen_share": float((inside & seen).sum() / inside.sum()),
+            "seen_outside_share": float((~ins).mean()), "inside_seen_share": float((inside & seen).sum() / max(inside.sum(), 1)),
             "largest_unseen_inside_m2": float(big)}
 
     # ---- 5. interior walls: extend each end to the first wall line it meets
     lines = [{"id": f"side{sd['k']}", "c": np.array(sd["p0"]), "n": np.array(sd["normal"]),
-              "u": (np.array(sd["p1"]) - np.array(sd["p0"])) / sd["length_m"], "a": [0.0, sd["length_m"]]} for sd in sides]
+              "u": (np.array(sd["p1"]) - np.array(sd["p0"])) / max(sd["length_m"], 1e-9), "a": [0.0, sd["length_m"]]}
+             for sd in sides if sd["length_m"] > 0.01]
     lines += [{"id": r["id"], **r["line"]} for r in walls if r["role"] == "interior"]
     for r in walls:
         L0 = r["line"]; r["ends"] = []
@@ -226,13 +282,16 @@ def close(run: str, storey: float = STOREY) -> dict:
     top = max(r["z"][1] for r in walls)
     final = []
     for sd in sides:
+        if sd["length_m"] < 0.01:
+            continue
         p0, dv = np.array(sd["p0"]), (np.array(sd["p1"]) - np.array(sd["p0"])) / sd["length_m"]
         marks = [0.0] + [x for ab in sd["observed"] for x in ab] + [sd["length_m"]]
         pieces = [{"p0": (p0 + marks[i] * dv).tolist(), "p1": (p0 + marks[i + 1] * dv).tolist(),
                    "kind": "observed" if i % 2 == 1 else "inferred"}
                   for i in range(len(marks) - 1) if marks[i + 1] - marks[i] >= 0.01]
-        final.append({"id": f"ext_{sd['side']}", "side": sd["k"], "role": "exterior", "walls": sd["walls"],
-                      "normal": sd["normal"], "pieces": pieces, "position_from": sd["from"]})
+        final.append({"id": f"ext_{sd['side']}", "side": sd["k"], "ring": sd["k"], "role": "exterior", "walls": sd["walls"],
+                      "normal": sd["normal"], "pieces": pieces, "position_from": sd["from"],
+                      "direction": sd["direction"], "dev_deg": sd["dev_deg"], "seen_beyond": sd.get("seen_beyond", [])})
     for r in walls:
         if r["role"] != "interior":
             continue
@@ -273,7 +332,8 @@ def close(run: str, storey: float = STOREY) -> dict:
     for r in walls:
         print(f"  {r['id']} behind seen {r['behind_seen']:4.0%} -> {r['role']}; "
               + (f"snapped to {SIDES[r['axis']]} by {r['snap_deg']:+.1f} deg" if r["axis"] is not None else "not snapped"))
-    print(f"rectangle {rect['width_m']:.2f} x {rect['depth_m']:.2f} m; seen space outside {rect['seen_outside_share']:.1%}, "
+    print(f"outline: {rect['shape']}, {rect['n_corners']} corners, {rect['area_m2']:.2f} m2 "
+          f"(extent {rect['width_m']:.2f} x {rect['depth_m']:.2f} m); seen space outside {rect['seen_outside_share']:.1%}, "
           f"inside seen {rect['inside_seen_share']:.0%}, largest unseen {rect['largest_unseen_inside_m2']:.2f} m2")
     for f in final:
         print(f"  {f['id']:6} {f['role']:8} {f['length_m']:.2f} m, inferred {f['inferred_m']:.2f} m, thickness {f['thickness_m']:.2f} m")

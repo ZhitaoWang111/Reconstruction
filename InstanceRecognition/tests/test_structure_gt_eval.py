@@ -44,10 +44,10 @@ def test_room_sides_are_measured_against_the_gt_points(monkeypatch):
     pts = np.r_[_sheet(0.0), _sheet(3.0), _sheet(0.0, x=(0, 3)) @ np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]]),
                 _sheet(4.0, x=(0, 3)) @ np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])]
     _fake_gt(monkeypatch, pts)
-    sides = [{"side": "W", "from": "observed", "p0": [0.1, 2.9], "p1": [0.1, 0.1], "normal": [1.0, 0.0]},
-             {"side": "S", "from": "observed", "p0": [0.1, 0.1], "p1": [3.9, 0.1], "normal": [0.0, 1.0]},
-             {"side": "E", "from": "observed", "p0": [3.9, 0.1], "p1": [3.9, 2.9], "normal": [-1.0, 0.0]},
-             {"side": "N", "from": "observed", "p0": [3.9, 2.9], "p1": [0.1, 2.9], "normal": [0.0, -1.0]}]
+    sides = [{"side": "W", "from": "observed", "p0": [0.1, 2.9], "p1": [0.1, 0.1], "normal": [1.0, 0.0], "offset": 0.1},
+             {"side": "S", "from": "observed", "p0": [0.1, 0.1], "p1": [3.9, 0.1], "normal": [0.0, 1.0], "offset": 0.1},
+             {"side": "E", "from": "observed", "p0": [3.9, 0.1], "p1": [3.9, 2.9], "normal": [-1.0, 0.0], "offset": -3.9},
+             {"side": "N", "from": "observed", "p0": [3.9, 2.9], "p1": [0.1, 2.9], "normal": [0.0, -1.0], "offset": -2.9}]
     C = {"sides": sides, "rectangle": {"width_m": 3.8, "depth_m": 2.8, "area_m2": 10.64, "seen_outside_share": 0.0}}
     out = ge.eval_room(C)
     assert all(x["inward_cm"] == pytest.approx(10.0, abs=1.0) for x in out["sides"])
