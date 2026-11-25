@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import struct
 import zlib
 from pathlib import Path
@@ -19,7 +20,9 @@ from plyfile import PlyData
 
 SCENE_ID = "scene0000_00"
 FRAME_ID = 162
-SOURCE = Path("/home/wzt/HDD/datasets/scannet_v2/scans") / SCENE_ID
+SOURCE = Path(os.environ.get(
+    "SCANNET_ROOT", Path(__file__).resolve().parents[2] / "data/scannet_v2"
+)).expanduser() / SCENE_ID
 OUTPUT = Path(__file__).resolve().parent / "assets"
 
 

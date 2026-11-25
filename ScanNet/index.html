@@ -402,7 +402,8 @@
           <p class="eyebrow">ScanNet v2 · Indoor RGB-D Dataset</p>
           <h1>室内三维理解的<span>RGB-D 数据集。</span></h1>
           <p class="hero-copy">ScanNet 包含室内场景的 RGB-D 视频、相机轨迹与标定、三维重建网格、实例与语义标注，以及逐帧投影到图像上的 2D 标签。</p>
-          <div class="path-chip mono" title="/home/wzt/HDD/datasets/scannet_v2">/home/wzt/HDD/datasets/scannet_v2</div>
+          <div class="path-chip mono" title="/home/seer/wzt/data/scannet_v2">/home/seer/wzt/data/scannet_v2</div>
+          <p><a href="objects/index.html">打开物体级 3D 标注真值浏览器 →</a></p>
         </div>
         <figure class="hero-visual">
           <img src="assets/scene0000_00-mesh.webp" alt="scene0000_00 简化彩色网格的点渲染预览">
@@ -481,7 +482,7 @@
               <button class="viewer-tab" role="tab" aria-selected="false" data-image="assets/scene0000_00-dense-segments.webp" data-alt="scene0000_00 稠密网格 segment 可视化" data-note="稠密 segment · segIndices 与稠密网格顶点一一对应 · 669 segments">稠密 segment</button>
               <button class="viewer-tab" role="tab" aria-selected="false" data-image="assets/scene0000_00-simple-rgb.webp" data-alt="scene0000_00 简化彩色网格的顶点点式预览" data-note="简化彩色网格 · 网页抽样顶点进行点式渲染 · 原文件含 81,369 vertices / 153,587 faces">简化彩色网格</button>
               <button class="viewer-tab" role="tab" aria-selected="false" data-image="assets/scene0000_00-simple-segments.webp" data-alt="scene0000_00 简化网格 segment 可视化" data-note="简化 segment · segIndices 与简化网格顶点一一对应 · 668 segments">简化 segment</button>
-              <button class="viewer-tab" role="tab" aria-selected="false" data-image="assets/scene0000_00-semantic-3d.webp" data-alt="scene0000_00 三维语义标签可视化" data-note="3D 语义 · *_vh_clean_2.labels.ply 的每个顶点带 ushort label">3D 语义</button>
+              <button class="viewer-tab" role="tab" aria-selected="false" data-image="assets/scene0000_00-semantic-3d.webp" data-alt="scene0000_00 三维语义标签可视化" data-note="3D 语义 · *_vh_clean_2.labels.ply 的每个顶点带 NYU40 label（不同于 2D ScanNet 类别 ID）">3D 语义</button>
               <button class="viewer-tab" role="tab" aria-selected="false" data-image="assets/scene0000_00-instance-3d.webp" data-alt="scene0000_00 三维实例可视化" data-note="3D 实例 · segs.json 的 segment 通过 aggregation.json 聚合为 67 个 objectId">3D 实例</button>
             </div>
             <div class="viewer-stage scene-stage">
@@ -539,7 +540,7 @@
       <div class="container">
         <div class="section-head">
           <div><p class="eyebrow">File anatomy</p><h2>13 个文件分别包含什么</h2></div>
-          <p>每个已下载场景都拥有同样的 13 个文件。使用时通常从 <code>.sens</code> 读取观测与位姿，从简化网格及 JSON 读取 3D 标注，从 ZIP 读取逐帧 2D 标签。</p>
+          <p>本地 scene0000_00 示例包含以下 13 个文件；其他场景需按实际下载情况检查。使用时通常从 <code>.sens</code> 读取观测与位姿，从简化网格及 JSON 读取 3D 标注，从 ZIP 读取逐帧 2D 标签。</p>
         </div>
         <div class="directory-tree" aria-label="scene0000_00 的 13 个文件目录树">
           <div class="directory-head"><strong class="mono">scene0000_00/</strong><span>13 files</span></div>
@@ -589,7 +590,7 @@
               </tr>
               <tr>
                 <td><code>*_vh_clean_2.labels.ply</code></td><td><span class="layer-chip label">3D 语义</span></td>
-                <td><ul class="file-points"><li>简化网格的顶点 XYZ 坐标</li><li>顶点 RGBA 颜色</li><li>三角网格面</li><li>每个顶点的 <code>ushort label</code> 语义 ID</li></ul></td>
+                <td><ul class="file-points"><li>简化网格的顶点 XYZ 坐标</li><li>顶点 RGBA 颜色</li><li>三角网格面</li><li>每个顶点的 <code>ushort label</code> NYU40 语义 ID</li></ul></td>
               </tr>
               <tr>
                 <td><code>*.aggregation.json</code></td><td><span class="layer-chip label">3D 实例</span></td>
@@ -624,9 +625,10 @@
     <section class="inventory" id="inventory">
       <div class="container">
         <div class="section-head">
-          <div><p class="eyebrow">Downloaded inventory</p><h2>本地 20 条数据</h2></div>
-          <p>这些是官方 v2 扫描列表的前 20 条，包含同一物理空间的多次采集。点击场景类型可快速筛选。</p>
+          <div><p class="eyebrow">Previous-machine inventory</p><h2>旧电脑的 20 条下载记录</h2></div>
+          <p>以下保留旧电脑的前 20 条扫描记录，不代表当前机器已下载。包含同一物理空间的多次采集，可按场景类型筛选。</p>
         </div>
+        <p class="sample-foot">当前机器检查（2026-09-18）：scene0000_00 与 scene0000_02 各有 13 个预期命名文件；本页图片由 scene0000_00 恢复。scene0001_01 缺少正式 .sens，仅有 .sens.larkcache 缓存；scene0000_01 与 scene0002_00 目录为空。此处仅核对文件清单，未对所有场景重新做完整性验证。</p>
         <div class="filters" id="filters" aria-label="场景筛选"></div>
         <div class="table-shell">
           <table>
@@ -641,12 +643,12 @@
       <div class="container">
         <div class="section-head">
           <div><p class="eyebrow">Before you use it</p><h2>三个容易踩坑的地方</h2></div>
-          <p>文件都已通过结构与 CRC 检查，但“文件齐全”不等于各字段可以不经转换直接混用。</p>
+          <p>本次已从 scene0000_00 提取并验证展示用资产，未对当前机器的全部文件重新做结构与 CRC 检查。“文件齐全”不等于字段可以直接混用。</p>
         </div>
         <div class="note-grid">
           <article class="note"><span class="icon">A</span><h3>先统一坐标系</h3><p>网格和轨迹进入评测或可视化前，确认是否需要应用 <code>axisAlignment</code>。重复应用或完全忽略都会造成朝向/位置错误。</p></article>
-          <article class="note"><span class="icon">#</span><h3>以真实流为准</h3><p>本地 <code>scene0001_00</code> 与 <code>scene0005_01</code> 的 TXT 声明帧数各比对应 <code>.sens</code> 多 1。遍历时应读取 `.sens` 文件头的 frame count。</p></article>
-          <article class="note"><span class="icon">ID</span><h3>不要混淆三种编号</h3><p>segment ID、objectId 与 semantic label 是三套不同索引。需要通过 <code>segs.json → aggregation.json → labels TSV</code> 逐层关联。</p></article>
+          <article class="note"><span class="icon">#</span><h3>以真实流为准</h3><p>旧电脑记录中，scene0001_00 与 scene0005_01 的 TXT 帧数曾比对应 .sens 多 1；当前机器未复核这两条记录。遍历时应读取 <code>.sens</code> 文件头的 frame count。</p></article>
+          <article class="note"><span class="icon">ID</span><h3>不要混淆三种编号</h3><p>segment ID、objectId 与 semantic label 是不同索引。用 <code>segs.json + aggregation.json</code> 得到每个物体的顶点集合。2D 语义图使用 ScanNet 类别 ID，3D labels.ply 使用 NYU40 ID，需要通过 labels TSV 映射。</p></article>
         </div>
       </div>
     </section>
@@ -654,8 +656,8 @@
 
   <footer>
     <div class="container footer-inner">
-      <span>Local ScanNet v2 data guide · generated from verified files</span>
-      <span class="mono">updated 2026-09-12</span>
+      <span>Local ScanNet v2 data guide · <a href="https://github.com/ScanNet/ScanNet#data-organization" target="_blank" rel="noopener">官方数据格式说明</a> · <a href="README.md">本地图片恢复说明</a></span>
+      <span class="mono">restored 2026-09-18</span>
     </div>
   </footer>
 
