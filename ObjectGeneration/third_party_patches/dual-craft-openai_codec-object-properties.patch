@@ -1,0 +1,46 @@
+diff --git a/src/dualcraft/providers/openai_codec.py b/src/dualcraft/providers/openai_codec.py
+index 853e42c9..8dc97667 100644
+--- a/src/dualcraft/providers/openai_codec.py
++++ b/src/dualcraft/providers/openai_codec.py
+@@ -21,8 +21,27 @@ def _scalar(value: Any) -> Any:
+     return None
+ 
+ 
++def _declare_object_properties(schema: dict[str, Any]) -> dict[str, Any]:
++    """Give an object-typed node an explicit ``properties`` when it has none.
++
++    A free-form map (``dict[str, int]``) serialises as ``type: object`` plus
++    ``additionalProperties`` and no ``properties``. A strict JSON Schema validator rejects
++    that ("object schema must define properties"); the relay on the DSW server does:
++    blender_commit's optional ``joint_sign_overrides`` failed at
++    /properties/joint_sign_overrides/type/0 on turn 1 (2026-11-11; same fix as the 2026-10-19
++    fork). An empty properties object accepts every value the map accepts.
++    """
++    schema_type = schema.get("type")
++    is_object = schema_type == "object" or (
++        isinstance(schema_type, list) and "object" in schema_type
++    )
++    if is_object and not isinstance(schema.get("properties"), dict):
++        schema["properties"] = {}
++    return schema
++
++
+ def make_json_schema_nullable(schema: dict[str, Any]) -> dict[str, Any]:
+-    normalized = copy.deepcopy(schema)
++    normalized = _declare_object_properties(copy.deepcopy(schema))
+     schema_type = normalized.get("type")
+     if isinstance(schema_type, str):
+         if schema_type != "null":
+@@ -79,6 +98,12 @@ def normalize_tool_json_schema_for_responses(
+             for item in items
+         ]
+ 
++    # A map's value schema is a node like any other: an object value needs its own
++    # `properties` too (dict[str, SomeModel]).
++    additional = normalized.get("additionalProperties")
++    if isinstance(additional, dict):
++        normalized["additionalProperties"] = normalize_tool_json_schema_for_responses(additional)
++
+     if nullable:
+         normalized = make_json_schema_nullable(normalized)
+     return normalized

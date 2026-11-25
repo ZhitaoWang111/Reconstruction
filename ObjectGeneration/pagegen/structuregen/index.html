@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>结构体生成 · 分步结果</title>
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>结构体生成 · 分步结果</h1>
+    <p class="lede">上游交接 <code>walls/v2</code> → 整房一个 USD，9 段墙体各自独立。
+    几何由脚本确定性生成，外观由 agent 在后续阶段决定。下表数字全部来自本次运行的
+    <code>plan.json</code> 与 Blender 建模报告，没有手填。</p>
+  </div>
+  <dl class="totals">
+    <dt>墙段</dt><dd id="segCount">—</dd>
+    <dt>墙体积</dt><dd id="wallVolume">—</dd>
+    <dt>关键帧</dt><dd id="frameCount">—</dd>
+  </dl>
+</header>
+
+<nav class="timeline" id="timeline" aria-label="阶段"></nav>
+
+<main>
+  <section class="stage" id="stage1">
+    <div class="stage-head">
+      <h2><span class="num">1</span>白模生成</h2>
+      <span class="tag script">脚本 · 免费</span>
+    </div>
+    <p class="sub">按内墙 butt 位置把外墙切段，每段一个独立物体；每段按占地拉高、在交接给出的洞口处留空；
+    每个面归入一个命名面区（front / back / top / bottom / end_start / end_end / reveal）。
+    交接的全部关键帧相机摆进同一场景。</p>
+
+    <div class="viewer-block">
+      <div class="viewer-wrap">
+        <canvas id="viewer" aria-label="白模三维视图"></canvas>
+        <div class="viewer-labels" id="viewerLabels"></div>
+        <div class="viewer-hint">左键旋转 · 右键平移 · 滚轮缩放</div>
+      </div>
+      <div class="viewer-side">
+        <h3>按段着色</h3>
+        <ul class="legend" id="legend"></ul>
+        <p class="note" id="viewerNote"></p>
+      </div>
+    </div>
+
+    <h3>逐段结果</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>段</th><th>所属墙</th><th class="n">沿墙范围 (m)</th><th class="n">长 (m)</th><th class="n">厚 (m)</th>
+              <th class="n">洞口</th><th class="n">面数</th><th>封闭</th><th class="n">体积 (m³)</th><th class="n">与解析值差</th></tr>
+        </thead>
+        <tbody id="segmentRows"></tbody>
+      </table>
+    </div>
+    <p class="note" id="tableNote"></p>
+
+    <details class="fold">
+      <summary>关键帧机位：白模叠在照片上 <span class="count" id="viewCount"></span></summary>
+      <p class="sub">白模从交接自带的相机位姿渲染，与照片同尺寸叠放。墙角、门洞、墙与地面的交线应当对得上；
+      对不上的地方说明几何（或交接里的位姿）有偏差。</p>
+      <div class="overlay-controls">
+        <label>白模不透明度 <input type="range" id="opacity" min="0" max="100" value="55"></label>
+        <span id="opacityValue">55%</span>
+        <label><input type="checkbox" id="edgesOnly"> 只看轮廓</label>
+      </div>
+      <div class="views" id="views"></div>
+    </details>
+  </section>
+
+  <section class="stage" id="stage2">
+    <div class="stage-head"><h2><span class="num">2</span>agent 的输入</h2><span class="tag script">脚本 · 免费</span></div>
+    <p class="sub">只有交接原有的信息和白模几何，不含推断。agent 逐段墙上外观，从第一面开始。</p>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">2.0</span><h3>输入清单</h3></div>
+      <div class="table-wrap"><table class="kv"><thead><tr><th>部分</th><th>何时给</th><th>形式</th><th>内容</th><th>来源</th></tr></thead>
+        <tbody id="inputList"></tbody></table></div>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">2.1</span><h3>任务卡</h3><span class="src" id="cardSize"></span></div>
+      <div class="card-grid">
+        <div><h4>场景</h4><div class="table-wrap"><table class="kv"><tbody id="sceneFacts"></tbody></table></div></div>
+        <div><h4>Blender 命名</h4><div class="table-wrap"><table class="kv"><tbody id="blenderNames"></tbody></table></div></div>
+        <div><h4>假定值（交接标注）</h4><div class="table-wrap"><table class="kv"><thead><tr><th>项</th><th>值</th><th>性质</th><th>备注</th></tr></thead>
+          <tbody id="assumedRows"></tbody></table></div>
+          <div class="excluded" id="excluded"></div></div>
+      </div>
+
+      <h4>墙段</h4>
+      <div class="table-wrap"><table class="seg-table"><thead><tr><th>#</th><th>段名</th><th>所属墙</th><th>类型</th>
+        <th class="n">front 起点 (x, y)</th><th class="n">front 终点 (x, y)</th><th class="n">沿墙 m</th><th class="n">长 m</th>
+        <th class="n">厚 m</th><th class="n">高 m</th><th class="n">front 法向</th><th>洞口（沿墙 × 高）</th></tr></thead>
+        <tbody id="cardSegments"></tbody></table></div>
+
+      <h4>每段的关键帧（交接原样）</h4>
+      <div class="table-wrap"><table class="seg-table"><thead><tr><th>#</th><th>段名</th><th>帧</th><th>role</th>
+        <th class="n">拍到沿墙 m</th><th class="n">视角 °</th><th class="n">重投影 px</th><th class="n">可见面积 m²</th>
+        <th class="n">可见像素</th><th class="n">清晰度</th></tr></thead>
+        <tbody id="frameRows"></tbody></table></div>
+      <p class="note">视角 = 视线与墙面法向夹角（0° 正对）；重投影 = 交接给的位姿误差；可见面积与像素按整面墙统计（交接字段）。</p>
+
+      <details class="fold"><summary>任务卡原文 <span class="count">· task_card.md，给 agent 的就是这一份</span></summary>
+        <pre class="card-text" id="cardText"></pre>
+      </details>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">2.2</span><h3>带序号的俯视图</h3><span class="src">plan.png</span></div>
+      <div class="plan-row">
+        <div class="plan-wrap"><img id="planImage" alt="带序号的墙段俯视图"></div>
+        <div class="table-wrap plan-legend"><table class="kv"><thead><tr><th>图例</th><th>含义</th></tr></thead><tbody>
+          <tr><td>色块</td><td>一段墙，每段一种颜色</td></tr>
+          <tr><td>圆圈数字</td><td>墙段序号，与任务卡一致</td></tr>
+          <tr><td>箭头</td><td>front 法向，指向房间一侧</td></tr>
+          <tr><td>虚线缺口</td><td>交接洞口</td></tr>
+          <tr><td>粗黑框</td><td>第一面墙</td></tr>
+          <tr><td>+X / +Y</td><td>amb3r_floor 坐标轴</td></tr>
+          <tr><td>比例尺</td><td>1 m</td></tr>
+        </tbody></table></div>
+      </div>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">2.3</span><h3>第一面墙</h3><span class="src" id="firstLabel"></span></div>
+      <div class="table-wrap"><table class="kv first-facts"><tbody id="firstFacts"></tbody></table></div>
+      <h4>关键帧</h4>
+      <div class="table-wrap"><table class="seg-table"><thead><tr><th>帧</th><th>role</th><th class="n">拍到沿墙 m</th>
+        <th class="n">本段 mask 面积 m²</th><th class="n">视角 °</th><th class="n">重投影 px</th><th>给 agent 的文件</th></tr></thead>
+        <tbody id="firstFrames"></tbody></table></div>
+      <h4>图（交接原样）</h4>
+      <div class="first-pairs" id="firstImages"></div>
+      <details class="fold"><summary>第一面墙的排序 <span class="count">· 外墙优先 → mask 覆盖面积 → 最正对帧的视角</span></summary>
+        <div class="table-wrap"><table class="rank-table"><thead><tr><th>名次</th><th>#</th><th>段名</th><th>类型</th><th class="n">有 mask 的帧</th>
+          <th class="n">mask 覆盖面积</th><th class="n">占墙面</th><th>最正对的帧</th><th class="n">视角</th><th class="n">重投影</th></tr></thead>
+          <tbody id="rankRows"></tbody></table></div>
+      </details>
+    </div>
+  </section>
+
+  <section class="stage design" id="stage3">
+    <div class="stage-head"><h2><span class="num">3</span>外观 agent</h2><span class="tag agent">gpt-6-astra</span>
+      <span class="tag review">设计稿 · 待确认</span></div>
+    <p class="sub">agent 一面墙一面墙地做，每面墙反复走「看 → 想 → 做 → 查」，问题清掉、也和照片相像后再换下一面。
+    顺序由程序把关：没写下判断就不让改；每次改动后自动检查并返回对比图；结束一面墙时再做一次最终检查。</p>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">3.0</span><h3>门窗分工</h3><span class="src">11-19 定</span></div>
+      <div class="table-wrap"><table class="kv"><thead><tr><th>东西</th><th>归谁</th><th>墙体这一步怎么做</th></tr></thead><tbody>
+        <tr><td>墙上的洞</td><td>上游交接</td><td>只开交接测到的洞（本场景 int_3 一个），agent 不自己开洞</td></tr>
+        <tr><td>门扇</td><td>实例物体生成（DualCraft）</td><td>不做；门的位置保持实墙</td></tr>
+        <tr><td>窗（玻璃、窗扇、窗套）</td><td>实例物体生成</td><td>不做；窗的位置保持实墙，也不画窗套</td></tr>
+        <tr><td>门套</td><td>墙体 agent</td><td>交接洞口四周的门套由 <code>sg.frame</code> 做</td></tr>
+        <tr><td>踢脚线、腰线</td><td>墙体 agent</td><td><code>sg.strip</code></td></tr>
+      </tbody></table></div>
+      <p class="note">关着的门、玻璃窗在交接里本来就是实墙，所以墙体这一步保持封闭。门扇与窗由实例生成放到墙前面；以后需要穿过门，在组装阶段按门的包围盒开洞。</p>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">3.1</span><h3>工作流</h3></div>
+      <div class="flow-wrap">
+      <svg class="flow" viewBox="0 0 1160 840" role="img" aria-label="外观 agent 工作流">
+        <defs>
+          <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b636e"/></marker>
+          <marker id="fr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker>
+          <marker id="fg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1d7a3e"/></marker>
+        </defs>
+        <rect x="330" y="14" width="500" height="60" rx="10" fill="#fff" stroke="#c9ced5"/>
+        <text x="580" y="38" text-anchor="middle" class="t1">开局</text>
+        <text x="580" y="61" text-anchor="middle" class="t2">白模已建好；把任务卡和俯视图交给 agent，从第一面墙开始</text>
+        <path d="M580,74 L580,108" stroke="#5b636e" marker-end="url(#fa)"/>
+        <rect x="40" y="110" width="1080" height="540" rx="14" fill="#f6f8fb" stroke="#9aa5b4" stroke-dasharray="6 5"/>
+        <text x="62" y="138" class="t1">一次只做一面墙</text>
+        <text x="62" y="160" class="t3">每面墙开一段新对话，只带任务卡、俯视图、已做完的墙的小结和这面墙的照片</text>
+        <rect x="70" y="192" width="230" height="214" rx="10" fill="#e8f0fe" stroke="#0f62fe"/>
+        <text x="88" y="220" class="t1" fill="#0f62fe">① 看（Observe）</text>
+        <text x="88" y="248" class="t2">程序直接给这面墙的资料、</text>
+        <text x="88" y="268" class="t2">原图、圈出墙的框图，</text>
+        <text x="88" y="288" class="t2">和当前模型的对比图</text>
+        <text x="88" y="308" class="t2">想换角度时再主动查看</text>
+        <line x1="84" x2="286" y1="372" y2="372" stroke="#0f62fe" stroke-opacity=".35"/>
+        <text x="88" y="392" class="t3 mono">compare · look</text>
+        <rect x="340" y="192" width="230" height="214" rx="10" fill="#f1e9fb" stroke="#7a3ec4"/>
+        <text x="358" y="220" class="t1" fill="#7a3ec4">② 想（Reason）</text>
+        <text x="358" y="248" class="t2">写清这面墙长什么样：</text>
+        <text x="358" y="268" class="t2">颜色、材质、踢脚线、</text>
+        <text x="358" y="288" class="t2">腰线、门套，在哪、多大、</text>
+        <text x="358" y="308" class="t2">依据哪张照片</text>
+        <text x="358" y="328" class="t2">每项生成一条待办</text>
+        <line x1="354" x2="556" y1="372" y2="372" stroke="#7a3ec4" stroke-opacity=".35"/>
+        <text x="358" y="392" class="t3 mono">declare</text>
+        <rect x="610" y="192" width="230" height="214" rx="10" fill="#e7f4ec" stroke="#1d7a3e"/>
+        <text x="628" y="220" class="t1" fill="#1d7a3e">③ 做（Act）</text>
+        <text x="628" y="248" class="t2">按待办上色、加饰线</text>
+        <text x="628" y="268" class="t2">只能改这一面墙</text>
+        <text x="628" y="288" class="t2">没写下判断就不让动手</text>
+        <text x="628" y="308" class="t2">改动前自动存快照</text>
+        <line x1="624" x2="826" y1="372" y2="372" stroke="#1d7a3e" stroke-opacity=".35"/>
+        <text x="628" y="392" class="t3 mono">execute_blender_code → sg.*</text>
+        <rect x="880" y="192" width="230" height="214" rx="10" fill="#fdf3e3" stroke="#9a5b00"/>
+        <text x="898" y="220" class="t1" fill="#9a5b00">④ 查（Verify）</text>
+        <text x="898" y="248" class="t2">每次改动后自动运行</text>
+        <text x="898" y="268" class="t2">改坏几何就回滚</text>
+        <text x="898" y="288" class="t2">报告越界和待办进度</text>
+        <text x="898" y="308" class="t2">返回最新对比图（只有图）</text>
+        <line x1="894" x2="1096" y1="372" y2="372" stroke="#9a5b00" stroke-opacity=".35"/>
+        <text x="898" y="392" class="t3 mono">程序自动执行</text>
+        <path d="M300,299 L336,299" stroke="#5b636e" marker-end="url(#fa)"/>
+        <path d="M570,299 L606,299" stroke="#5b636e" marker-end="url(#fa)"/>
+        <path d="M840,299 L876,299" stroke="#5b636e" marker-end="url(#fa)"/>
+        <polygon points="995,432 1085,478 995,524 905,478" fill="#fff" stroke="#5b636e"/>
+        <text x="995" y="474" text-anchor="middle" class="t2">问题清了，</text>
+        <text x="995" y="492" text-anchor="middle" class="t2">也像照片？</text>
+        <path d="M995,406 L995,428" stroke="#5b636e" marker-end="url(#fa)"/>
+        <path d="M905,478 L725,478 L725,410" stroke="#b3261e" fill="none" marker-end="url(#fr)"/>
+        <text x="713" y="482" text-anchor="end" class="t3" fill="#b3261e">不行：继续改；判断变了就先更新待办</text>
+        <text x="1005" y="542" class="t3" fill="#1d7a3e">可以</text>
+        <path d="M995,524 L995,548" stroke="#1d7a3e" marker-end="url(#fg)"/>
+        <rect x="800" y="550" width="300" height="64" rx="10" fill="#fff" stroke="#1d7a3e"/>
+        <text x="818" y="576" class="t2">最终检查，通过后记下小结</text>
+        <text x="818" y="598" class="t3 mono">finish_segment（没过就返回问题）</text>
+        <path d="M800,582 L120,582 L120,410" stroke="#1d7a3e" fill="none" marker-end="url(#fg)"/>
+        <text x="460" y="574" text-anchor="middle" class="t3" fill="#1d7a3e">下一面墙（开新对话）</text>
+        <text x="62" y="634" class="t3">每面墙最多 15 次模型回复；用完后保留最后一个合格版本，标“未收敛”，继续下一面</text>
+        <path d="M580,650 L580,684" stroke="#5b636e" marker-end="url(#fa)"/>
+        <rect x="240" y="686" width="680" height="64" rx="10" fill="#fff" stroke="#c9ced5"/>
+        <text x="580" y="711" text-anchor="middle" class="t1">收尾：照片里看不到的面</text>
+        <text x="580" y="734" text-anchor="middle" class="t2">卫生间一侧的内墙面、外墙外侧、墙顶：参照已做好的墙来定，标明“推断”或“假定”</text>
+        <path d="M580,750 L580,774" stroke="#5b636e" marker-end="url(#fa)"/>
+        <rect x="380" y="776" width="400" height="56" rx="10" fill="#fdf3e3" stroke="#9a5b00"/>
+        <text x="580" y="800" text-anchor="middle" class="t2">全场景总检查，通过后交给第 4 步导出</text>
+        <text x="580" y="820" text-anchor="middle" class="t3 mono">commit</text>
+      </svg>
+      </div>
+      <div class="legend-inline">
+        <span><span class="sw" style="background:#e8f0fe;border-color:#0f62fe"></span>看：只看不改</span>
+        <span><span class="sw" style="background:#f1e9fb;border-color:#7a3ec4"></span>想：把判断和依据写下来</span>
+        <span><span class="sw" style="background:#e7f4ec;border-color:#1d7a3e"></span>做：唯一能改模型的一步</span>
+        <span><span class="sw" style="background:#fdf3e3;border-color:#9a5b00"></span>查 / 总检查：程序自动检查</span>
+        <span>每个框底部的等宽字是这一步用的工具</span>
+      </div>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">3.2</span><h3>工具</h3></div>
+      <h4>处理一面墙时的工具调用顺序</h4>
+      <div class="cs">
+        <div class="cs-phase o" style="grid-column:1">看</div>
+        <div class="cs-phase r" style="grid-column:2">想</div>
+        <div class="cs-phase a" style="grid-column:3">做</div>
+        <div class="cs-phase v" style="grid-column:4">查</div>
+        <div class="cs-phase f" style="grid-column:5">结束</div>
+        <div class="cs-card auto" style="grid-column:1">
+          <span class="cs-no">1</span><span class="cs-tool">程序开场</span>
+          <p>准备这面墙的上下文</p>
+          <p class="cs-ret"><b>给 agent</b>资料、原图、框图、当前对比图</p><p class="cs-note">想换角度：compare / look</p>
+        </div>
+        <div class="cs-card" style="grid-column:2">
+          <span class="cs-no">2</span><code class="cs-tool">declare</code>
+          <p>写下外观判断和依据帧</p>
+          <p class="cs-ret"><b>返回</b>带编号的待办清单</p>
+        </div>
+        <div class="cs-card" style="grid-column:3">
+          <span class="cs-no">3</span><code class="cs-tool">execute_blender_code</code>
+          <p>调 sg.* 上色、加饰线</p>
+          <p class="cs-ret"><b>返回</b>执行结果、新版本号</p><p class="cs-note">前提：已 declare</p>
+        </div>
+        <div class="cs-card auto" style="grid-column:4">
+          <span class="cs-no">4</span><span class="cs-tool">自动检查</span>
+          <p>每次改动后立即运行</p>
+          <p class="cs-ret"><b>给 agent</b>问题清单、待办进度、对比图</p><p class="cs-note">严重问题自动回滚</p>
+        </div>
+        <div class="cs-card" style="grid-column:5">
+          <span class="cs-no">5</span><code class="cs-tool">finish_segment</code>
+          <p>最终检查，写小结</p>
+          <p class="cs-ret"><b>返回</b>下一面墙，或未通过的问题</p>
+        </div>
+        <div class="cs-loop"><span>有问题或不像照片：继续改</span></div>
+      </div>
+      <p class="note">虚线框由程序自动完成，不需要 agent 调用。所有 Blender 操作都经过 harness，由它检查前提、存快照并记录版本。</p>
+      <h4>工具一览</h4>
+      <p class="note">agent 能用 7 个工具。<code>look</code> 和 <code>get_scene_info</code> 合在一张卡片里。</p>
+      <div class="tool-cards">
+        <div class="tc">
+          <div class="tc-head"><span class="step o">① 看</span><code class="tc-name">compare(frame)</code><span class="tc-src">自定义</span></div>
+          <p class="tc-purpose">想换一张照片核对时调用。每次改动后程序已自动给一张，不用重复调用。</p>
+          <div class="tc-body">
+            <div><h5>输入</h5><table class="tc-in"><tbody><tr><td><code>frame</code></td><td>关键帧号，必须是当前这面墙的关键帧之一</td></tr></tbody></table></div>
+            <div><h5>输出（agent 收到什么）</h5><ul><li>一张图：左边照片，右边同一相机、同样尺寸的当前模型（平光 + 墙角遮蔽 + 细轮廓线：大面积墙色就是设定色，只在墙角略暗，墙角、洞口和饰线描细边）</li></ul></div>
+            <div><h5>规则 / 检查</h5><ul><li>只读，不改场景</li><li>只出图，不给 RGB、色差、亮度差或合格判断</li></ul></div>
+          </div><div class="tc-ex"><span>示例</span><code>compare(447)</code></div>
+        </div>
+        <div class="tc">
+          <div class="tc-head"><span class="step o">① 看（可选）</span><code class="tc-name">look · get_scene_info</code><span class="tc-src">MCP 原生</span></div>
+          <p class="tc-purpose">想从别的角度看模型，或查物体、材质的名字和尺寸时用。</p>
+          <div class="tc-body">
+            <div><h5>输入</h5><table class="tc-in"><tbody><tr><td><code>look: mode / views / target</code></td><td>从哪看、看哪些物体</td></tr><tr><td><code>get_scene_info: query / fields</code></td><td>查哪些物体、要哪些字段</td></tr></tbody></table></div>
+            <div><h5>输出（agent 收到什么）</h5><ul><li>look：一张图</li><li>get_scene_info：物体清单文字</li></ul></div>
+            <div><h5>规则 / 检查</h5><ul><li>只读，不改场景</li></ul></div>
+          </div><div class="tc-ex"><span>示例</span><code>look(mode="angles", target=["ext_E_1"])</code></div>
+        </div>
+        <div class="tc">
+          <div class="tc-head"><span class="step r">② 想</span><code class="tc-name">declare(n, findings)</code><span class="tc-src">自定义</span></div>
+          <p class="tc-purpose">动手前写下判断。每一项都会变成带编号的待办，结束这面墙时逐项核对。</p>
+          <div class="tc-body">
+            <div><h5>输入</h5><table class="tc-in"><tbody><tr><td><code>n</code></td><td>墙段序号，必须是当前这面墙</td></tr><tr><td><code>findings.surface</code></td><td>墙面颜色、材质、粗糙度、依据帧号</td></tr><tr><td><code>findings.trims[]</code></td><td>踢脚线 / 腰线 / 门套：高度、沿墙范围、颜色、依据帧号；没有就给空列表</td></tr><tr><td><code>findings.notes</code></td><td>可选：看到但这一步不做的东西，如门、窗、柜子</td></tr></tbody></table></div>
+            <div><h5>输出（agent 收到什么）</h5><ul><li>待办清单，如 t1 墙面、t2 腰线</li></ul></div>
+            <div><h5>规则 / 检查</h5><ul><li>每项都要有依据帧号</li><li>重复调用会更新待办；已完成且内容没变的项保留状态</li><li>门扇、窗、窗套不接受</li></ul></div>
+          </div><div class="tc-ex"><span>示例</span><code>declare(3, {surface: {…, basis: [894, 447]}, trims: [{kind: "腰线", …}]})</code></div>
+        </div>
+        <div class="tc">
+          <div class="tc-head"><span class="step a">③ 做</span><code class="tc-name">execute_blender_code(code, description)</code><span class="tc-src">MCP 原生，经 harness 转发</span></div>
+          <p class="tc-purpose">唯一能改模型的工具，正常情况下只调用下面三个 sg 算子。</p>
+          <div class="tc-body">
+            <div><h5>输入</h5><table class="tc-in"><tbody><tr><td><code>code</code></td><td>Blender Python 代码</td></tr><tr><td><code>description</code></td><td>一句话说明这次改了什么，写进编辑日志</td></tr></tbody></table></div>
+            <div><h5>输出（agent 收到什么）</h5><ul><li>print 输出或报错</li><li>新的场景版本号</li><li>自动检查的问题清单和待办进度</li><li>最正对帧的对比图</li></ul></div>
+            <div><h5>规则 / 检查</h5><ul><li>没有 declare 就拒绝执行</li><li>执行前存整场景快照</li><li>检查规则见 3.3</li></ul></div>
+          </div><div class="tc-ex"><span>示例</span><code>execute_blender_code('bpy.ops.sg.paint(seg="ext_E_1", face="front", rgb=(…), item="t1")', "上墙面色")</code></div>
+        </div>
+        <div class="tc">
+          <div class="tc-head"><span class="step f">结束这面墙</span><code class="tc-name">finish_segment(n, summary, dropped)</code><span class="tc-src">自定义</span></div>
+          <p class="tc-purpose">现场检查当前场景，通过后记下小结，进入下一面墙。</p>
+          <div class="tc-body">
+            <div><h5>输入</h5><table class="tc-in"><tbody><tr><td><code>n</code></td><td>墙段序号</td></tr><tr><td><code>summary</code></td><td>一两句小结，带进后面每面墙的对话</td></tr><tr><td><code>dropped</code></td><td>可选：放弃的待办及原因，如 {t2: “被柜子挡住，看不清”}</td></tr></tbody></table></div>
+            <div><h5>输出（agent 收到什么）</h5><ul><li>通过：下一面墙的序号</li><li>未通过：问题清单，继续修改</li></ul></div>
+            <div><h5>规则 / 检查</h5><ul><li>检查的就是此刻的场景，不需要凭证</li><li>检查项见 3.3</li></ul></div>
+          </div><div class="tc-ex"><span>示例</span><code>finish_segment(3, "米白墙、木腰线、无门套")</code></div>
+        </div>
+        <div class="tc">
+          <div class="tc-head"><span class="step f">收尾</span><code class="tc-name">commit()</code><span class="tc-src">自定义</span></div>
+          <p class="tc-purpose">所有墙和照片看不到的面都做完后调用，全场景总检查。</p>
+          <div class="tc-body">
+            <div><h5>输入</h5><table class="tc-in"><tbody><tr><td colspan="2">无</td></tr></tbody></table></div>
+            <div><h5>输出（agent 收到什么）</h5><ul><li>通过：进入第 4 步导出</li><li>未通过：指明哪面墙、哪个面有问题</li></ul></div>
+            <div><h5>规则 / 检查</h5><ul><li>重跑全部硬检查</li><li>列出未收敛的墙和未解决的待办</li></ul></div>
+          </div><div class="tc-ex"><span>示例</span><code>commit()</code></div>
+        </div>
+      </div>
+      <h4>sg 算子：在 <code>execute_blender_code</code> 里调用的三个函数</h4>
+      <p class="note">在 Blender 启动时预先注册。做成算子是因为 MCP 安全模式不允许 import 自定义模块，但允许调用 <code>bpy.ops.*</code>。</p>
+      <div class="table-wrap"><table class="kv ops"><thead><tr><th>算子</th><th>作用</th><th>参数</th><th>结果</th></tr></thead><tbody><tr><td><code>bpy.ops.sg.paint</code></td><td>给墙的某一个面上色、设材质</td><td class="params"><div><code>seg</code> 段名</div><div><code>face</code> front / back / top / end_start / end_end / reveal</div><div><code>rgb</code> 颜色，0–255</div><div><code>roughness</code> 粗糙度 0–1，可选，默认 0.9</div><div><code>item</code> 对应的待办编号；依据从 declare 读取</div></td><td>这个面的材质被替换，依据写进物体属性</td></tr><tr><td><code>bpy.ops.sg.strip</code></td><td>在 front 面加水平长条，做踢脚线或腰线</td><td class="params"><div><code>seg</code> 段名</div><div><code>z0, z1</code> 下沿、上沿离地高度（米）</div><div><code>a0, a1</code> 沿墙范围（米），可选；碰到洞口自动断开</div><div><code>depth</code> 凸出墙面，≤ 0.05 m</div><div><code>rgb</code> 颜色</div><div><code>item</code> 对应的待办编号</div></td><td>贴墙长方体，作为这一段的子物体</td></tr><tr><td><code>bpy.ops.sg.frame</code></td><td>沿交接洞口加一圈门套</td><td class="params"><div><code>seg</code> 段名，必须有交接洞口</div><div><code>width</code> 门套面宽（米）</div><div><code>depth</code> 凸出墙面，≤ 0.05 m</div><div><code>sides</code> front / back / 两面</div><div><code>rgb</code> 颜色</div><div><code>item</code> 对应的待办编号</div></td><td>洞口左、右、上三条木条，作为子物体；不画窗套</td></tr></tbody></table></div>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">3.3</span><h3>验收</h3></div>
+      <h4>自动检查</h4>
+      <div class="table-wrap"><table class="kv"><thead><tr><th>检查项</th><th>每次改动后</th><th><code>finish_segment</code></th><th>不通过时</th></tr></thead><tbody><tr><td>代码执行报错</td><td>查</td><td>—</td><td>自动回滚</td></tr><tr><td>墙体几何被改（顶点、体积与白模不一致）</td><td>查</td><td>再查</td><td>自动回滚</td></tr><tr><td>改到了其他墙段</td><td>查</td><td>再查</td><td>自动回滚</td></tr><tr><td>出现不是 sg 生成的新物体</td><td>查</td><td>再查</td><td>自动回滚</td></tr><tr><td>饰线越界、穿过洞口、与他段相交、尺寸超范围（凸出 ≤ 5 cm，踢脚线高 2–30 cm）</td><td>查</td><td>再查</td><td>保留并报告；不修正不能结束</td></tr><tr><td>朝房间的面缺材质或依据</td><td>报告进度</td><td>必须通过</td><td>不能结束</td></tr><tr><td>declare 的待办未完成</td><td>报告进度</td><td>完成，或写明放弃原因</td><td>不能结束</td></tr></tbody></table></div>
+      <p class="note"><code>commit</code> 重跑全部硬检查；第 4 步导出的 USD 还要能被 pxr 读回并通过校验。</p>
+      <div class="card-grid gates">
+        <div><h4>到达上限时</h4><div class="table-wrap"><table class="kv"><tbody><tr><td>这面墙</td><td>回到最后一个没有硬问题的版本，标“未收敛”</td></tr><tr><td>缺材质的面</td><td>填中性色，依据标“未完成”</td></tr><tr><td>交付</td><td>保留已有结果，并列出未解决项</td></tr><tr><td>不放宽</td><td>几何不变、不改其他墙段、饰线不越界</td></tr></tbody></table></div></div>
+        <div><h4>质量（离线评估，不卡交付）</h4><div class="table-wrap"><table class="kv"><tbody><tr><td>颜色</td><td>每个关键帧比较渲染与照片的 ΔE，不给 agent</td></tr><tr><td>人工</td><td>审阅页：12 帧「照片 | 最终模型」+ 每面墙的 declare</td></tr><tr><td>过程</td><td>每面墙回复数、未收敛墙数、token 与费用</td></tr></tbody></table></div></div>
+        <div><h4>预算</h4><div class="table-wrap"><table class="kv"><tbody><tr><td>每面墙</td><td>最多 15 次模型回复</td></tr><tr><td>收尾</td><td>最多 15 次</td></tr><tr><td>全场景</td><td>最多 150 次</td></tr><tr><td>总费用</td><td>$20 保护线</td></tr><tr><td>预估</td><td>用满约 $15–18，需实测</td></tr></tbody></table></div></div>
+      </div>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">3.4</span><h3>从 DualCraft 借鉴</h3></div>
+      <div class="table-wrap"><table class="kv"><thead><tr><th>机制</th><th>DualCraft</th><th>这里的做法</th></tr></thead><tbody>
+        <tr><td>差异账本</td><td>差异带编号，逐项解决或放弃</td><td><code>declare</code> 生成待办，<code>sg.*</code> 用 <code>item</code> 关联</td></tr>
+        <tr><td>不收敛处理</td><td>同一项改 3 个版本未解决就退出</td><td>同一待办改 3 次仍未完成，标“未收敛”，不再阻塞本面墙</td></tr>
+        <tr><td>改前备份</td><td>整场景备份，失败回滚</td><td>照用</td></tr>
+        <tr><td>改后反馈</td><td><code>edit</code> 后附预览</td><td>改动后自动返回对比图和检查结果</td></tr>
+        <tr><td>每轮提示</td><td>注入剩余回合和场景版本</td><td>注入第几面墙、未解决待办、剩余回复数</td></tr>
+        <tr><td>空转恢复</td><td>连续无动作先提醒，第 3 次停止</td><td>照用；第 3 次结束这面墙并标“未收敛”</td></tr>
+        <tr><td>验证令牌</td><td>validate 发令牌，commit 校验</td><td>不用：改动后自动检查，<code>finish_segment</code> 现场再查</td></tr>
+        <tr><td>对比数值</td><td>附平均色和亮度差</td><td>不用：<code>compare</code> 只出图；模型用平光 + 墙角遮蔽 + 细轮廓线</td></tr>
+      </tbody></table></div>
+    </div>
+  </section>
+  <section class="stage" id="stage3run">
+    <div class="stage-head"><h2><span class="num">3</span>外观 agent · 运行结果</h2><span class="tag agent" id="runModel">gpt-6-astra</span></div>
+    <p class="sub" id="runLede"></p>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">R1</span><h3>运行概况</h3><span class="src" id="runDir"></span></div>
+      <div class="run-tiles" id="runTiles"></div>
+      <h4>每次模型回复的费用</h4>
+      <div class="reply-bars" id="replyBars"></div>
+      <div class="legend-inline" id="replyLegend"></div>
+      <p class="note">柱高 = 这次回复的费用；柱下字母是这次回复调用的工具（D declare · E execute_blender_code · C compare · F finish_segment · M commit）。
+      输入是整段对话（含所有图片），所以同一面墙越往后越贵。</p>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">R2</span><h3>最终模型</h3><span class="src">appearance.blend，由 Blender 读回</span></div>
+      <div class="viewer-block">
+        <div class="viewer-wrap">
+          <canvas id="finalViewer" aria-label="外观模型三维视图"></canvas>
+          <div class="viewer-labels" id="finalLabels"></div>
+          <div class="viewer-hint">左键旋转 · 右键平移 · 滚轮缩放</div>
+        </div>
+        <div class="viewer-side">
+          <h3>颜色即 agent 给每个面的 sRGB</h3>
+          <p class="note">墙体 + 饰线子物体，共 <b id="finalObjects">—</b> 个物体。光照只是为了看清形状，不代表材质。</p>
+          <ul class="legend" id="finalLegend"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="ev" id="floorBlock">
+      <div class="ev-head"><span class="ev-num">R3a</span><h3>地板结果</h3></div>
+      <div class="table-wrap"><table class="kv result-table"><thead><tr>
+        <th>地板</th><th>回复</th><th>费用</th><th>颜色</th><th>铺面</th><th>材质（agent 原话）</th><th>agent 备注</th>
+      </tr></thead><tbody id="floorRows"></tbody></table></div>
+      <p class="note">地板几何由墙围出（白模阶段），外观由 agent 选：纯色，或 <code>sg.tiles</code> 铺砖/木地板。色块：砖色、缝色。</p>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">R3</span><h3>逐面墙结果</h3></div>
+      <div class="table-wrap"><table class="kv result-table"><thead><tr>
+        <th>#</th><th>段</th><th>回复</th><th>费用</th><th>改动</th><th>墙面颜色</th><th>材质（agent 原话）</th><th>饰线</th><th>agent 备注（没做什么、为什么）</th>
+      </tr></thead><tbody id="wallRows"></tbody></table></div>
+      <p class="note">「墙面颜色」左块是 agent 给的颜色；右块是照片里这段墙在 mask 内的像素中位数（离地 0.3 m 以上，多帧合并），带光照，只作参考。
+      饰线一栏的尺寸读自 Blender 里的子物体：高度 z、沿墙范围、凸出深度。</p>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">R4</span><h3>关键帧：照片 | 最终模型</h3><span class="src" id="finalCount"></span></div>
+      <p class="note">与 agent 看到的 compare 图同一种渲染：平光 × 墙角遮蔽 + 细轮廓线。地面不在本步范围，画成深灰。</p>
+      <div class="final-grid" id="finalGrid"></div>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">R5</span><h3>收尾：照片看不到的面</h3></div>
+      <div class="table-wrap"><table class="vis face-matrix"><thead id="faceHead"></thead><tbody id="faceRows"></tbody></table></div>
+      <p class="note">t1 = 这面墙的表面待办（agent 设的）；w = 收尾时推定的颜色（没有照片依据）；manual = 运行后人工改的（见 amendments.json）。空格 = 这段没有这个面。</p>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">R6</span><h3>逐面墙过程</h3><span class="src">transcript.jsonl，按墙展开</span></div>
+      <div id="wallSteps"></div>
+    </div>
+
+    <div class="ev">
+      <div class="ev-head"><span class="ev-num">R7</span><h3>看图发现的问题</h3><span class="src">人工观察，待讨论</span></div>
+      <div class="table-wrap"><table class="kv"><thead><tr><th>现象</th><th>在哪看</th><th>可能的原因</th></tr></thead><tbody>
+        <tr><td>墙色普遍比照片亮、偏暖白</td><td>R3 两个色块对比</td><td>agent 在估“漆的颜色”而不是像素颜色；提示没说两者怎么取舍</td></tr>
+        <tr><td>门套只做了房间一侧（<code>sides=FRONT</code>）</td><td>R4 帧 3688、1229</td><td>front 以外的面在逐墙阶段不归它管；收尾阶段只能上色，不能加饰线</td></tr>
+        <tr><td>卫生间踢脚线 0.16 m、白色，比主房间的 0.12 m 木色高</td><td>R4 帧 3800</td><td>只有一帧依据；高度是目测，没有量尺工具</td></tr>
+        <tr><td>9 面墙里只有 3 面主动调用 <code>compare</code></td><td>R6</td><td>每次改动已自动回一张对比图，模型很少再看其他帧</td></tr>
+        <tr><td>缓存命中低（R1）</td><td>R1</td><td>每面墙开一段新对话可以解释换墙时不命中；同一面墙内连续回复也几乎不命中，原因还没查</td></tr>
+      </tbody></table></div>
+    </div>
+  </section>
+  <section class="stage pending" id="stage4">
+    <div class="stage-head"><h2><span class="num">4</span>导出与校验</h2><span class="tag todo">未开始</span></div>
+    <p class="sub">USD 导出、pxr 读回校验、对比渲染与审阅页。</p>
+  </section>
+</main>
+
+<script>/*__DATA__*/</script>
+<script src="page.js"></script>
+</body>
+</html>

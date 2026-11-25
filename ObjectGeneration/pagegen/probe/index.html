@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>单物体生成 · SAM3D 结果</title>
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>单物体生成 · SAM3D 结果</h1>
+    <p class="lede">每个物体用交接文件里一个关键帧的原图和 mask 送进 SAM 3D Objects。
+    中间是生成网格（归一化尺寸，最长边约为 1，没有单位），下面是该物体在扫描里的实例分割点云（米）。
+    两个窗口都画了坐标轴：<span class="axis-x">X 红</span> · <span class="axis-y">Y 绿</span> · <span class="axis-z">Z 蓝</span>，Z 朝上，原点在物体底面中心。</p>
+  </div>
+  <dl class="totals">
+    <dt>物体</dt><dd id="objectCount">—</dd>
+    <dt>耗时合计</dt><dd id="totalSeconds">—</dd>
+    <dt>显存峰值</dt><dd id="peakVram">—</dd>
+  </dl>
+</header>
+
+<main>
+  <aside>
+    <div class="filters">
+      <input id="search" type="search" placeholder="按标签或编号过滤…" aria-label="按标签或编号过滤">
+      <p id="filterNote" class="filter-note"></p>
+    </div>
+    <ul id="objectList" class="object-list"></ul>
+  </aside>
+
+  <section class="content" id="detail">
+    <div class="detail-head" id="detailHead"></div>
+
+    <div class="images">
+      <figure><img id="rgbImage" alt="关键帧原图"><figcaption>原图（RGB）</figcaption></figure>
+      <figure><img id="maskImage" alt="关键帧 mask"><figcaption>Mask</figcaption></figure>
+    </div>
+
+    <div class="viewer">
+      <div class="viewer-bar">
+        <span class="viewer-title">缩放网格 + 扫描点云</span>
+        <span class="viewer-unit" id="overlayUnit">米（缩放后）</span>
+        <label class="toggle"><input id="overlayShowMesh" type="checkbox" checked> 显示网格</label>
+        <label class="toggle"><input id="overlayShowCloud" type="checkbox" checked> 显示点云</label>
+        <label class="toggle"><input id="overlayGround" type="checkbox" checked> 地面网格（1 m）</label>
+        <label class="toggle"><input id="overlayFlat" type="checkbox"> 纯色网格</label>
+        <label class="toggle">点大小 <input id="overlayPointSize" type="range" min="1" max="8" step="0.5" value="3"></label>
+        <button type="button" class="reset" data-reset="overlay">重置视角</button>
+      </div>
+      <div class="stage">
+        <canvas id="overlayCanvas" aria-label="缩放网格与扫描点云叠加视图"></canvas>
+        <div class="axis-labels" id="overlayAxisLabels" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <div class="viewer">
+      <div class="viewer-bar">
+        <span class="viewer-title">SAM3D 生成网格</span>
+        <span class="viewer-unit" id="meshUnit">归一化尺寸，无单位</span>
+        <label class="toggle"><input id="meshGround" type="checkbox" checked> 地面网格</label>
+        <label class="toggle"><input id="meshFlat" type="checkbox"> 纯色（看形状）</label>
+        <button type="button" class="reset" data-reset="mesh">重置视角</button>
+      </div>
+      <div class="stage">
+        <canvas id="meshCanvas" aria-label="SAM3D 生成网格三维视图"></canvas>
+        <div class="axis-labels" id="meshAxisLabels" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <p class="viewer-hint">左键拖动旋转 · 右键拖动平移 · 滚轮缩放</p>
+    <div id="facts" class="facts"></div>
+    <p id="fallback" class="fallback" hidden>浏览器不支持 WebGL，无法显示三维视图。</p>
+  </section>
+</main>
+
+<script src="probe.js"></script>
+<script src="page.js"></script>
+</body>
+</html>

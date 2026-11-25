@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>物体生成与导出方案</title>
+<style>
+:root {
+  --ink: #16191d; --ink-2: #454c55; --ink-3: #7a8390;
+  --surface: #f8f9fa; --raised: #ffffff; --border: #dde1e6;
+  --accent: #0f62fe; --accent-2: #e8f0fe;
+  --ok: #198038; --ok-bg: #e7f6ec; --trial: #8a3ffc; --trial-bg: #f1e9ff;
+  --plan: #b26a00; --plan-bg: #fff4e0;
+  --radius: 6px; --radius-lg: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; line-height: 1.6; color: var(--ink); background: var(--surface); }
+.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 28px; max-width: 1280px; margin: 0 auto; padding: 28px 24px 64px; }
+nav.toc { position: sticky; top: 20px; align-self: start; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+nav.toc a { color: var(--ink-2); text-decoration: none; padding: 3px 8px; border-radius: var(--radius); border-left: 2px solid transparent; }
+nav.toc a:hover { background: var(--accent-2); color: var(--accent); }
+nav.toc a.sub { padding-left: 20px; font-size: 12.5px; color: var(--ink-3); }
+nav.toc .sep { height: 1px; background: var(--border); margin: 8px 0; }
+main { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+h1 { font-size: 21px; font-weight: 600; }
+h2 { font-size: 17px; font-weight: 600; scroll-margin-top: 16px; }
+h3 { font-size: 14.5px; font-weight: 600; scroll-margin-top: 16px; }
+h4 { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+section { display: flex; flex-direction: column; gap: 12px; }
+.lede { color: var(--ink-2); max-width: 900px; }
+.sub { color: var(--ink-3); font-size: 12.5px; }
+p { max-width: 960px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; word-break: break-all; }
+pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55; background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 16px; overflow-x: auto; color: var(--ink-2); }
+.card { background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.tag { display: inline-block; font-size: 11.5px; font-weight: 600; border-radius: 10px; padding: 0 8px; line-height: 20px; white-space: nowrap; vertical-align: 1px; }
+.tag.ok { color: var(--ok); background: var(--ok-bg); }
+.tag.trial { color: var(--trial); background: var(--trial-bg); }
+.tag.plan { color: var(--plan); background: var(--plan-bg); }
+.tag.na { color: var(--ink-3); background: var(--surface); border: 1px solid var(--border); }
+
+/* overview diagram */
+.diagram { display: grid; grid-template-columns: 1fr 34px 1.25fr 34px 1fr 34px 1.1fr 34px 1fr; align-items: center; gap: 0; background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 16px; }
+.node { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; background: var(--surface); font-size: 12.5px; line-height: 1.45; }
+.node b { display: block; font-size: 13px; margin-bottom: 2px; }
+.node.input { background: #f3f4f6; }
+.node.route-a { border-color: #b7e0c4; background: var(--ok-bg); }
+.node.route-b { border-color: #d4bbff; background: var(--trial-bg); }
+.node.est { border-color: var(--accent); background: var(--accent-2); }
+.node.out { border-color: #b7e0c4; background: #f3fbf5; }
+.node.plan { border-style: dashed; }
+.routes { display: flex; flex-direction: column; gap: 10px; }
+.arrow { text-align: center; color: var(--ink-3); font-size: 18px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-3); margin-top: 10px; grid-column: 1 / -1; }
+
+/* tables */
+.table-wrap { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--raised); }
+th, td { padding: 8px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+thead th { background: var(--surface); font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+tbody th { font-weight: 600; color: var(--ink-2); background: #fbfbfc; white-space: nowrap; font-size: 12.5px; }
+tbody tr:last-child td, tbody tr:last-child th { border-bottom: none; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+col.c-k { width: 15%; } col.c-a, col.c-b { width: 42.5%; }
+
+/* stage cards */
+.stage { background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 18px 16px; display: flex; flex-direction: column; gap: 10px; scroll-margin-top: 16px; }
+.stage.planned { border-style: dashed; background: #fffdf8; }
+.stage-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.stage-no { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.stage-no.b { background: var(--trial); }
+.stage-no.p { background: var(--plan); }
+.stage-title { font-size: 14px; font-weight: 600; }
+.stage-script { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink-3); }
+.stage-head .tags { margin-left: auto; display: flex; gap: 6px; }
+dl.rows { display: grid; grid-template-columns: 64px 1fr; gap: 6px 14px; font-size: 13px; }
+dl.rows dt { color: var(--ink-3); font-size: 12px; padding-top: 1px; }
+dl.rows dd { line-height: 1.6; }
+.stat { color: var(--accent); font-weight: 600; }
+.concept-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.concept-box p { font-size: 13px; }
+.concept-note { font-size: 12px; color: var(--ink-3); }
+.concept-table { font-size: 12.5px; }
+.concept-table th, .concept-table td { padding: 5px 10px; }
+
+figure { display: flex; flex-direction: column; gap: 4px; }
+figure img { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: #e9ecef; display: block; cursor: zoom-in; }
+figcaption { font-size: 12.5px; color: var(--ink-2); }
+ul.plain { margin-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.callout { border-left: 3px solid var(--plan); background: var(--plan-bg); padding: 10px 14px; border-radius: 0 var(--radius) var(--radius) 0; font-size: 13px; }
+.callout.info { border-left-color: var(--accent); background: var(--accent-2); }
+.foot { font-size: 12px; color: var(--ink-3); }
+#lightbox { position: fixed; inset: 0; background: rgba(10,12,15,.88); display: none; align-items: center; justify-content: center; z-index: 10; cursor: zoom-out; padding: 24px; }
+#lightbox.open { display: flex; }
+#lightbox img { max-width: 100%; max-height: 100%; border-radius: var(--radius); }
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { position: static; flex-direction: row; flex-wrap: wrap; }
+  nav.toc .sep, nav.toc a.sub { display: none; }
+  .diagram { grid-template-columns: 1fr; gap: 6px; }
+  .arrow { transform: rotate(90deg); }
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+}
+
+/* export flowchart */
+.flowchart { display: grid; grid-template-columns: 1fr 26px 1.15fr 26px 1.5fr 26px 1fr; align-items: center; background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; font-size: 12.5px; line-height: 1.45; }
+.fc-col { display: flex; flex-direction: column; gap: 6px; }
+.fc-src, .fc-cmd, .fc-step, .fc-out, .fc-opt { border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 9px; background: var(--surface); }
+.fc-src { background: #f3f4f6; }
+.fc-cmd b, .fc-out b, .fc-main > b { display: block; font-size: 13px; }
+.fc-main { border: 1px solid var(--accent); background: var(--accent-2); border-radius: var(--radius); padding: 9px 10px; }
+.fc-inner { display: flex; flex-direction: column; gap: 0; }
+.fc-step { background: var(--raised); }
+.fc-out { border-color: #b7e0c4; background: #f3fbf5; }
+.fc-opt { border-style: dashed; color: var(--ink-2); }
+.fc-run { display: inline-block; font-size: 11px; font-weight: 600; color: #fff; background: var(--ink-2); border-radius: 3px; padding: 0 5px; margin-bottom: 3px; }
+.fc-arrow { text-align: center; color: var(--ink-3); font-size: 18px; }
+.fc-down { text-align: center; color: var(--ink-3); font-size: 13px; }
+.fc-down span { font-size: 11.5px; }
+.fc-down.small { font-size: 12px; line-height: 1.2; }
+.flowchart code { font-size: 11px; }
+@media (max-width: 1080px) { .flowchart { grid-template-columns: 1fr; gap: 6px; } .fc-arrow { transform: rotate(90deg); } }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <a href="#overview">总览</a>
+  <a href="#input">输入：场景交接文件</a>
+  <a href="#routes">两条生成路线对比</a>
+  <a href="#route-a" class="sub">A · SAM3D</a>
+  <a href="#route-b" class="sub">B · DualCraft</a>
+  <a href="#example">同一物体走两条路线</a>
+  <a href="#export">导出流程</a>
+  <a href="#stage-1" class="sub">1 · 尺度估计</a>
+  <a href="#stage-2" class="sub">2 · 物理与外观估计</a>
+  <a href="#stage-3" class="sub">3 · 网格转 USD</a>
+  <a href="#stage-4" class="sub">4 · 配置物理</a>
+  <a href="#stage-5" class="sub">5 · 组装交接</a>
+  <a href="#stage-x" class="sub">铰接物体导出</a>
+  <a href="#layout">产物目录</a>
+  <div class="sep"></div>
+  <a href="../routing/index.html">→ 生成路线判断</a>
+  <a href="../physics/index.html">→ 物理与外观参数审查</a>
+  <a id="runPageLink" href="#">→ DualCraft 运行记录</a>
+</nav>
+
+<main>
+  <header>
+    <h1>物体生成与导出方案</h1>
+    <p class="lede">从场景理解交出的每个物体（关键帧 + mask + 扫描点云）出发，生成三维资产，再估计物理参数、导出成 Isaac Sim 可用的 USD，交给场景组装。生成有两条路线：<b>SAM3D</b> 出单个刚体网格，已经跑完整个场景；<b>DualCraft</b> 出带部件和关节的 URDF，目前在试用。两条路线的产物最后都进入我们自己的物理估计和导出。</p>
+  </header>
+
+  <!-- ───────────── overview ───────────── -->
+  <section id="overview">
+    <h2>总览</h2>
+    <div class="diagram">
+      <div class="node input"><b>场景交接文件</b>handoff/v1<br>每个物体：关键帧 RGB、mask、扫描点云、相机</div>
+      <div class="arrow">→</div>
+      <div class="routes">
+        <div class="node route-a"><b>A · SAM3D <span class="tag ok">已投产</span></b>单张关键帧 + mask → 归一化刚体网格 <code>mesh.glb</code></div>
+        <div class="node route-b"><b>B · DualCraft <span class="tag trial">试用</span></b>2–3 张已知方位裁图 + 尺寸 → Blender agent 建模 → URDF（部件 + 关节）</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node est"><b>我们的物理与外观估计</b>尺度、总质量、body_type、碰撞近似、粗糙度 / 金属度<br><span class="sub">DualCraft 接入：<span class="tag plan">设计中</span></span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>USD 导出</b>视觉 USD + 物理 USD（刚体、质量、惯量、碰撞代理、物理材质）<br><span class="sub">铰接 USD：<span class="tag plan">设计中</span></span></div>
+      <div class="arrow">→</div>
+      <div class="node out"><b>组装交接</b>assembly_handoff/v2<br>每个物体一份 USD + 位姿 + 尺寸可信度</div>
+      <div class="legend">
+        <span><span class="tag ok">已投产</span> 已在整个场景上跑通</span>
+        <span><span class="tag trial">试用</span> 单个物体跑通，接入脚本未写</span>
+        <span><span class="tag plan">设计中</span> 方案已讨论，未实现</span>
+      </div>
+    </div>
+    <div class="grid3" id="kpis"></div>
+  </section>
+
+  <!-- ───────────── input ───────────── -->
+  <section id="input">
+    <h2>输入：场景交接文件</h2>
+    <p>两条路线都从 InstanceRecognition 交出的 <code>handoff/v1</code> 读物体（本页数据：<code data-v="generation.handoff.path"></code>）。</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>内容</th><th>说明</th><th>SAM3D 用到</th><th>DualCraft 用到</th></tr></thead>
+      <tbody>
+        <tr><th>物体清单</th><td>本场景 <span class="stat" data-v="generation.handoff.objects"></span> 个物体，其中 <span data-v="generation.handoff.structural"></span> 个结构物体（墙、地、顶等）不生成</td><td>✓</td><td>✓</td></tr>
+        <tr><th>关键帧 RGB + mask</th><td>每个物体最多 3 张（primary / secondary / third），共 <span data-v="generation.handoff.key_frames"></span> 张；mask 与 ScanNet 2D 实例图逐像素一致</td><td>只用 primary 一张</td><td>挑正面一侧、物体完整的 2–3 张，按 mask 框外扩 15% 裁图</td></tr>
+        <tr><th>相机</th><td>每张关键帧的内参和 camera_to_world（OpenCV 约定）</td><td>—（位姿由 SAM3D 自己估）</td><td>换算成物体系下的方位角 / 仰角</td></tr>
+        <tr><th>扫描点云</th><td>每个物体的重建点云 <code>clouds/*.ply</code></td><td>导出第 1 步用它定尺度</td><td>拟合外包盒得宽 / 深 / 高，并判定正面朝向</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ───────────── routes ───────────── -->
+  <section id="routes">
+    <h2>两条生成路线对比</h2>
+    <div class="table-wrap"><table>
+      <colgroup><col class="c-k"><col class="c-a"><col class="c-b"></colgroup>
+      <thead><tr><th></th><th>A · SAM3D <span class="tag ok">已投产</span></th><th>B · DualCraft <span class="tag trial">试用</span></th></tr></thead>
+      <tbody>
+        <tr><th>方法</th><td>单图三维生成模型（SAM 3D Objects），一次前向推理</td><td>LLM agent（gpt-6-astra）看照片写蓝图，再在 Blender 里一步步建模、自查、编译</td></tr>
+        <tr><th>输入</th><td>1 张关键帧 RGB + mask</td><td>2–3 张已知相机方位的裁图 + 外包尺寸 <code>size.json</code>（宽 / 深 / 高，标注是否实测）</td></tr>
+        <tr><th>输出</th><td><code>mesh.glb</code>（顶点色三角网格）、<code>splat.ply</code>、<code>pose.json</code></td><td><code>model.urdf</code> + 每个 link 的 OBJ / MTL / 烘焙贴图；附带只含外观的 <code>object.usdc</code></td></tr>
+        <tr><th>结构</th><td>整体一个刚体，没有部件</td><td>link 树 + 关节（类型、轴、原点、上下限），关节方向经 pose_check 自查</td></tr>
+        <tr><th>尺度与坐标</th><td>Y 轴朝上、最长边约 1、无单位；导出时按扫描定尺度</td><td>米制，+X 前 / +Y 左 / +Z 上，底面 z=0；按给定尺寸建，容差 ±10%</td></tr>
+        <tr><th>场景位姿</th><td>SAM3D 估计的相机系位姿：旋转可用，尺度和平移不是米制；本场景 6/52 倒置</td><td>不估位姿；物体系与扫描的对应关系由转换时记录（正面方向、外包盒中心）</td></tr>
+        <tr><th>外观</th><td>顶点色，来自照片；看不到的面靠模型补</td><td>每种材质单独的颜色、粗糙度、金属度和烘焙贴图；看不到的部分按常识补</td></tr>
+        <tr><th>物理</th><td>无，全部由我们的估计补</td><td>URDF 里有质量、惯量、碰撞，但都是默认值（包围盒体积 × 400 kg/m³；碰撞体就是可视网格），要由我们重写</td></tr>
+        <tr><th>耗时与成本</th><td>中位 <span class="stat" data-v="generation.sam3d.seconds_median"></span> s / 物体（最长 <span data-v="generation.sam3d.seconds_max"></span> s），整场景 <span data-v="generation.sam3d.generated"></span> 个共 <span data-v="generation.sam3d.minutes_total"></span> 分钟；显存峰值中位 <span data-v="generation.sam3d.vram_median"></span> GiB</td><td id="dcCost"></td></tr>
+        <tr><th>运行环境</th><td>本机 RTX 5070 Ti 16 GB，<code>.venv-sam3d</code>，<code>--low-vram --sequential-condition</code></td><td>DSW 服务器：Blender 4.4.0（带界面，Xvfb 虚拟显示）+ blender-mcp 插件，模型走网关</td></tr>
+        <tr><th>适合</th><td>大量、小件、无可动部件的物体</td><td>有门、抽屉、翻盖等可动部件，需要交互的物体</td></tr>
+      </tbody>
+    </table></div>
+    <p class="callout info">路线由模型逐个判断（<code>scripts/tools/route_generators.py</code>，结果 <code>routing.json</code>）：有人要转动或拉开才能用的刚性部件（门、抽屉、盖、翻板）走 DualCraft，固定在建筑上的柜子也算；其余走 SAM3D。本场景 <span id="routeCounts">—</span>，逐个物体的照片和理由见 <a href="../routing/index.html">生成路线判断</a>。DualCraft 目前只实际跑过 obj_0038。</p>
+
+    <h3 id="route-a">A · SAM3D 路线</h3>
+    <div class="stage">
+      <div class="stage-head"><span class="stage-no">A</span><span class="stage-title">交接文件批量生成</span><span class="stage-script">scripts/run_generate.sh → scripts/pipeline/generate.py + handoff_io.py</span><span class="tags"><span class="tag ok">已投产</span></span></div>
+      <dl class="rows">
+        <dt>作用</dt><dd>读 handoff，用每个非结构物体的 primary 关键帧 RGB + mask 生成网格。模型只加载一次，逐个物体生成；单个物体失败只记录，不中断整批。</dd>
+        <dt>输入</dt><dd><code>--handoff &lt;handoff 目录&gt;</code>（或 <code>--image + --mask</code> 单图模式，自动包装成只含一个物体的 handoff）；<code>--objects</code> 选子集，<code>--view</code> 选关键帧</dd>
+        <dt>输出</dt><dd><code>objects/&lt;oid&gt;/primary/sam3d/</code> 下的 <code>mesh.glb</code>、<code>splat.ply</code>、<code>pose.json</code>、<code>report.json</code>（输入和输出哈希、耗时、显存）；汇总到 <code>objects.json</code> 和 <code>manifest.json</code>（assets/v1）</dd>
+        <dt>续跑</dt><dd>输入 sha256、配置哈希、seed 都没变且输出哈希仍和报告一致就复用，否则重新生成。目录只由 scene_id / handoff 名 / object_id / 视角决定，没有时间戳。</dd>
+        <dt>本场景</dt><dd><span class="stat" id="sam3dStatus"></span>；水密网格 <span data-v="generation.sam3d.watertight"></span>/<span data-v="generation.sam3d.generated"></span>；面数中位 <span data-v="generation.sam3d.faces_median"></span></dd>
+        <dt>已知局限</dt><dd>
+          <ul class="plain">
+            <li>只看一张图：背面和侧面靠模型补；mask 内的空洞（椅腿之间等）会被填实。</li>
+            <li>网格是归一化尺寸，必须在导出第 1 步按扫描定尺度。</li>
+            <li>位姿是单视角猜测：本场景 6 个物体整体倒置；正立的物体里，有 15 个的朝向与扫描配准结果差 180°，单靠几何分不出哪个对。</li>
+            <li>没有部件和关节：带门柜子生成出来是一整块，门打不开。</li>
+          </ul>
+        </dd>
+      </dl>
+    </div>
+
+    <h3 id="route-b">B · DualCraft 路线</h3>
+    <div class="stage">
+      <div class="stage-head"><span class="stage-no b">B1</span><span class="stage-title">交接文件 → DualCraft 输入</span><span class="stage-script">（手工完成，转换脚本未写）</span><span class="tags"><span class="tag plan">待写脚本</span></span></div>
+      <dl class="rows">
+        <dt>作用</dt><dd>把 handoff 里的一个物体转成 DualCraft「视频交接」格式：已知相机方位的参考照片 + 外包尺寸，跳过 DualCraft 自己的相机锚定。</dd>
+        <dt>步骤</dt><dd>① 对扫描点云 1–99 百分位的 XY 拟合最小面积矩形，得宽、深、高和朝向；② 关键帧相机所在的一侧定为正面（+X）；③ 由 camera_to_world 算每张图在物体系下的方位角和仰角；④ 按 mask 框外扩 15% 裁图，画面截断的帧不用；⑤ 写 <code>handoff.json</code>（views + size，measured=true，容差 10%）。</dd>
+        <dt>本例</dt><dd>obj_0038：3 张关键帧用了 2 张（方位 −27°、−7.3°），第 3 张柜子右半边出画面没用；尺寸 0.959 × 0.348 × 2.305 m。</dd>
+        <dt>要改进</dt><dd>深度是扫描从正面看到的厚度，可能偏浅，不该标成实测；关键帧都在正面一侧，应从原始帧里按方位角多挑几张。</dd>
+      </dl>
+    </div>
+    <div class="stage">
+      <div class="stage-head"><span class="stage-no b">B2</span><span class="stage-title">蓝图起草</span><span class="stage-script">dualcraft.perception.common.blueprint</span><span class="tags"><span class="tag trial">试用</span></span></div>
+      <dl class="rows">
+        <dt>作用</dt><dd>模型看参考照片，列出零件清单：每个零件的父件、是否可动、可见性（看得见 / 部分 / 推断）、颜色和材质，以及物体类别、总质量估计。尺寸直接用给定值。</dd>
+        <dt>输出</dt><dd><code>inputs/prompt.json</code>（零件表）、<code>blueprint/source.json</code>（估计值，含 <code>mass_kg</code>）</dd>
+      </dl>
+    </div>
+    <div class="stage">
+      <div class="stage-head"><span class="stage-no b">B3</span><span class="stage-title">Blender agent 建模</span><span class="stage-script">dualcraft harness（python -m demo.jobs）</span><span class="tags"><span class="tag trial">试用</span></span></div>
+      <dl class="rows">
+        <dt>作用</dt><dd>agent 通过 blender-mcp 在带界面的 Blender 里写代码建模，按蓝图摆零件、放铰链枢轴、设关节轴。</dd>
+        <dt>流程</dt><dd>A 阶段改几何（最多 8 次编辑），每次编辑后自动导出、编译、几何质检；关节先放占位轴，要求 agent 用 pose_check 把门转到上限看对不对；与照片的差异记在差异台账里。B 阶段：验证 → 提交 → 零件清单逐项核对 → <code>compile_model(finalize)</code>。收工检查（尺寸、齐平、遮挡）不过会打开返工窗口。</dd>
+        <dt>输出</dt><dd><code>product/model.urdf</code>、<code>assets/meshes/*/mesh.obj|mtl|png</code>、<code>compile_report.json</code>、轨迹与渲染图</dd>
+        <dt>运行</dt><dd>服务器 <code>/mnt/data/usr/wzt/submodules/dualcraft/dual-craft</code>，<code>DISPLAY=:99</code>（Xvfb）；需要给上游 <code>openai_codec.py</code> 打一处补丁才能过网关校验（未提交）。</dd>
+        <dt>已跑</dt><dd id="dcRuns"></dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ───────────── example ───────────── -->
+  <section id="example">
+    <h2>同一物体走两条路线：<span id="exTitle"></span></h2>
+    <p class="sub" id="exNote"></p>
+    <div class="grid3">
+      <figure id="exBoxed"></figure>
+      <figure id="exSam3d"></figure>
+      <figure id="exDualcraft"></figure>
+    </div>
+    <div class="table-wrap"><table id="exTable"></table></div>
+  </section>
+
+  <!-- ───────────── export ───────────── -->
+  <section id="export">
+    <h2>导出流程</h2>
+    <p>从生成产物到 Isaac Sim 可用的 USD 资产，实际要手动依次运行三个命令：先 <code>estimate_sizes</code>，再 <code>estimate_physics_appearance</code>（它读 sizes.json 里的尺寸），最后 <code>build_assembly_handoff</code>。第 3、4 步不单独运行，由第 5 步对每个物体以子进程调用。每一步的结果都落盘，可以单独重跑。目前这条链只接了 SAM3D 路线；DualCraft 的铰接物体导出见最后一张卡片。</p>
+    <div class="flowchart">
+      <div class="fc-col">
+        <div class="fc-src">生成产物<br><code>objects.json</code> · <code>mesh.glb</code> · <code>pose.json</code></div>
+        <div class="fc-src">场景交接 handoff/v1<br><code>clouds/*.ply</code> · 关键帧 · 标签</div>
+      </div>
+      <div class="fc-arrow">→</div>
+      <div class="fc-col">
+        <div class="fc-cmd"><span class="fc-run">命令 ①</span><b>1 · estimate_sizes</b>读：mesh.glb + 扫描点云<br>写：<code>sizes.json</code></div>
+        <div class="fc-down">↓ <span>sizes.json（尺寸给模型参考）</span></div>
+        <div class="fc-cmd"><span class="fc-run">命令 ②</span><b>2 · estimate_physics_appearance</b>读：sizes.json + 标签 + 关键帧<br>写：<code>physics_appearance.json</code></div>
+      </div>
+      <div class="fc-arrow">→</div>
+      <div class="fc-main">
+        <span class="fc-run">命令 ③</span><b>5 · build_assembly_handoff</b>
+        <div class="sub" style="margin:2px 0 8px">读 sizes.json、physics_appearance.json、生成产物；对每个物体：</div>
+        <div class="fc-inner">
+          <div class="fc-step">dynamic 但网格非水密 → 改 static</div>
+          <div class="fc-down small">↓</div>
+          <div class="fc-step"><b>3 · mesh_to_usd</b>（子进程）<br><span class="sub">scale_factor、粗糙度、金属度 → <code>visual.usdc</code></span></div>
+          <div class="fc-down small">↓</div>
+          <div class="fc-step"><b>4 · configure_usd_physics</b>（子进程）<br><span class="sub">质量、body_type、碰撞近似 → <code>physics.usdc</code>；dynamic 失败则以 static 重试</span></div>
+          <div class="fc-down small">↓</div>
+          <div class="fc-step">位姿换算到 USD 坐标系，写本物体的 objects.json 条目</div>
+        </div>
+      </div>
+      <div class="fc-arrow">→</div>
+      <div class="fc-col">
+        <div class="fc-out"><b>assembly_handoff/</b>（v2）<br><code>objects.json</code> · <code>manifest.json</code><br><code>usds/&lt;oid&gt;/visual.usdc</code><br><code>usds/&lt;oid&gt;/physics.usdc</code></div>
+        <div class="fc-down">↓ <span>可选，手动</span></div>
+        <div class="fc-opt">Isaac Sim 验证<br><code>check_usd_isaacsim.py</code><br><code>check_usd_physics_isaacsim.py</code></div>
+      </div>
+    </div>
+    <p class="sub">编号沿用脚本的阶段号，不是运行顺序：3、4 在 5 里面跑。Isaac Sim 验证不在 build_assembly_handoff 里，本场景 52 个 USD 还没有逐个跑过掉落检查。</p>
+
+    <article class="stage" id="stage-1">
+      <div class="stage-head"><span class="stage-no">1</span><span class="stage-title">尺度估计</span><span class="stage-script">scripts/tools/estimate_sizes.py</span><span class="tags"><span class="tag ok">SAM3D</span><span class="tag na">DualCraft 不需要</span></span></div>
+      <dl class="rows">
+        <dt>作用</dt><dd>SAM3D 网格是归一化的（最长边约 1、无单位），给每个物体算一个统一缩放系数，落到真实米制尺寸。</dd>
+        <dt>输入</dt><dd><code>objects.json</code> 的生成记录、交接文件里每个物体的扫描点云 <code>clouds/*.ply</code>、SAM3D <code>mesh.glb</code></dd>
+        <dt>输出</dt><dd><code>sizes.json</code> — 每个物体的 <code>scale_factor</code>、<code>height_m</code>、<code>source</code>、<code>confidence</code>、<code>axis_ratio</code></dd>
+        <dt>逻辑</dt><dd>主路径用扫描点云的 Z 高度 ÷ 网格 GLB-Y 高度。两种情况下自动退回 footprint 匹配：网格竖直薄度 <code>scene_z_thin_frac &lt; 0.05</code>（SAM3D 只生成了表面薄片），或 Z 与 footprint 两个独立估计相差超过 3 倍（朝向不一致）。尺寸都取 1–99 百分位，避免离群点撑大。可信度按资产和扫描在三个轴上是否一致分 high / medium / low。</dd>
+        <dt>可选</dt><dd>在生成目录放 <code>sizes_overrides.json</code> 手工钉死某些物体</dd>
+        <dt>DualCraft</dt><dd>按给定尺寸建模，已经是米制，不需要缩放；只需用 sizes.json 核对整体包围盒是否在容差内。</dd>
+        <dt>本轮</dt><dd><span class="stat" id="statSizes"></span></dd>
+      </dl>
+    </article>
+
+    <article class="stage" id="stage-2">
+      <div class="stage-head"><span class="stage-no">2</span><span class="stage-title">物理与外观参数估计</span><span class="stage-script">scripts/tools/estimate_physics_appearance.py</span><span class="tags"><span class="tag ok">SAM3D</span><span class="tag plan">DualCraft 设计中</span></span></div>
+      <dl class="rows">
+        <dt>作用</dt><dd>用视觉模型给每个物体估质量、粗糙度、金属度、是否固定安装、碰撞近似方式。</dd>
+        <dt>输入</dt><dd>物体标签、缩放后的真实尺寸（长 × 宽 × 高，<b>取自第 1 步的 sizes.json</b>，所以必须在第 1 步之后运行）、最多 3 张关键帧原图</dd>
+        <dt>输出</dt><dd><code>physics_appearance.json</code> — <code>mass_kg</code>、<code>roughness</code>、<code>metallic</code>、<code>body_type</code>、<code>kinematic</code>、<code>collision_approximation</code>、<code>confidence</code>、<code>reasoning</code></dd>
+        <dt>模型</dt><dd><code data-v="generation.physics.model"></code>，强制 <code>tool_use</code> 填固定 schema。网关偶尔路由到 thinking 模式，脚本检测到没有 tool_use 就重试（最多 3 次）。</dd>
+        <dt>安全网</dt><dd>质量按标签先验区间 <code>MASS_RANGE</code> 截断，超出范围标记为 <code>model+clamped</code>；重试用尽回落到 <code>fallback</code> 默认值。</dd>
+        <dt>重跑</dt><dd><code>--object-id</code> 可只跑子集，结果与已有文件按 <code>object_id</code> 合并，不会覆盖其他物体。</dd>
+        <dt>本轮</dt><dd><span class="stat" id="statPhysics"></span></dd>
+      </dl>
+    </article>
+
+    <article class="stage" id="stage-3">
+      <div class="stage-head"><span class="stage-no">3</span><span class="stage-title">网格转 USD</span><span class="stage-script">scripts/pipeline/mesh_to_usd.py</span><span class="tags"><span class="tag ok">SAM3D</span><span class="tag na">DualCraft 另走</span></span></div>
+      <dl class="rows">
+        <dt>作用</dt><dd>把 GLB 转成 Isaac Sim 可用的 Z-up、米制 USD 视觉资产。导出时由第 5 步调用，也可以单独运行。</dd>
+        <dt>输入</dt><dd><code>mesh.glb</code>（Y-up、归一化、无单位）</dd>
+        <dt>输出</dt><dd><code>visual.usdc</code> + <code>visual.conversion.json</code></dd>
+        <dt>处理</dt><dd>Y-up → Z-up 旋转 <code>[[1,0,0],[0,0,-1],[0,1,0]]</code>；乘 <code>scale_factor</code>；XY 居中、Z 底面对齐到 0；可视网格抽到最多 40000 面；顶点色 sRGB → 线性；写 <code>UsdPreviewSurface</code> 并把 roughness / metallic 接进去；阶段设 <code>upAxis=Z</code>、<code>metersPerUnit=1</code>。转换后会重新打开文件做一次拓扑校验。</dd>
+        <dt>参数</dt><dd><code>--scale</code>（或 <code>--height</code>，二选一）、<code>--roughness</code>、<code>--metallic</code>、<code>--target-faces</code>、<code>--prim-name</code>、<code>--asset-name</code></dd>
+        <dt>DualCraft</dt><dd>DualCraft 自己的 <code>urdf2usd</code> 已经按 link 树写出带贴图的视觉 USD（每个 link 一个 Xform，关节信息在 customData），可以直接作为视觉层，不再经过这一步。</dd>
+      </dl>
+    </article>
+
+    <article class="stage" id="stage-4">
+      <div class="stage-head"><span class="stage-no">4</span><span class="stage-title">配置物理</span><span class="stage-script">scripts/pipeline/configure_usd_physics.py</span><span class="tags"><span class="tag ok">SAM3D</span><span class="tag plan">DualCraft 设计中</span></span></div>
+      <dl class="rows">
+        <dt>作用</dt><dd>给视觉 USD 加刚体、质量属性和碰撞体。导出时由第 5 步调用，也可以单独运行。</dd>
+        <dt>输入</dt><dd><code>visual.usdc</code>（dynamic 要求网格水密）</dd>
+        <dt>输出</dt><dd><code>physics.usdc</code> + <code>physics.physics.json</code></dd>
+        <dt>参数</dt><dd><code>--mass</code>、<code>--body-type dynamic|kinematic|static</code>、<code>--collision-approximation</code>、<code>--max-convex-hulls</code>、<code>--voxel-resolution</code>、两个 solver 迭代数</dd>
+        <dt>处理</dt><dd>根据 <code>body_type</code> 写入不同的 USD schema 组合（见下表）。dynamic 在水密网格上按均匀密度积分出质心、惯量和主轴。视觉网格关掉碰撞（<code>collisionEnabled=False</code>），碰撞由独立的 <code>CollisionMesh</code> prim 承担：<code>convexHull</code> 走表面采样后取凸包（几百面），<code>convexDecomposition</code> 走抽面副本（最多 5000 面）。物理材质：静摩擦 0.6 / 动摩擦 0.5 / 恢复系数 0。</dd>
+        <dt>本轮</dt><dd><span class="stat" id="statCollision"></span></dd>
+      </dl>
+      <div class="concept-box">
+        <h4>RigidBodyAPI 与 MassAPI</h4>
+        <p><code>RigidBodyAPI</code> 告诉 PhysX 把这个 prim 当作刚体——施加之后引擎才会为它建物理代理，使它受力、响应碰撞。<code>rigidBodyEnabled</code> 控制刚体是否激活，<code>kinematicEnabled</code> 控制位置是由物理积分器计算还是由外部 transform 驱动。</p>
+        <p><code>MassAPI</code> 告诉 PhysX 这个刚体有多重、质心在哪、如何旋转。三个关键值：<code>mass</code>（kg），<code>centerOfMass</code>（偏移米），<code>diagonalInertia</code> + <code>principalAxes</code>（主惯性矩和主轴）。没有 <code>MassAPI</code> 时 PhysX 会从碰撞体几何自动估算，但我们的碰撞体是粗糙的凸包；从完整水密网格按均匀密度假设算出的惯量更准，所以显式写入。</p>
+        <h4>三种 body_type</h4>
+        <div class="table-wrap"><table class="concept-table">
+          <thead><tr><th></th><th>dynamic</th><th>kinematic</th><th>static</th></tr></thead>
+          <tbody>
+            <tr><th>谁决定位置</th><td>PhysX 积分器</td><td>外部写入的 transform</td><td>永远不动</td></tr>
+            <tr><th>受重力</th><td>✓</td><td>✗</td><td>✗</td></tr>
+            <tr><th>被外力推动</th><td>✓</td><td>✗</td><td>✗</td></tr>
+            <tr><th>能推开别人</th><td>✓</td><td>✓</td><td>✗</td></tr>
+            <tr><th>RigidBodyAPI</th><td>rbe=True, kin=False</td><td>rbe=True, kin=True</td><td>不写</td></tr>
+            <tr><th>MassAPI</th><td>质量 + 惯量</td><td>仅质量</td><td>不写</td></tr>
+            <tr><th>本场景数量</th><td id="btDynamic"></td><td id="btKinematic"></td><td id="btStatic"></td></tr>
+            <tr><th>例子</th><td>桌、椅、垃圾桶、烤面包机</td><td>铰链门、轨道窗帘</td><td>嵌入式台面、水槽、壁挂柜</td></tr>
+          </tbody>
+        </table></div>
+        <p class="concept-note">dynamic 和 kinematic 的核心差异：dynamic 不能被直接写位置（写了物理积分器下一帧覆盖），只能施加力或冲量；kinematic 每帧由脚本写 transform，但仍作为刚体参与碰撞响应，会把挡路的 dynamic 物体推开。</p>
+      </div>
+    </article>
+
+    <article class="stage" id="stage-5">
+      <div class="stage-head"><span class="stage-no">5</span><span class="stage-title">组装交接</span><span class="stage-script">scripts/tools/build_assembly_handoff.py</span><span class="tags"><span class="tag ok">SAM3D</span><span class="tag plan">DualCraft 设计中</span></span></div>
+      <dl class="rows">
+        <dt>作用</dt><dd>串起第 3–4 步，逐物体生成 USD，并记录生成状态、生成帧、SAM3D 位姿、资产尺寸与可信度，交给下游场景组装。场景交接（标签、点云、关键帧、相机）不再转抄，下游按 <code>object_id</code> 关联两份交接文件。</dd>
+        <dt>输入</dt><dd><code>sizes.json</code> + <code>physics_appearance.json</code> + 生成产物 + 上游 handoff（只读其哈希和生成帧文件哈希）</dd>
+        <dt>输出</dt><dd><code>assembly_handoff/</code>（<span data-v="generation.assembly.schema"></span>）：<code>usds/&lt;oid&gt;/visual.usdc</code> 与 <code>physics.usdc</code>、<code>objects.json</code>、<code>manifest.json</code></dd>
+        <dt>位姿</dt><dd>SAM3D 的相机系位姿换算到 USD 资产坐标系：<code>p_cam = scale · R · p_usd + t</code>（OpenCV 相机），再用生成帧的 camera_to_world 到场景。旋转可用，尺度和平移不是米制。</dd>
+        <dt>降级</dt><dd>非水密网格无法定义体积和惯量，dynamic 强制改为 static 并在 <code>demotion_reason</code> 里记录原因；物理配置过程中崩溃（含 SIGSEGV）也会自动以 static 重试一次，而不是让整批中断。</dd>
+        <dt>参数</dt><dd><code>--output</code>、<code>--object-id</code>、<code>--skip-existing</code>、<code>--dry-run</code></dd>
+        <dt>本轮</dt><dd><span class="stat" id="statHandoff"></span></dd>
+      </dl>
+    </article>
+
+    <article class="stage" id="stage-x">
+      <div class="stage-head"><span class="stage-no b">+</span><span class="stage-title">铰接物体导出（DualCraft 产物）</span><span class="stage-script">import_dualcraft.py · configure_articulated_physics.py</span><span class="tags"><span class="tag trial">已实现，obj_0038 验证</span></span></div>
+      <p>链路：<b>DualCraft / SAM3D → 我们的物理估计</b>。导出链 1–5 不另起一条：每一步按 <code>objects.json</code> 里的 <code>generator</code> 分支，写出同一套格式；刚体是「只有一个 link、没有关节」的特例。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>步骤</th><th>DualCraft 分支做什么</th><th>脚本</th></tr></thead>
+        <tbody>
+          <tr><th>导入</th><td>把 DualCraft 产物（URDF、每个 link 的 OBJ/MTL/贴图）、输入、轨迹拷到 <code>objects/&lt;oid&gt;/primary/dualcraft/</code>，登记到 <code>dualcraft.json</code>；<code>objects.json</code> 里该物体记 <code>generator: dualcraft</code>，SAM3D 结果保留不删</td><td><code>scripts/pipeline/import_dualcraft.py</code></td></tr>
+          <tr><th>1 尺度</th><td>不缩放（scale_factor = 1）；关闭状态的包围盒与扫描、与给定尺寸各比一次，超出 ±10% 记入 flags</td><td><code>estimate_sizes.py</code></td></tr>
+          <tr><th>2 估计</th><td>模型只估<b>总质量</b>和<b>根 link 是否固定</b>（static / dynamic）；输入加蓝图零件清单，蓝图 <code>mass_kg</code> 作参考并记入 <code>mass_reference</code>；粗糙度 / 金属度从 MTL 读；<code>--dry-run</code> 可先看提示词</td><td><code>estimate_physics_appearance.py</code></td></tr>
+          <tr><th>3 + 4 USD</th><td>固定关节挂着的小零件（拉手、旋钮、隔板）并进父 link；每个刚体一个平级 Xform；质量按「各块凸包体积 × 材质密度」分配，惯量在凸包上积分；碰撞 = 每块取凸包；关节转成 PhysX 关节，static 时加 <code>fix_base</code> 固定柜体；视觉网格用 DualCraft 自己的 OBJ/MTL 读取和材质代码</td><td><code>scripts/pipeline/configure_articulated_physics.py</code><br><code>scripts/pipeline/dualcraft_product.py</code></td></tr>
+          <tr><th>5 交接</th><td>位姿来自转换时记录的物体系（<code>pose.frame = "scene"</code>，米制 4×4，直接到扫描坐标）；条目多一个 <code>articulation</code>（刚体、关节、轴的来源、几何检查）；估计若还是给 SAM3D 资产做的，标 <code>estimate_source: stale</code></td><td><code>build_assembly_handoff.py</code></td></tr>
+          <tr><th>验证</th><td>Isaac Sim：一个 articulation、运行时质量一致、静止时门不漂、对每扇门施加真实力矩能打开且不越限、柜体不动（static）或保持直立（dynamic）</td><td><code>scripts/pipeline/check_articulated_isaacsim.py</code></td></tr>
+        </tbody>
+      </table></div>
+      <p class="sub">几何检查（写进报告，不改数据）：静止时没有关节相连的刚体互相穿插；门转到限位时是否钻进柜体，或是否越过关闭平面往柜内走。PhysX 不检测关节两端刚体之间的碰撞，装反的门会直接穿过柜体，只有这两项检查能发现。</p>
+      <p class="callout">未完成：关节阻尼 / 摩擦暂缓。实测 dynamic（落地不固定）的柜子在 Isaac 里，门会在静止 2 秒内自己转开 8–14°（落地接触的微小冲击，门轴没有任何阻尼）；static 时为 0。</p>
+    </article>
+  </section>
+
+  <!-- ───────────── layout ───────────── -->
+  <section id="layout">
+    <h2>产物目录</h2>
+    <div class="grid2">
+      <div>
+        <h4 style="margin-bottom:6px">SAM3D 路线（本机）</h4>
+<pre>output/&lt;scene_id&gt;/&lt;handoff 名&gt;/
+├── manifest.json        # assets/v1、来源与生成配置
+├── objects.json         # 每个物体的生成状态
+├── objects/&lt;oid&gt;/primary/sam3d/
+│   └── mesh.glb  splat.ply  pose.json  report.json
+├── sizes.json           # 导出第 1 步
+├── physics_appearance.json   # 第 2 步
+└── assembly_handoff/    # 第 5 步（v2）
+    ├── manifest.json  objects.json
+    └── usds/&lt;oid&gt;/
+        ├── visual.usdc  visual.conversion.json
+        └── physics.usdc physics.physics.json</pre>
+      </div>
+      <div>
+        <h4 style="margin-bottom:6px">DualCraft 路线（服务器运行，本地副本）</h4>
+<pre>服务器 dual-craft/output/demo/&lt;run&gt;/
+├── inputs/      # 参考图、size.json、蓝图
+├── product/
+│   ├── model.urdf  object.usdc  compile_report.json
+│   └── assets/meshes/&lt;hash&gt;/mesh.obj|mtl|*.png
+└── articraft_data/…/traces/trajectory.jsonl
+
+本地 output/dualcraft/&lt;run&gt;/   # 审查用副本
+├── inputs/  product/  rev/（渲染、台账、轨迹）
+├── viewer_links/               # 每个 link 的顶点色网格
+└── turns.json  run.log</pre>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</main>
+</div>
+<div id="lightbox"><img alt=""></div>
+
+<script>
+window.DATA = /*__DATA__*/null;
+</script>
+<script>
+(function () {
+"use strict";
+const D = window.DATA;
+const G = D.generation;
+const $ = id => document.getElementById(id);
+const get = path => path.split(".").reduce((o, k) => (o == null ? o : o[k]), D);
+const cnt = (obj, key) => (obj && obj[key]) || 0;
+document.querySelectorAll("[data-v]").forEach(e => { const v = get(e.dataset.v); e.textContent = v == null ? "—" : String(v); });
+
+/* KPIs */
+const runs = D.dualcraft_runs || [];
+const kpis = [
+  ["场景物体", `${G.handoff.objects}`, `${G.handoff.objects - G.handoff.structural} 个非结构物体待生成`],
+  ["SAM3D 生成", `${cnt(G.sam3d.status, "success")} / ${G.handoff.objects - G.handoff.structural}`, `整场景 ${G.sam3d.minutes_total} 分钟，单个中位 ${G.sam3d.seconds_median} s`],
+  ["已导出 USD", `${G.assembly.exported}`, `${cnt(G.assembly.body_type, "dynamic")} dynamic · ${cnt(G.assembly.body_type, "static")} static · ${cnt(G.assembly.body_type, "kinematic")} kinematic`],
+];
+if (runs.length) {
+  const r = runs[0];
+  kpis.push(["DualCraft 试跑", `${runs.length} 次`, `${r.name}：${r.links} 个 link、${r.movable} 个可动关节，$${r.cost_usd}`]);
+}
+$("kpis").style.gridTemplateColumns = `repeat(${kpis.length}, minmax(0,1fr))`;
+for (const [k, v, s] of kpis) {
+  const div = document.createElement("div"); div.className = "card";
+  div.innerHTML = `<div class="sub">${k}</div><div style="font-size:20px;font-weight:600">${v}</div><div class="sub">${s}</div>`;
+  $("kpis").append(div);
+}
+
+/* stage stats */
+$("sam3dStatus").textContent = `${cnt(G.sam3d.status, "success")} 个成功，${cnt(G.sam3d.status, "failed")} 个失败，${cnt(G.sam3d.status, "skipped")} 个结构物体跳过`;
+$("statSizes").textContent = `${G.sizes.total} 个物体：${cnt(G.sizes.source, "scan height")} 个用 Z 高度，${cnt(G.sizes.source, "footprint")} 个退回 footprint，`
+  + `${cnt(G.sizes.source, "manual override") ? cnt(G.sizes.source, "manual override") + " 个手工覆盖" : "无手工覆盖"}；可信度 high ${cnt(G.sizes.confidence, "high")} / medium ${cnt(G.sizes.confidence, "medium")} / low ${cnt(G.sizes.confidence, "low")}`;
+$("statPhysics").textContent = `${G.physics.total} 个物体：${cnt(G.physics.confidence, "model")} 个 model，${cnt(G.physics.confidence, "model+clamped")} 个被质量区间截断，${cnt(G.physics.confidence, "fallback")} 个 fallback`;
+$("statCollision").textContent = `碰撞近似 convexHull ${cnt(G.assembly.collision, "convexHull")} 个、convexDecomposition ${cnt(G.assembly.collision, "convexDecomposition")} 个；碰撞代理面数中位 ${G.assembly.collision_faces_median}、最多 ${G.assembly.collision_faces_max}`;
+$("statHandoff").textContent = `${G.assembly.exported} 个物体导出：${cnt(G.assembly.body_type, "dynamic")} 个 dynamic，${cnt(G.assembly.body_type, "kinematic")} 个 kinematic，${cnt(G.assembly.body_type, "static")} 个 static`
+  + (G.assembly.demoted ? `（其中 ${G.assembly.demoted} 个被强制降级）` : "，无降级")
+  + (G.assembly.non_watertight.length ? `；非水密网格 ${G.assembly.non_watertight.length} 个（${G.assembly.non_watertight.map(o => `${o.label} ${o.body_type}`).join("、")}），本来就不是 dynamic，降级规则没有触发` : "");
+$("btDynamic").textContent = cnt(G.assembly.body_type, "dynamic");
+$("btKinematic").textContent = cnt(G.assembly.body_type, "kinematic");
+$("btStatic").textContent = cnt(G.assembly.body_type, "static");
+
+/* routing */
+const R = D.routing || {};
+if (R.route_counts) {
+  const c = R.route_counts, o = R.overridden || [];
+  $("routeCounts").textContent = `${c.dualcraft || 0} 个走 DualCraft、${c.sam3d || 0} 个走 SAM3D`
+    + (o.length ? `（其中 ${o.length} 个人工改判：${o.join("、")}）` : "");
+}
+
+/* DualCraft runs */
+const minutes = (a, b) => ((new Date(b) - new Date(a)) / 60000).toFixed(1);
+if (runs.length) {
+  const r = runs[0];
+  $("dcCost").innerHTML = `1 次试跑：建模 <span class="stat">${minutes(r.history.modeling, r.history.export)}</span> 分钟、总计 ${minutes(r.history.created, r.history.done)} 分钟，${r.turns} 轮，<span class="stat">$${r.cost_usd}</span>，${(r.tokens / 1000).toFixed(0)}K token`;
+  $("dcRuns").innerHTML = runs.map(x => `<code>${x.name}</code>：${x.status === "success" ? "编译通过" : x.status}，${x.turns} 轮，$${x.cost_usd}，${x.links} 个 link / ${x.movable} 个可动关节`
+    + (x.page ? `，<a href="${x.page}">运行记录与问题清单</a>` : "")).join("<br>");
+  if (r.page) $("runPageLink").href = r.page; else $("runPageLink").remove();
+} else { $("dcCost").textContent = "—"; $("dcRuns").textContent = "—"; $("runPageLink").remove(); }
+
+/* worked example */
+const E = D.example;
+const fig = (el, src, cap) => { if (!src) { el.remove(); return; } el.innerHTML = `<img src="${src}" alt=""><figcaption>${cap}</figcaption>`; };
+if (E && E.object_id) {
+  $("exTitle").textContent = `${E.object_id}（${E.label}）`;
+  $("exNote").textContent = "左：生成用的关键帧（黄框为 mask 外接框）。中：SAM3D 网格四个方位的渲染（0°/90°/180°/270°）。右：DualCraft 最终版与参考照片对照。";
+  fig($("exBoxed"), E.boxed, `关键帧 seq ${E.seq}（SAM3D 只用这一张；DualCraft 用了它和 seq 124）`);
+  fig($("exSam3d"), E.sam3d_preview, "SAM3D：一整块网格，门是表面纹理，背面是平板");
+  fig($("exDualcraft"), E.dualcraft.compare, "DualCraft：四扇门是独立 link，可以转开");
+  const s = E.sam3d, d = E.dualcraft, dims = v => v ? v.map(x => Number(x).toFixed(2)).join(" × ") + " m" : "—";
+  const rows = [
+    ["结构", "1 个刚体", "10 个 link：柜体、4 扇门、4 个拉手 / 旋钮、隔板；4 个转动关节"],
+    // Width x depth x height for both: SAM3D's footprint axes have no front, so take long/short;
+    // DualCraft is +X front, so width is Y and depth is X.
+    ["尺寸 宽 × 深 × 高", s.dimensions_m ? `${dims([Math.max(s.dimensions_m[0], s.dimensions_m[1]), Math.min(s.dimensions_m[0], s.dimensions_m[1]), s.dimensions_m[2]])}，可信度 ${s.size_confidence}` + (s.size_flags && s.size_flags.length ? `（${s.size_flags.join("；")}）` : "") : "—",
+      d.dimensions_m ? `${dims([d.dimensions_m[1], d.dimensions_m[0], d.dimensions_m[2]])}，按给定尺寸 ${d.scan.width} × ${d.scan.depth} × ${d.scan.height} m 建（深度取自扫描，可能偏浅）` : "—"],
+    ["网格", `${(s.faces / 1000).toFixed(0)}K 面，${s.watertight ? "水密" : "非水密"}；导出时抽到 40K 面`, "按零件拼板建模，每块都是凸的封闭网格；柜体 19 块、隔板 5 块"],
+    ["生成耗时", `${s.seconds} s`, runs.length ? `${minutes(runs[0].history.created, runs[0].history.done)} 分钟，$${runs[0].cost_usd}` : "—"],
+    ["物理（当前）", s.physics ? `我们估计：${s.physics.body_type}，${s.estimated_mass_kg ?? "—"} kg` + (s.physics.mass_kg == null ? "（static 不写入 USD）" : "") + `，碰撞 ${s.physics.collision_approximation}，粗糙度 ${s.physics.roughness}` : "—", `URDF 默认值：合计 ${d.urdf_mass_kg ?? "—"} kg（包围盒体积 × 400 kg/m³），碰撞体 = 可视网格；待按下文「铰接物体导出」重写`],
+    ["能否开门", "不能", "能（0–90°）"],
+  ];
+  const t = $("exTable");
+  t.innerHTML = `<thead><tr><th></th><th>A · SAM3D</th><th>B · DualCraft</th></tr></thead>`;
+  const tb = document.createElement("tbody");
+  for (const [k, a, b] of rows) { const tr = document.createElement("tr"); tr.innerHTML = `<th>${k}</th><td></td><td></td>`; tr.children[1].textContent = a; tr.children[2].textContent = b; tb.append(tr); }
+  t.append(tb);
+} else { $("example").remove(); }
+
+$("foot").innerHTML = `由 <code>scripts/tools/build_generation_page.py</code> 生成；SAM3D 与导出统计来自 <code>${G.path}</code>，DualCraft 来自 <code>output/dualcraft/</code> 下的运行副本。物体级的物理参数见 <a href="../physics/index.html">物理与外观参数审查</a>。`;
+
+const lb = $("lightbox");
+document.addEventListener("click", e => { if (e.target.tagName === "IMG" && e.target.closest("figure")) { lb.querySelector("img").src = e.target.src; lb.classList.add("open"); } });
+lb.addEventListener("click", () => lb.classList.remove("open"));
+document.addEventListener("keydown", e => { if (e.key === "Escape") lb.classList.remove("open"); });
+})();
+</script>
+</body>
+</html>

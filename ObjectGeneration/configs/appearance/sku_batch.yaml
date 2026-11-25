@@ -1,0 +1,14 @@
+schema_version: 1
+model: openai/gpt-6-astra
+base_url: https://vibeg.seer-robotics.cn/openai/v1
+api_env_file: /home/seer/wzt/API/.env
+request_timeout_seconds: 90
+max_completion_tokens: 2048
+blender: /home/seer/wzt/Blender/.local/opt/blender/blender
+mcp_port: 19877
+texture_size: 2048
+max_iterations: 3
+review_required: true
+max_api_calls: 6
+max_total_tokens: 90000
+max_wall_seconds: 1200

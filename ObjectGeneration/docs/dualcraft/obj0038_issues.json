@@ -1,0 +1,88 @@
+[
+  {
+    "id": "mass",
+    "severity": "high",
+    "area": "产物 · 物理",
+    "title": "URDF 质量是按实心包围盒算的，整柜约 460 kg",
+    "detail": "蓝图估的是 65 kg，但 harness 没把它传给编译：joint_plan.skeleton_assembly_params 收到的 masses 永远是空的，每个 link 按『包围盒体积 × 400 kg/m³』取默认值（DEFAULT_DENSITY_KG_M3）。柜体 0.34×0.96×2.31 m 的盒子算成 302 kg，隔板 0.26×0.85×1.50 m 算成 131 kg，门 4–9 kg，拉手 0.05 kg。惯量也按实心盒子算。",
+    "evidence": "product/model.urdf 的 <inertial>；rev/model.py 第 9 行注释『Inertia approximation: committed local bounding box』；src/dualcraft/agent/modeling/joint_plan.py:1043 default_mass。",
+    "images": [],
+    "table": "mass",
+    "next": "接入场景组装前按总质量重新分配：用蓝图 65 kg 或我们 physics_appearance.json 的估计，按体积比例或按『外壳/门/隔板』分档写回 URDF。上游可以把蓝图 mass_kg 传进 masses，但这要改 DualCraft。"
+  },
+  {
+    "id": "collision",
+    "severity": "high",
+    "area": "产物 · 物理",
+    "title": "碰撞体就是可视网格本身；USD 里没有任何物理",
+    "detail": "URDF 每个 link 的 <collision> 和 <visual> 指向同一个 OBJ（柜体由 12 块凹的拼板组成，没有凸分解）。object.usdc 只有 Mesh/Material/Xform，没有 RigidBodyAPI、CollisionAPI、关节 prim；关节只写在 customData 里。所以这份 USD 不能直接放进 Isaac Sim 做仿真。",
+    "evidence": "model.urdf 10/10 个 link 的 visual 与 collision 文件名相同；object.usdc 的 applied schema 只有 MaterialBindingAPI、NodeDefAPI。",
+    "images": [],
+    "next": "仿真用 URDF：Isaac Sim 的 URDF importer 会生成 articulation，碰撞再做凸分解（我们 configure_usd_physics.py 已有 convexDecomposition 那一路，可以复用到每个 link）。"
+  },
+  {
+    "id": "islands",
+    "severity": "medium",
+    "area": "产物 · 几何",
+    "title": "柜体 19 块、隔板 5 块互不相连的散件",
+    "detail": "编译 QC 报『disconnected geometry islands』：housing 由 19 块互不相连的网格拼成（只有 8 块连成一体），interior_shelves 5 块各自独立；门也是 9–14 块拼板。外观上看不出来（各块紧挨着放），QC 只当警告放行。但做碰撞或按连通分量拆分时，这些散件会被当成独立的东西。上面 3D 视图切到『按连通块着色』可以直接看到。",
+    "evidence": "product/compile_report.json warnings；最后一次 compile_model：『housing 19 pieces, interior_shelves 5 pieces』。",
+    "images": [],
+    "next": "组装端按 link 处理就不受影响；做凸分解时按 link 整体分解，不按连通分量。",
+    "viewer": "pieces"
+  },
+  {
+    "id": "flush_gate",
+    "severity": "medium",
+    "area": "Harness",
+    "title": "『上下门不齐平』这个收工门误报了一路，最后靠窗口过期放行",
+    "detail": "收工检查 sibling_alignment 把对角的两扇门当成『同一平面上并排的一对』来比：door_1（下层、物体左侧）配 door_4（上层、右侧），door_2（下右）配 door_3（上左），算出沿宽度方向错开 425 mm，报『不齐平，收工门会拒绝』（容差 42 mm）。其实它们一上一下、一左一右，本来就该错开。第 12 轮 commit 后收工门据此打开返工窗口，agent 没改几何，三轮后窗口过期，第 17 轮 finalize 被接受。也就是说，这道门在本例里既是误报，最后又没真的挡住。",
+    "evidence": "trajectory 中 sibling_alignment 两条原文：『door_4 sits 425 mm out of plane with door_1 along width … (tolerance 42 mm)』『door_2 sits 425 mm out of plane with door_3 …』，从第 1 轮 edit 起每轮进度块都重复；diff_loop.json rework_windows: finish_gate 12→15 expired；finish_gates.py sibling_alignment_report 只按名字族（door_N）和同父件配对。",
+    "images": [],
+    "next": "四门柜、上下两层门这类布局会稳定触发。可以在 DualCraft 里把『配对』限制为同一层（竖直方向重叠 ≥ 一半）——属于改上游，先记着。"
+  },
+  {
+    "id": "depth",
+    "severity": "medium",
+    "area": "输入",
+    "title": "深度用的是扫描看到的 0.35 m，可能偏浅",
+    "detail": "宽 0.96 m、高 2.305 m 来自扫描，可信；深度 0.348 m 是扫描点云从正面看到的厚度。SAM3D 资产在这个轴上是扫描的 1.47 倍（size.confidence = medium 的原因）。DualCraft 按 measured 给的尺寸严格建模（容差 10%），生成结果深 0.362 m。真实柜子可能更深。",
+    "evidence": "inputs/size.json；sizes.json 里 obj_0038 axis_ratio.footprint_short = 1.47；生成 GLB 包围盒 0.362 × 0.96 × 2.31 m。",
+    "images": [],
+    "next": "转换脚本里对『扫描可能不全』的轴放宽：只把高度和宽度标为 measured，深度给范围或交给模型估。"
+  },
+  {
+    "id": "frames",
+    "severity": "low",
+    "area": "输入",
+    "title": "只用了 2 张正面附近的关键帧，第 3 张被画面截断",
+    "detail": "三张关键帧的相机都在正面一侧（方位角 −27°、−7°、−1°），看不到侧面和背面；seq 130 那张柜子右半边出了画面，没有交给模型。所以侧面、顶部、内部结构（5 层隔板）都是模型按常识补的（蓝图里 interior_shelves 的 visibility = inferred）。三张图里柜顶都被截掉一点。",
+    "evidence": "inputs/scannet_handoff.json views / unused_views；蓝图 visibility。",
+    "images": [],
+    "table": "keyframes",
+    "next": "转换脚本从 handoff/v1 之外的原始帧里多挑几张：ScanNet 每个物体可见 7–144 帧，可以按方位角铺开挑。"
+  },
+  {
+    "id": "appearance",
+    "severity": "low",
+    "area": "外观",
+    "title": "木色偏暗，第一版木纹是夸张的同心圆",
+    "detail": "第 1 版贴图是大圈年轮（agent 自己在 d05 记下，第 4–5 轮改成顺纹）。最终版和照片比整体偏暗、偏黄，agent 记了 d06（外观类，不阻塞收工），一直没处理就交付了。照片本身是室内暖光、偏黄，也有一部分是光照差异。",
+    "evidence": "diff_ledger d05 resolved、d06 open；revision-0001 与 revision-0004 渲染。",
+    "images": [
+      "rev1_front",
+      "front"
+    ],
+    "next": "外观不影响组装，可以先不管。"
+  },
+  {
+    "id": "upstream_patch",
+    "severity": "info",
+    "area": "环境",
+    "title": "上游代码打了一处补丁才能跑通（未提交）",
+    "detail": "第一次运行在第 1 轮被网关拒绝：blender_commit 的 joint_sign_overrides 是一个没有 properties 的 object schema，这个网关严格校验不收。改了 src/dualcraft/providers/openai_codec.py，给这类 schema 补空的 properties。服务器和本机 ThirdParty/dual-craft 都改了，没有提交，也没推到 dual-craft 远端。",
+    "evidence": "scannet_s0000_obj0038_v1/run.log：『object schema must define properties』；v2 用补丁后的代码跑通。",
+    "images": [],
+    "next": "决定是否把补丁提交到 dual-craft 仓库。"
+  }
+]

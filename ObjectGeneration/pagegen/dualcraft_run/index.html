@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DualCraft 生成结果</title>
+<style>
+:root {
+  --ink: #16191d;
+  --ink-2: #454c55;
+  --ink-3: #7a8390;
+  --surface: #f8f9fa;
+  --raised: #ffffff;
+  --border: #dde1e6;
+  --accent: #0f62fe;
+  --accent-2: #e8f0fe;
+  --high: #c62828;   --high-bg: #fdecea;
+  --medium: #b26a00; --medium-bg: #fff4e0;
+  --low: #2e6b30;    --low-bg: #e8f3e8;
+  --info: #455a64;   --info-bg: #eceff1;
+  --radius: 6px;
+  --radius-lg: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; line-height: 1.6; color: var(--ink); background: var(--surface); }
+main { max-width: 1240px; margin: 0 auto; padding: 28px 24px 64px; display: flex; flex-direction: column; gap: 22px; }
+h1 { font-size: 20px; font-weight: 600; }
+h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+h3 { font-size: 14px; font-weight: 600; }
+section { display: flex; flex-direction: column; gap: 12px; }
+.lede { color: var(--ink-2); max-width: 900px; }
+.sub { color: var(--ink-3); font-size: 12.5px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; word-break: break-all; }
+.card { background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.stat { background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+.stat b { display: block; font-size: 18px; font-weight: 600; }
+.stat span { color: var(--ink-3); font-size: 12px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--raised); }
+.table-wrap { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: auto; }
+th, td { padding: 7px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+thead th { background: var(--surface); font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.dim td { color: var(--ink-3); }
+
+.badge { display: inline-block; font-size: 11.5px; font-weight: 600; border-radius: 10px; padding: 0 8px; line-height: 20px; white-space: nowrap; }
+.sev-high { color: var(--high); background: var(--high-bg); }
+.sev-medium { color: var(--medium); background: var(--medium-bg); }
+.sev-low { color: var(--low); background: var(--low-bg); }
+.sev-info { color: var(--info); background: var(--info-bg); }
+.chip { display: inline-block; font-family: ui-monospace, monospace; font-size: 11.5px; background: var(--accent-2); color: var(--accent); border-radius: 4px; padding: 0 5px; margin: 1px 3px 1px 0; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,.2); vertical-align: -2px; margin-right: 4px; }
+
+.overview { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.overview a { display: grid; grid-template-columns: 62px 110px 1fr; gap: 10px; align-items: baseline; color: inherit; text-decoration: none; padding: 5px 8px; border-radius: var(--radius); }
+.overview a:hover { background: var(--accent-2); }
+.overview .area { color: var(--ink-3); font-size: 12.5px; }
+
+figure { display: flex; flex-direction: column; gap: 4px; }
+figure img { width: 100%; border-radius: var(--radius); border: 1px solid var(--border); background: #ddd; cursor: zoom-in; display: block; }
+figcaption { color: var(--ink-2); font-size: 12.5px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+
+.viewer { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; }
+.canvas-wrap { position: relative; height: 620px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: #e9ecef; }
+canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+canvas.dragging { cursor: grabbing; }
+.axis-label { position: absolute; left: 0; top: 0; font: 600 12px ui-monospace, monospace; pointer-events: none; margin: -8px 0 0 -4px; }
+.axis-x { color: #d33; } .axis-y { color: #2a9a2a; } .axis-z { color: #2563eb; }
+.hint { position: absolute; left: 10px; bottom: 8px; font-size: 11.5px; color: var(--ink-3); pointer-events: none; }
+.controls { display: flex; flex-direction: column; gap: 12px; }
+.controls .card { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.slider { display: grid; grid-template-columns: 62px 1fr 44px; gap: 8px; align-items: center; font-size: 12.5px; }
+.slider input { width: 100%; }
+.slider .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.seg { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.seg button { flex: 1; border: 0; background: var(--raised); padding: 5px 4px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--ink-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.on { background: var(--accent); color: #fff; }
+button.plain { border: 1px solid var(--border); background: var(--raised); border-radius: var(--radius); padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+button.plain:hover { background: var(--accent-2); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.links-table td, .links-table th { padding: 4px 8px; font-size: 12px; }
+.links-table tr.hover td { background: var(--accent-2); }
+
+.issue { display: flex; flex-direction: column; gap: 10px; scroll-margin-top: 16px; }
+.issue-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.issue-head h3 { font-size: 15px; }
+.issue dl { display: grid; grid-template-columns: 64px 1fr; gap: 6px 12px; font-size: 13px; }
+.issue dt { color: var(--ink-3); }
+.issue dd { color: var(--ink-2); }
+.issue.sev-border-high { border-left: 4px solid var(--high); }
+.issue.sev-border-medium { border-left: 4px solid var(--medium); }
+.issue.sev-border-low { border-left: 4px solid var(--low); }
+.issue.sev-border-info { border-left: 4px solid var(--info); }
+
+.kf { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: start; }
+.kf-card { display: flex; flex-direction: column; gap: 8px; }
+.kf-card.unused { opacity: .75; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; font-size: 12.5px; }
+.kv dt { color: var(--ink-3); }
+
+.bar { height: 8px; border-radius: 4px; background: var(--accent); display: inline-block; vertical-align: middle; }
+.bar.tool { background: #8fb3ff; }
+.event { display: block; font-size: 12px; color: var(--medium); }
+.foot { font-size: 12px; color: var(--ink-3); }
+
+#lightbox { position: fixed; inset: 0; background: rgba(10,12,15,.88); display: none; align-items: center; justify-content: center; z-index: 10; cursor: zoom-out; padding: 24px; }
+#lightbox.open { display: flex; }
+#lightbox img { max-width: 100%; max-height: 100%; border-radius: var(--radius); }
+@media (max-width: 960px) {
+  .viewer, .grid2, .kf { grid-template-columns: 1fr; }
+  .grid4, .grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">DualCraft 生成结果</h1>
+    <p class="lede" id="lede"></p>
+  </header>
+  <div class="stats" id="stats"></div>
+
+  <section>
+    <h2>当前问题速览</h2>
+    <div class="card overview" id="issueOverview"></div>
+  </section>
+
+  <section>
+    <h2>与照片对照</h2>
+    <p class="sub">DualCraft 最终版（第 4 版场景）按照片的相机方位渲染，左为参考照片，右为生成结果。点击图片放大。</p>
+    <div class="grid2" id="compare"></div>
+  </section>
+
+  <section>
+    <h2>URDF 三维视图</h2>
+    <p class="sub">直接读 <code>product/model.urdf</code>：每个 link 的网格按关节链摆放，四扇门可以用滑块转动。坐标系是 DualCraft 物体系：+X 朝前（红），+Y 朝物体左侧（绿），+Z 向上（蓝），底面在 z=0。</p>
+    <div class="viewer">
+      <div class="canvas-wrap">
+        <canvas id="canvas"></canvas>
+        <div id="labels"></div>
+        <div class="hint">左键拖动旋转 · 右键平移 · 滚轮缩放</div>
+      </div>
+      <div class="controls">
+        <div class="card">
+          <h3>着色</h3>
+          <div class="seg" id="colourMode">
+            <button data-mode="texture" class="on">贴图颜色</button>
+            <button data-mode="link">按 link</button>
+            <button data-mode="pieces">按连通块</button>
+          </div>
+          <div class="sub" id="colourNote"></div>
+        </div>
+        <div class="card">
+          <h3>门（revolute 关节）</h3>
+          <div id="sliders"></div>
+          <div class="row">
+            <button class="plain" id="openAll">全部打开</button>
+            <button class="plain" id="closeAll">全部关上</button>
+            <button class="plain" id="resetCam">重置视角</button>
+          </div>
+        </div>
+        <div class="card" style="padding:8px 8px">
+          <table class="links-table" id="linkTable"></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>多视角渲染（最终版）</h2>
+    <div class="grid4" id="renders"></div>
+  </section>
+
+  <section>
+    <h2>关节</h2>
+    <p class="sub">DualCraft 先把四扇门都放成「绕 +z 转」的占位轴，再让 agent 用 pose_check（把门转到上限渲一张）自己看对不对。第 7 轮看到 door_2、door_4 往柜子里转，第 9 轮改成 −z，第 10 轮复查。</p>
+    <div class="table-wrap"><table id="jointTable"></table></div>
+    <div class="grid2" id="poseChecks"></div>
+  </section>
+
+  <section>
+    <h2>问题详情</h2>
+    <div id="issues" style="display:flex;flex-direction:column;gap:14px"></div>
+  </section>
+
+  <section>
+    <h2>输入：从 ScanNet 交接文件转来的照片和尺寸</h2>
+    <p class="sub">关键帧来自 InstanceRecognition 的 handoff（框为该物体的 mask 外接框）；按 mask 框外扩 15% 裁成 DualCraft 的参考照片。方位角在 DualCraft 物体系里量：0° 为正前方，负值偏物体右侧。</p>
+    <div id="keyframes" style="display:flex;flex-direction:column;gap:14px"></div>
+    <div class="grid2">
+      <div class="card"><h3>尺寸（size.json）</h3><dl class="kv" id="sizeKv" style="margin-top:6px"></dl></div>
+      <div class="card"><h3>物体系（ScanNet 扫描坐标里）</h3><dl class="kv" id="frameKv" style="margin-top:6px"></dl></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>蓝图（perception 阶段，GPT 看照片写的）</h2>
+    <div class="card"><p id="bpText" style="color:var(--ink-2)"></p></div>
+    <div class="table-wrap"><table id="bpTable"></table></div>
+  </section>
+
+  <section>
+    <h2>建模过程</h2>
+    <p class="sub">每一轮是一次模型调用及其工具调用。深色条为模型思考时间，浅色条为工具（Blender）时间；橙色行是 harness 自己记的事件。</p>
+    <div class="table-wrap"><table id="turnTable"></table></div>
+    <h3 style="margin-top:6px">差异台账（diff ledger）</h3>
+    <div class="table-wrap"><table id="ledgerTable"></table></div>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</main>
+<div id="lightbox"><img alt=""></div>
+
+<script>
+window.DATA = /*__DATA__*/null;
+</script>
+<script>
+(function () {
+"use strict";
+const D = window.DATA;
+const $ = id => document.getElementById(id);
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v; else if (k === "style") e.style.cssText = v; else e.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k instanceof Node ? k : document.createTextNode(String(k)));
+  return e;
+};
+const SEV = { high: "高", medium: "中", low: "低", info: "记录" };
+const badge = s => el("span", { class: `badge sev-${s}` }, SEV[s] || s);
+const fmt = (v, d = 2) => v == null ? "—" : Number(v).toFixed(d);
+const dur = s => s >= 60 ? `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, "0")}s` : `${s.toFixed(0)}s`;
+const img = (key, caption) => {
+  const src = D.images[key];
+  if (!src) return null;
+  return el("figure", {}, el("img", { src, alt: caption || key, loading: "lazy" }), caption ? el("figcaption", {}, caption) : null);
+};
+function table(target, head, rows, numeric = []) {
+  const t = typeof target === "string" ? $(target) : target;
+  t.innerHTML = "";
+  t.append(el("thead", {}, el("tr", {}, head.map((h, i) => el("th", { class: numeric.includes(i) ? "num" : "" }, h)))));
+  const body = el("tbody");
+  for (const r of rows) {
+    const cells = r.cells || r;
+    body.append(el("tr", { class: r.cls || "" }, cells.map((c, i) => el("td", { class: numeric.includes(i) ? "num" : "", ...(r.span && i === 0 ? { colspan: r.span } : {}) }, c))));
+  }
+  t.append(body);
+  return t;
+}
+
+/* ── header ── */
+const est = D.estimates || {};
+const hist = D.job.history;
+const t = s => new Date(hist[s]).getTime() / 1000;
+const llm = D.turns.reduce((a, x) => a + x.llm_s, 0), tool = D.turns.reduce((a, x) => a + x.tool_s, 0);
+$("title").textContent = `DualCraft 生成结果 · ScanNet scene0000_00 ${D.handoff.object}（${est.label || "柜子"}）`;
+document.title = `DualCraft · ${D.run}`;
+$("lede").innerHTML = `运行 <code>${D.run}</code>，${new Date(hist.created).toLocaleString("zh-CN", { hour12: false })} 在 DSW 服务器上跑完（模型 <code>${D.job.settings.model}</code>，thinking=${D.job.settings.thinking}）。` +
+  `输入是从 InstanceRecognition 交接文件手工转出的 2 张关键帧裁图和扫描量出的外包尺寸；输出是 ${Object.keys(D.urdf.links).length} 个 link、${D.urdf.joints.filter(j => j.type === "revolute").length} 个转动关节的 URDF（附 OBJ 网格和烘焙贴图）。` +
+  `整体形状、门板分格、拉手位置和照片一致，开门方向经 agent 自查改对；物理参数（质量、碰撞体）不能直接用，见下面的问题清单。`;
+const stats = [
+  [`$${D.cost.costs_usd.total.toFixed(2)}`, `花费（上限 $${D.job.settings.max_cost_usd}）`],
+  [`${D.compile.turns}`, `轮（上限 ${D.job.settings.max_turns}）`],
+  [dur(t("done") - t("created")), `总耗时（建模 ${dur(t("export") - t("modeling"))}）`],
+  [dur(llm), "模型思考合计"], [dur(tool), "Blender 工具合计"],
+  [`${(D.cost.tokens.total_tokens / 1000).toFixed(0)}K`, `token（缓存命中 ${(D.cost.tokens.cached_tokens / 1000).toFixed(0)}K）`],
+  [`${D.blueprint.parts.length} / ${D.blueprint.parts.filter(p => p.movable).length}`, "零件 / 可动"],
+  [D.compile.status === "success" ? "通过" : D.compile.status, `编译（${D.compile.warnings.length} 条警告）`],
+];
+$("stats").append(...stats.map(([b, s]) => el("div", { class: "stat" }, el("b", {}, b), el("span", {}, s))));
+
+/* ── issue overview ── */
+for (const i of D.issues)
+  $("issueOverview").append(el("a", { href: `#issue-${i.id}` }, badge(i.severity), el("span", { class: "area" }, i.area), el("span", {}, i.title)));
+
+/* ── compare / renders ── */
+$("compare").append(img("compare0", "photo_0（方位 −27°，仰角 6.7°）"), img("compare1", "photo_1（方位 −7.3°，仰角 4.1°）"));
+$("renders").append(img("front", "正前方"), img("front_left", "左前（物体左侧）"), img("front_right", "右前"),
+  img("top", "顶视（DualCraft 自带相机，取景只拍到柜顶一部分）"));
+
+/* ── joints ── */
+const jointRows = D.urdf.joints.map(j => [
+  j.name, j.type, j.parent, j.child, j.xyz.map(v => v.toFixed(3)).join(", "),
+  j.type === "revolute" ? j.axis.map(v => v === 0 ? "0" : v > 0 ? "+" + v : String(v)).join(" ") : "—",
+  j.type === "revolute" ? `${(j.lower * 180 / Math.PI).toFixed(0)}° … ${(j.upper * 180 / Math.PI).toFixed(0)}°` : "—",
+]);
+table("jointTable", ["关节", "类型", "父", "子", "原点 xyz（父系，m）", "轴", "范围"],
+  jointRows.map(r => ({ cells: r, cls: r[1] === "fixed" ? "dim" : "" })));
+$("poseChecks").append(
+  img("pose_t07_door_2", "第 7 轮 pose_check：door_2 按占位 +z 转到 90°：门往柜内转、穿过柜体（左图左下那扇门不见了，右图侧视门板从柜背穿出）"),
+  img("pose_t10_door_2", "第 10 轮：door_2 改成 −z 后，门向外打开"),
+  img("pose_t07_door_4", "第 7 轮：door_4 同样问题"),
+  img("pose_t10_door_4", "第 10 轮：door_4 改成 −z 后"));
+
+/* ── issues ── */
+const linkNames = Object.keys(D.urdf.links);
+function massTable() {
+  const rows = linkNames.map(n => {
+    const l = D.urdf.links[n], b = l.bounds, sz = b ? b[1].map((v, k) => v - b[0][k]) : null;
+    const vol = sz ? sz[0] * sz[1] * sz[2] : null;
+    return [n, sz ? sz.map(v => v.toFixed(3)).join(" × ") : "—", fmt(vol, 4), fmt(vol * 400, 1), fmt(l.mass, 2)];
+  });
+  const total = linkNames.reduce((a, n) => a + (D.urdf.links[n].mass || 0), 0);
+  rows.push({ cells: ["合计", "", "", "", total.toFixed(1)], cls: "" });
+  rows.push({ cells: ["蓝图估计", "", "", "", String(est.mass_kg ?? "—")], cls: "dim" });
+  const tb = table(el("table"), ["link", "包围盒（m）", "体积 m³", "× 400 kg/m³", "URDF mass kg"], rows, [2, 3, 4]);
+  return el("div", { class: "table-wrap" }, tb);
+}
+function keyframeTable() {
+  const rows = D.keyframes.map(k => ({ cells: [String(k.seq), k.file, k.used ? "用了" : "没用", k.azimuth != null ? `${k.azimuth}°` : "—", k.elevation != null ? `${k.elevation}°` : "—", k.reason || ""], cls: k.used ? "" : "dim" }));
+  return el("div", { class: "table-wrap" }, table(el("table"), ["seq", "文件", "交给模型", "方位角", "仰角", "备注"], rows));
+}
+for (const i of D.issues) {
+  const card = el("div", { class: `card issue sev-border-${i.severity}`, id: `issue-${i.id}` },
+    el("div", { class: "issue-head" }, badge(i.severity), el("h3", {}, i.title), el("span", { class: "sub" }, i.area)),
+    el("dl", {}, el("dt", {}, "现象"), el("dd", {}, i.detail), el("dt", {}, "证据"), el("dd", {}, i.evidence), el("dt", {}, "下一步"), el("dd", {}, i.next)));
+  if (i.table === "mass") card.append(massTable());
+  if (i.table === "keyframes") card.append(keyframeTable());
+  if (i.viewer === "pieces") card.append(el("div", { class: "row" }, el("button", { class: "plain", "data-goto": "pieces" }, "在 3D 视图里按连通块着色 ↑")));
+  const ims = (i.images || []).map(k => img(k, ({ rev1_front: "第 1 版（第 1 轮）正视：同心圆年轮", front: "最终版（第 4 版）正视", pose_t07_door_3: "pose_check door_3" })[k] || k)).filter(Boolean);
+  if (ims.length) card.append(el("div", { class: ims.length > 1 ? "grid2" : "grid3" }, ims));
+  $("issues").append(card);
+}
+
+/* ── inputs ── */
+for (const k of D.keyframes) {
+  const facts = el("dl", { class: "kv" },
+    el("dt", {}, "关键帧"), el("dd", {}, `seq ${k.seq}`),
+    el("dt", {}, "参考图"), el("dd", {}, k.used ? k.file : `${k.file}（没交给模型）`),
+    ...(k.used ? [el("dt", {}, "方位 / 仰角"), el("dd", {}, `${k.azimuth}° / ${k.elevation}°`)] : [el("dt", {}, "原因"), el("dd", {}, k.reason || "")]));
+  const view = D.handoff.views.find(v => v.keyframe === k.seq);
+  if (view) facts.append(el("dt", {}, "相机距离"), el("dd", {}, `${view.distance} m`), el("dt", {}, "裁剪框"), el("dd", {}, view.crop.join(", ")));
+  $("keyframes").append(el("div", { class: `card kf-card ${k.used ? "" : "unused"}` },
+    el("div", { class: "kf" },
+      k.boxed ? el("figure", {}, el("img", { src: k.boxed, alt: `seq ${k.seq}` }), el("figcaption", {}, "关键帧 + mask 框")) : el("div"),
+      el("div", { style: "display:flex;flex-direction:column;gap:8px" },
+        k.crop ? el("figure", {}, el("img", { src: k.crop, alt: k.file, style: "max-height:300px;object-fit:contain" }), el("figcaption", {}, "裁出的参考图")) : null, facts))));
+}
+const sz = D.handoff.size;
+$("sizeKv").append(
+  el("dt", {}, "宽（正面左右）"), el("dd", {}, `${sz.width} m`), el("dt", {}, "深（前后）"), el("dd", {}, `${sz.depth} m`),
+  el("dt", {}, "高"), el("dd", {}, `${sz.height} m`), el("dt", {}, "measured"), el("dd", {}, String(sz.measured)),
+  el("dt", {}, "容差"), el("dd", {}, `±${D.handoff.envelope_tolerance * 100}%`), el("dt", {}, "备注"), el("dd", {}, sz.note));
+const of = D.handoff.object_frame;
+$("frameKv").append(
+  el("dt", {}, "原点 xy"), el("dd", {}, of.origin_xy.join(", ")), el("dt", {}, "底 / 顶 z"), el("dd", {}, `${of.bottom_z} / ${of.top_z}`),
+  el("dt", {}, "+X 前"), el("dd", {}, of.front.join(", ")), el("dt", {}, "+Y 左"), el("dd", {}, of.left.join(", ")),
+  el("dt", {}, "外包拟合"), el("dd", {}, of.footprint_fit), el("dt", {}, "正面判定"), el("dd", {}, of.front_rule));
+
+/* ── blueprint ── */
+$("bpText").textContent = D.blueprint.text;
+const VIS = { visible: "看得见", partial: "部分", inferred: "推断" };
+table("bpTable", ["零件", "父", "可动", "可见性", "颜色", "描述"], D.blueprint.parts.map(p => ({
+  cells: [p.id, p.parent || "—", p.movable ? "是" : "", el("span", { style: "white-space:nowrap" }, VIS[p.visibility] || p.visibility),
+    el("span", {}, el("span", { class: "swatch", style: `background:${p.appearance.hex}` }), `${p.appearance.colour} ${p.appearance.hex}`), p.description],
+  cls: p.visibility === "inferred" ? "dim" : "" })));
+
+/* ── process ── */
+const maxT = Math.max(...D.turns.map(x => x.llm_s + x.tool_s));
+const turnRows = [];
+const evByTurn = {};
+for (const e of D.events) (evByTurn[e.turn] = evByTurn[e.turn] || []).push(e);
+for (const e of evByTurn[0] || []) turnRows.push({ cells: [el("span", { class: "event" }, `开始前 · ${e.text}`)], span: 7 });
+let cum = 0;
+for (const x of D.turns) {
+  cum += x.cost;
+  turnRows.push([String(x.turn), el("span", {}, x.tools.map(n => el("span", { class: "chip" }, n))),
+    el("span", { style: "white-space:nowrap" }, el("span", { class: "bar", style: `width:${(x.llm_s / maxT * 140).toFixed(0)}px` }), el("span", { class: "bar tool", style: `width:${(x.tool_s / maxT * 140).toFixed(0)}px` })),
+    `${x.llm_s.toFixed(0)} + ${x.tool_s.toFixed(0)} s`, `$${x.cost.toFixed(3)}`, `$${cum.toFixed(2)}`, `${(x.ctx / 1000).toFixed(1)}K / ${(x.cached / 1000).toFixed(1)}K`]);
+  for (const e of evByTurn[x.turn] || []) turnRows.push({ cells: [el("span", { class: "event" }, `↳ ${e.text}`)], span: 7 });
+}
+table("turnTable", ["轮", "工具调用", "时间", "模型 + 工具", "本轮", "累计", "上下文 / 缓存"], turnRows, [3, 4, 5, 6]);
+const ST = { open: "未关", resolved: "已解决", dropped: "放弃" };
+table("ledgerTable", ["条目", "类型", "零件", "开 → 关（轮）", "状态", "内容"], D.ledger.map(l => ({
+  cells: [l.id, l.kind, l.parts.join(", "), `${l.opened_turn} → ${l.closed_turn ?? "—"}`, el("span", { style: "white-space:nowrap" }, ST[l.status] || l.status), l.note],
+  cls: l.status === "open" ? "" : "dim" })));
+
+$("foot").innerHTML = `由 <code>scripts/tools/build_dualcraft_run_page.py</code> 生成；数据来自 <code>output/dualcraft/${D.run}/</code>（服务器 <code>/mnt/data/usr/wzt/submodules/dualcraft/dual-craft/output/demo/${D.run}</code> 的本地副本），问题清单来自 <code>docs/dualcraft/obj0038_issues.json</code>。`;
+
+/* ── lightbox ── */
+const lb = $("lightbox");
+document.addEventListener("click", e => {
+  if (e.target.tagName === "IMG" && e.target.closest("figure")) { lb.querySelector("img").src = e.target.src; lb.classList.add("open"); }
+  const go = e.target.closest("[data-goto]");
+  if (go) { setMode(go.dataset.goto); $("canvas").scrollIntoView({ behavior: "smooth", block: "center" }); }
+});
+lb.addEventListener("click", () => lb.classList.remove("open"));
+document.addEventListener("keydown", e => { if (e.key === "Escape") lb.classList.remove("open"); });
+
+/* ── 3D viewer ── */
+function decode(b64, Type) {
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Type(bytes.buffer);
+}
+// column-major 4x4
+function mul(a, b) {
+  const o = new Float32Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; }
+  return o;
+}
+const ident = () => new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+const translate = v => { const m = ident(); m[12] = v[0]; m[13] = v[1]; m[14] = v[2]; return m; };
+function axisAngle(axis, a) {
+  const n = Math.hypot(...axis) || 1, x = axis[0] / n, y = axis[1] / n, z = axis[2] / n, c = Math.cos(a), s = Math.sin(a), t1 = 1 - c;
+  return new Float32Array([t1*x*x+c, t1*x*y+s*z, t1*x*z-s*y, 0, t1*x*y-s*z, t1*y*y+c, t1*y*z+s*x, 0, t1*x*z+s*y, t1*y*z-s*x, t1*z*z+c, 0, 0,0,0,1]);
+}
+const rpy = r => mul(axisAngle([0,0,1], r[2]), mul(axisAngle([0,1,0], r[1]), axisAngle([1,0,0], r[0])));
+function perspective(fov, aspect, near, far) {
+  const f = 1 / Math.tan(fov / 2), nf = 1 / (near - far);
+  return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
+}
+const sub = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
+const dot = (a, b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const norm = v => { const n = Math.hypot(...v) || 1; return [v[0]/n, v[1]/n, v[2]/n]; };
+function lookAt(eye, target, up) {
+  const f = norm(sub(target, eye)), s = norm(cross(f, up)), u = cross(s, f);
+  return new Float32Array([s[0],u[0],-f[0],0, s[1],u[1],-f[1],0, s[2],u[2],-f[2],0, -dot(s,eye),-dot(u,eye),dot(f,eye),1]);
+}
+
+const canvas = $("canvas");
+const gl = canvas.getContext("webgl", { antialias: true });
+const LINK_COLOURS = { housing: [176,136,82], interior_shelves: [120,170,210], door_1: [214,96,77], door_2: [92,170,110], door_3: [235,170,60], door_4: [140,110,200],
+  handle_left: [40,40,40], handle_right: [40,40,40], pull_knob_left: [40,40,40], pull_knob_right: [40,40,40] };
+const NOTES = {
+  texture: "顶点色是把 OBJ 的烘焙贴图按 UV 采样到顶点上得到的，细节比 Blender 渲染粗。",
+  link: "每个 URDF link 一种颜色；拉手和旋钮是门的 fixed 子 link。",
+  pieces: "每个互不相连的网格块一种颜色（顶点按位置焊接后求连通分量）。柜体 19 块、隔板 5 块，门 9–14 块拼板。",
+};
+let mode = "texture";
+const angles = {};
+const view = { yaw: 0.62, pitch: 0.22, dist: 5.2, target: [0, 0, 1.12] };
+const home = { ...view, target: view.target.slice() };
+
+if (!gl) {
+  canvas.parentElement.append(el("div", { style: "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#555" }, "浏览器不支持 WebGL"));
+} else {
+  const vs = `attribute vec3 a_pos,a_nrm,a_col;uniform mat4 u_mvp,u_model;uniform float u_lit;uniform vec3 u_tint;uniform float u_useTint;varying vec3 v_col;
+    void main(){vec3 n=normalize(mat3(u_model)*a_nrm);
+      float l=0.38+0.42*abs(dot(n,normalize(vec3(0.6,0.35,0.7))))+0.2*abs(dot(n,normalize(vec3(-0.3,-0.8,0.2))));
+      vec3 c=mix(a_col,u_tint,u_useTint);v_col=c*mix(1.0,l,u_lit);gl_Position=u_mvp*u_model*vec4(a_pos,1.0);}`;
+  const fs = `precision mediump float;varying vec3 v_col;void main(){gl_FragColor=vec4(v_col,1.0);}`;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog);
+  const L = { pos: gl.getAttribLocation(prog, "a_pos"), nrm: gl.getAttribLocation(prog, "a_nrm"), col: gl.getAttribLocation(prog, "a_col"),
+    mvp: gl.getUniformLocation(prog, "u_mvp"), model: gl.getUniformLocation(prog, "u_model"), lit: gl.getUniformLocation(prog, "u_lit"),
+    tint: gl.getUniformLocation(prog, "u_tint"), useTint: gl.getUniformLocation(prog, "u_useTint") };
+  const buf = data => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); return b; };
+  const meshes = {};
+  for (const [name, m] of Object.entries(D.meshes))
+    meshes[name] = { count: m.count, pos: buf(decode(m.positions, Float32Array)), nrm: buf(decode(m.normals, Float32Array)),
+      col: buf(decode(m.colours, Uint8Array)), piece: buf(decode(m.piece_colours, Uint8Array)) };
+
+  // grid + axes
+  const lines = [], lineCols = [];
+  for (let i = -15; i <= 15; i++) {
+    const v = i * 0.1, c = i % 5 === 0 ? [150,158,168] : [205,210,216];
+    lines.push(v,-1.5,0, v,1.5,0, -1.5,v,0, 1.5,v,0); lineCols.push(...c,...c,...c,...c);
+  }
+  const AX = [[220,50,50],[40,150,40],[37,99,235]];
+  for (let a = 0; a < 3; a++) { const tip = [0,0,0]; tip[a] = 0.6; lines.push(0,0,0.001, tip[0],tip[1],tip[2]+0.001); lineCols.push(...AX[a],...AX[a]); }
+  const grid = { pos: buf(new Float32Array(lines)), col: buf(new Uint8Array(lineCols)), count: lines.length / 3 };
+  const labels = ["X","Y","Z"].map((n, a) => { const s = el("span", { class: `axis-label axis-${n.toLowerCase()}` }, n); $("labels").append(s); return s; });
+
+  const children = {};
+  for (const j of D.urdf.joints) (children[j.parent] = children[j.parent] || []).push(j);
+  const childSet = new Set(D.urdf.joints.map(j => j.child));
+  const roots = linkNames.filter(n => !childSet.has(n));
+  function worldTransforms() {
+    const out = {};
+    const walk = (name, M) => {
+      out[name] = M;
+      for (const j of children[name] || []) {
+        let T = mul(M, mul(translate(j.xyz), rpy(j.rpy)));
+        if (j.type === "revolute" || j.type === "continuous") T = mul(T, axisAngle(j.axis, angles[j.name] || 0));
+        else if (j.type === "prismatic") T = mul(T, translate(j.axis.map(v => v * (angles[j.name] || 0))));
+        walk(j.child, T);
+      }
+    };
+    roots.forEach(r => walk(r, ident()));
+    return out;
+  }
+  const eye = () => [view.target[0] + view.dist * Math.cos(view.pitch) * Math.cos(view.yaw),
+    view.target[1] + view.dist * Math.cos(view.pitch) * Math.sin(view.yaw), view.target[2] + view.dist * Math.sin(view.pitch)];
+  let pending = false, hoverLink = null;
+  const request = () => { if (!pending) { pending = true; requestAnimationFrame(draw); } };
+  function attrib(b, loc, size, type, normed) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, type, normed, 0, 0); }
+  function draw() {
+    pending = false;
+    const dpr = window.devicePixelRatio || 1, w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.clientHeight * dpr);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    gl.viewport(0, 0, w, h); gl.clearColor(0.914, 0.925, 0.937, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(prog); gl.enable(gl.DEPTH_TEST);
+    const mvp = mul(perspective(Math.PI / 4, w / h, 0.02, 60), lookAt(eye(), view.target, [0,0,1]));
+    gl.uniformMatrix4fv(L.mvp, false, mvp);
+    // grid
+    gl.uniformMatrix4fv(L.model, false, ident()); gl.uniform1f(L.lit, 0); gl.uniform1f(L.useTint, 0);
+    attrib(grid.pos, L.pos, 3, gl.FLOAT, false); attrib(grid.col, L.col, 3, gl.UNSIGNED_BYTE, true);
+    gl.disableVertexAttribArray(L.nrm); gl.vertexAttrib3f(L.nrm, 0, 0, 1);
+    gl.drawArrays(gl.LINES, 0, grid.count);
+    // links
+    const W = worldTransforms();
+    gl.uniform1f(L.lit, 1);
+    for (const [name, m] of Object.entries(meshes)) {
+      gl.uniformMatrix4fv(L.model, false, W[name] || ident());
+      attrib(m.pos, L.pos, 3, gl.FLOAT, false); attrib(m.nrm, L.nrm, 3, gl.FLOAT, false);
+      attrib(mode === "pieces" ? m.piece : m.col, L.col, 3, gl.UNSIGNED_BYTE, true);
+      const tint = mode === "link" ? (LINK_COLOURS[name] || [160,160,160]) : null;
+      const hl = hoverLink === name;
+      gl.uniform1f(L.useTint, tint || hl ? 1 : 0);
+      const c = hl ? [15,98,254] : tint || [0,0,0];
+      gl.uniform3f(L.tint, c[0] / 255, c[1] / 255, c[2] / 255);
+      gl.drawArrays(gl.TRIANGLES, 0, m.count);
+    }
+    labels.forEach((s, a) => {
+      const p = [0,0,0]; p[a] = 0.66;
+      const x = mvp[0]*p[0]+mvp[4]*p[1]+mvp[8]*p[2]+mvp[12], y = mvp[1]*p[0]+mvp[5]*p[1]+mvp[9]*p[2]+mvp[13], ww = mvp[3]*p[0]+mvp[7]*p[1]+mvp[11]*p[2]+mvp[15];
+      s.hidden = ww <= 0; s.style.transform = `translate(${((x/ww)*.5+.5)*canvas.clientWidth}px,${(.5-(y/ww)*.5)*canvas.clientHeight}px)`;
+    });
+  }
+  let drag = null;
+  canvas.addEventListener("contextmenu", e => e.preventDefault());
+  canvas.addEventListener("mousedown", e => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; canvas.classList.add("dragging"); });
+  window.addEventListener("mouseup", () => { drag = null; canvas.classList.remove("dragging"); });
+  window.addEventListener("mousemove", e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+    if (drag.pan) {
+      const f = norm(sub(view.target, eye())), r = norm(cross(f, [0,0,1])), u = cross(r, f), s = view.dist * 0.9 / canvas.clientHeight;
+      for (let i = 0; i < 3; i++) view.target[i] += (-dx * r[i] + dy * u[i]) * s;
+    } else { view.yaw -= dx * 0.008; view.pitch = Math.max(-1.45, Math.min(1.45, view.pitch + dy * 0.008)); }
+    request();
+  });
+  canvas.addEventListener("wheel", e => { e.preventDefault(); view.dist = Math.max(0.5, Math.min(20, view.dist * Math.exp(e.deltaY * 0.0012))); request(); }, { passive: false });
+  window.addEventListener("resize", request);
+  $("resetCam").addEventListener("click", () => { Object.assign(view, { ...home, target: home.target.slice() }); request(); });
+  window.__viewer = { request, view, angles, setHover: n => { hoverLink = n; request(); } };
+  request();
+}
+
+// sliders
+const revolute = D.urdf.joints.filter(j => j.type === "revolute");
+const sliderInputs = [];
+for (const j of revolute) {
+  angles[j.name] = 0;
+  const val = el("span", { class: "val" }, "0°");
+  const input = el("input", { type: "range", min: String(j.lower), max: String(j.upper), step: "0.01", value: "0" });
+  input.addEventListener("input", () => { angles[j.name] = +input.value; val.textContent = `${Math.round(+input.value * 180 / Math.PI)}°`; window.__viewer && window.__viewer.request(); });
+  sliderInputs.push(input);
+  $("sliders").append(el("label", { class: "slider" }, el("span", {}, j.child), input, val));
+}
+const setAll = f => sliderInputs.forEach((s, i) => { s.value = String(revolute[i].lower + f * (revolute[i].upper - revolute[i].lower)); s.dispatchEvent(new Event("input")); });
+$("openAll").addEventListener("click", () => setAll(1));
+$("closeAll").addEventListener("click", () => setAll(0));
+
+function setMode(m) {
+  mode = m;
+  for (const b of $("colourMode").children) b.classList.toggle("on", b.dataset.mode === m);
+  $("colourNote").textContent = NOTES[m];
+  window.__viewer && window.__viewer.request();
+}
+$("colourMode").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setMode(b.dataset.mode); });
+setMode("texture");
+
+// link table
+const lt = table("linkTable", ["link", "质量 kg", "面", "连通块"], linkNames.map(n => {
+  const l = D.urdf.links[n], m = D.meshes[n];
+  return { cells: [el("span", {}, el("span", { class: "swatch", style: `background:rgb(${(LINK_COLOURS[n] || [160,160,160]).join(",")})` }), n), fmt(l.mass, 2), String(m.faces), String(m.components)] };
+}), [1, 2, 3]);
+[...lt.tBodies[0].rows].forEach((row, i) => {
+  row.addEventListener("mouseenter", () => { row.classList.add("hover"); window.__viewer && window.__viewer.setHover(linkNames[i]); });
+  row.addEventListener("mouseleave", () => { row.classList.remove("hover"); window.__viewer && window.__viewer.setHover(null); });
+});
+})();
+</script>
+</body>
+</html>

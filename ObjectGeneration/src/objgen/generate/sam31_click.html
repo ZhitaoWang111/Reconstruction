@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SAM3.1 · 点击选物</title>
+<style>
+  :root {color-scheme:light; font-family:system-ui,-apple-system,"Noto Sans CJK SC",sans-serif;color:#23332f;background:#f2f5f3}
+  * {box-sizing:border-box} body {margin:0} header {height:78px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:white;border-bottom:1px solid #dce4df}
+  h1 {font-size:21px;margin:0 0 4px} header p {margin:0;color:#66776e;font-size:13px}.tag {font-size:12px;background:#eef6f1;border:1px solid #d5e6dc;border-radius:20px;padding:7px 13px;color:#35664f}
+  main {display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:22px;padding:22px;max-width:1800px;margin:auto}
+  .viewer {background:#e3e9e5;border:1px solid #d4ded7;border-radius:14px;overflow:hidden;min-width:0;display:flex;flex-direction:column}
+  .viewer-top {background:#fff;padding:12px 17px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#607068}
+  .canvas-wrap {height:calc(100vh - 181px);min-height:360px;display:flex;align-items:center;justify-content:center;padding:12px}
+  canvas {max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;cursor:crosshair;box-shadow:0 2px 14px #223b3222;touch-action:manipulation}
+  aside {display:flex;flex-direction:column;gap:16px}.card {background:white;border:1px solid #dce4df;border-radius:14px;padding:20px}
+  .step {font-size:12px;color:#547361;font-weight:600;letter-spacing:1px;margin-bottom:9px} h2 {font-size:17px;margin:0 0 14px}
+  p,li {font-size:14px;line-height:1.7} .muted {color:#6b7970} .status {padding:13px;border-radius:9px;background:#f0f5f2;font-size:14px;line-height:1.7;min-height:74px}
+  .status.error {background:#fff1ee;color:#a23b25}.status.success {background:#e5f5eb;color:#12683d}
+  .modes {display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.modes label {cursor:pointer;border:1px solid #d6e0d9;border-radius:8px;padding:10px 5px;text-align:center;font-size:13px}
+  .positive {color:#137447}.negative {color:#b74a22} .modes input {accent-color:#1e8153}
+  .buttons {display:flex;gap:8px} button {font:inherit;font-size:14px;padding:10px 14px;border-radius:8px;border:1px solid #d3ded6;background:#fff;color:#314b3c;cursor:pointer}
+  button:hover:enabled {background:#f1f7f3} button:disabled {opacity:.42;cursor:not-allowed}.buttons button {flex:1}
+  #confirm {display:block;width:100%;background:#187649;color:white;border:none;padding:13px 10px;font-weight:600;margin-top:14px} #confirm:hover:enabled {background:#115d39}
+  #cancel {display:block;width:100%;margin-top:9px;color:#66776e}.count {font-size:13px;margin:13px 0;color:#63776a}
+  .note {font-size:12px;line-height:1.7;color:#718077;margin:12px 0 0} .keys {margin:0;padding-left:18px;color:#596c5f} .foot {font-size:12px;line-height:1.7;color:#718077;padding:0 6px}
+  @media(max-width:850px) {main {grid-template-columns:1fr;padding:12px}.canvas-wrap {height:65vh} header {padding:0 16px}.tag {display:none} aside {display:grid;grid-template-columns:1fr 1fr}.foot {grid-column:1/-1}}
+  @media(max-width:560px) {aside {display:flex}.viewer-top {font-size:11px}}
+</style>
+<header><div><h1>SAM3.1 · 点击选物</h1><p>选择一个物体，确认分割后继续生成三维资产</p></div><span class="tag">本地交互 · 图片不会上传</span></header>
+<main>
+  <section class="viewer" aria-label="图片与分割预览">
+    <div class="viewer-top"><span id="image-info">正在读取图片…</span><label><input id="show-mask" type="checkbox" checked> 显示绿色 mask</label></div>
+    <div class="canvas-wrap"><canvas id="photo" aria-label="点击图片添加分割提示点"></canvas></div>
+  </section>
+  <aside>
+    <section class="card"><div class="step">01 / 点击选择</div><h2>点在目标物体内部</h2>
+      <div class="modes"><label class="positive"><input type="radio" name="mode" value="1" checked> 正点 · 保留</label><label class="negative"><input type="radio" name="mode" value="0"> 负点 · 排除</label></div>
+      <ul class="keys"><li>左键：添加当前类型的点</li><li>右键：快速添加负点</li><li>每次点击后自动更新分割</li></ul>
+      <p class="count" id="count">正点 0 · 负点 0</p>
+      <div class="buttons"><button id="undo" disabled>撤销上一点</button><button id="clear" disabled>清空重选</button></div>
+    </section>
+    <section class="card"><div class="step">02 / 检查并确认</div><h2>绿色区域就是生成范围</h2>
+      <div id="status" class="status" role="status" aria-live="polite">正在连接本地分割服务…</div>
+      <p class="note">漏掉物体部分时补正点；包含了背景或其他物体时补负点。确认前可以反复调整；请在显示绿色 mask 时确认。</p>
+      <button id="confirm" disabled>确认分割，继续生成</button><button id="cancel">取消本次任务</button>
+    </section>
+    <p class="foot">确认后自动释放 SAM3.1，继续运行启动命令所包含的后续阶段。后续进度请查看终端。<br>关闭或刷新此页面将取消尚未确认的任务。</p>
+  </aside>
+</main>
+<script>
+const canvas = document.getElementById('photo'), ctx = canvas.getContext('2d');
+const statusBox = document.getElementById('status');
+const buttons = Object.fromEntries(['undo','clear','confirm','cancel'].map(id => [id,document.getElementById(id)]));
+let state = null, posting = false, finished = false, pollTimer = null;
+let original = new Image(), preview = null, previewRevision = -1, loadingRevision = -1, localError = '';
+const base = new URL('.', window.location.href);
+const endpoint = name => new URL(name, base);
+
+function draw() {
+  if (!original.complete || !original.naturalWidth) return;
+  canvas.width = original.naturalWidth; canvas.height = original.naturalHeight;
+  const show = document.getElementById('show-mask').checked;
+  ctx.drawImage(show && preview && state && previewRevision === state.revision ? preview : original, 0, 0, canvas.width, canvas.height);
+  for (const [i,p] of (state?.points || []).entries()) {
+    const x=p.x*canvas.width,y=p.y*canvas.height;
+    ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);ctx.fillStyle=p.label?'#12bb6e':'#ef623e';ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='#fff';ctx.stroke();
+    ctx.font='bold 13px sans-serif';ctx.fillStyle='white';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.label?'+':'−',x,y);
+  }
+}
+function display() {
+  if (!state) return;
+  const busy = posting || ['loading','segmenting'].includes(state.phase);
+  const closed = ['confirmed','cancelled','failed'].includes(state.phase);
+  buttons.undo.disabled = buttons.clear.disabled = busy || closed || !state.points.length;
+  buttons.confirm.disabled = busy || closed || !state.can_confirm || previewRevision !== state.revision || !original.naturalWidth || !document.getElementById('show-mask').checked;
+  buttons.cancel.disabled = posting || closed;
+  canvas.style.cursor = busy ? 'wait' : closed ? 'default' : 'crosshair';
+  document.getElementById('count').textContent = `正点 ${state.points.filter(p=>p.label===1).length} · 负点 ${state.points.filter(p=>p.label===0).length}`;
+  const texts = {loading:'正在加载 SAM3.1，完成后即可点击图片。',ready:'请点击目标内部；至少添加一个正点。',segmenting:'正在根据点击点分割，请稍候…',preview:'请检查绿色区域。可以继续补点，满意后确认。',confirmed:'分割已确认。流水线将继续运行，请查看终端进度。此页面可以关闭。',cancelled:'已取消本次任务，后续生成不会启动。',failed:'分割服务启动失败，请查看终端和 sam31/run.log。'};
+  statusBox.textContent = localError || state.error || texts[state.phase] || state.phase;
+  statusBox.className = 'status' + ((localError || state.error || state.phase==='failed') ? ' error' : state.phase==='confirmed' ? ' success' : '');
+  document.getElementById('image-info').textContent = `${state.image_size[0]} × ${state.image_size[1]} · 点击坐标自动映射到原图`;
+  draw();
+}
+async function applyState(next) {
+  if (finished) return;
+  if (state && next.revision < state.revision) return;
+  state = next;
+  if (['confirmed','cancelled','failed'].includes(state.phase)) {finished=true;clearTimeout(pollTimer);}
+  if (state.has_preview && state.phase==='preview' && previewRevision!==state.revision && loadingRevision!==state.revision) {
+    const revision=state.revision;
+    loadingRevision=revision;
+    const img=new Image();
+    img.onload=()=>{if(state.revision===revision){preview=img;previewRevision=revision;display();} loadingRevision=-1;};
+    img.onerror=()=>{loadingRevision=-1;localError='预览图片加载失败，正在尝试重新读取。';display();};
+    img.src=endpoint(`preview?revision=${revision}`).href;
+  }
+  display();
+}
+async function post(action, data) {
+  if (posting || finished) return;
+  posting=true;localError='';display();
+  try {
+    const response=await fetch(endpoint(action),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const next=await response.json();
+    if(!response.ok) throw new Error(next.error || '操作失败');
+    await applyState(next);
+  } catch(error) {localError=error.message;}
+  finally {posting=false;display();}
+}
+async function poll() {
+  if(finished) return;
+  try {
+    if(!posting){const response=await fetch(endpoint('state'));if(!response.ok)throw new Error('连接失败');await applyState(await response.json());}
+  } catch(error) {
+    if(!finished){localError='本地服务已断开，请查看终端。不会自动继续生成。';display();}
+  }
+  if(!finished)pollTimer=setTimeout(poll,500);
+}
+canvas.addEventListener('contextmenu', event=>event.preventDefault());
+canvas.addEventListener('pointerdown', event=>{
+  if(!state || posting || !['ready','preview'].includes(state.phase)) return;
+  if(event.button!==0 && event.button!==2) return;
+  event.preventDefault();
+  const rect=canvas.getBoundingClientRect(), x=(event.clientX-rect.left)/rect.width,y=(event.clientY-rect.top)/rect.height;
+  const label=event.button===2?0:Number(document.querySelector('input[name="mode"]:checked').value);
+  post('points',{revision:state.revision,points:[...state.points,{x,y,label}]});
+});
+buttons.undo.onclick=()=>post('points',{revision:state.revision,points:state.points.slice(0,-1)});
+buttons.clear.onclick=()=>post('points',{revision:state.revision,points:[]});
+buttons.confirm.onclick=()=>post('confirm',{revision:state.revision});
+buttons.cancel.onclick=()=>post('cancel',{});
+document.getElementById('show-mask').onchange=display;
+window.addEventListener('pagehide',()=>{if(!finished)navigator.sendBeacon(endpoint('cancel'),new Blob(['{}'],{type:'application/json'}));});
+original.onload=()=>{draw();display();};original.src=endpoint('image').href;poll();
+</script>
+</html>

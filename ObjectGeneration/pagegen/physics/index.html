@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>物理与外观参数 · 审查</title>
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1 id="pageTitle">物理与外观参数审查</h1>
+    <p class="lede" id="pageLede">模型估计的物理参数（质量、摩擦、碰撞）和外观参数（粗糙度、金属度），结合三维网格和关键帧图像对照。各参数怎么来、怎么导出成 USD，见 <a href="../generation/index.html">物体生成与导出方案</a>。</p>
+  </div>
+  <dl class="totals">
+    <dt>物体</dt><dd id="objectCount">—</dd>
+    <dt>model</dt><dd id="countModel">—</dd>
+    <dt>clamped</dt><dd id="countClamped">—</dd>
+    <dt>fallback</dt><dd id="countFallback">—</dd>
+  </dl>
+</header>
+
+
+
+<main>
+  <div id="viewParams">
+    <aside>
+      <div class="filters">
+        <input id="search" type="search" placeholder="按标签或编号过滤…" aria-label="按标签或编号过滤">
+        <div class="filter-chips">
+          <label class="chip"><input type="checkbox" id="filterKinematic"> 固定安装</label>
+          <label class="chip"><input type="checkbox" id="filterClamped"> clamped</label>
+          <label class="chip"><input type="checkbox" id="filterDecomp"> convexDecomp</label>
+        </div>
+      </div>
+      <ul id="objectList" class="object-list"></ul>
+    </aside>
+
+    <section class="content" id="detail">
+      <div class="detail-head" id="detailHead"></div>
+
+      <div class="viewer">
+        <div class="viewer-bar">
+          <span class="viewer-title">缩放后网格（米）</span>
+          <label class="toggle"><input id="meshGround" type="checkbox" checked> 地面网格</label>
+      <label class="toggle" id="meshFlatLabel" hidden><input id="meshFlat" type="checkbox"> 纯色</label>
+          <button type="button" class="reset" data-reset="mesh">重置视角</button>
+        </div>
+        <div class="stage">
+          <canvas id="meshCanvas" aria-label="缩放后网格三维视图"></canvas>
+          <div class="axis-labels" id="meshAxisLabels" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <div class="keyframes" id="keyframes"></div>
+
+      <div id="facts" class="facts"></div>
+      <p id="fallback" class="fallback" hidden>浏览器不支持 WebGL，无法显示三维视图。</p>
+      <p class="viewer-hint">左键拖动旋转 · 右键拖动平移 · 滚轮缩放</p>
+    </section>
+  </div>
+
+</main>
+
+<script src="physics.js"></script>
+<script src="page.js"></script>
+</body>
+</html>
