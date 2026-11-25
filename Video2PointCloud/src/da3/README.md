@@ -6,7 +6,7 @@ This is an RGB-only reproduction of the official Depth Anything 3 Nested inferen
 
 ## Frozen inputs and versions
 
-- Upstream: `/home/wzt/wzt/CVPR_2027/Video2PointCloud/ThirdParty/depth-anything-3`
+- Upstream: `Submodule/depth-anything-3` at the repository root
 - Upstream commit: `3d835ec1a5802d64a8b8b15f817a1ab54809bfe4`
 - Model: `depth-anything/DA3NESTED-GIANT-LARGE-1.1`, revision `b2359bdf726fb44ef62acca04d629dcf158053e7`
 - The `-1.1` checkpoint is the upstream-recommended replacement for the deprecated original checkpoint after a training-bug fix.

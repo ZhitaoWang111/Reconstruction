@@ -102,7 +102,7 @@ Extract the bounded ScanNet sequence:
 Run the official AMB3R-VO entrypoint:
 
 ```bash
-cd /home/wzt/wzt/CVPR_2027/Video2PointCloud/ThirdParty/amb3r
+cd /home/seer/wzt/Reconstruction/Submodule/amb3r
 CUDA_VISIBLE_DEVICES=0 /home/wzt/.conda/envs/amb3r/bin/python slam/run.py \
   --data_path /home/wzt/wzt/CVPR_2027/Video2PointCloud/data/scannet/scene0000_00_stride10_40f/rgb \
   --demo_name scene0000_00_s0_n40_stride10 \
@@ -114,10 +114,10 @@ CUDA_VISIBLE_DEVICES=0 /home/wzt/.conda/envs/amb3r/bin/python slam/run.py \
 Run the 20-frame metric head and evaluate it:
 
 ```bash
-cd /home/wzt/wzt/CVPR_2027/Video2PointCloud/ThirdParty/amb3r
+cd /home/seer/wzt/Reconstruction/Submodule/amb3r
 CUDA_VISIBLE_DEVICES=0 /home/wzt/.conda/envs/amb3r/bin/python \
   /home/wzt/wzt/CVPR_2027/Video2PointCloud/src/amb3r/run_headless_amb3r.py \
-  --repo /home/wzt/wzt/CVPR_2027/Video2PointCloud/ThirdParty/amb3r \
+  --repo /home/seer/wzt/Reconstruction/Submodule/amb3r \
   --data /home/wzt/wzt/CVPR_2027/Video2PointCloud/data/scannet/scene0000_00_stride10_40f/input \
   --checkpoint /home/wzt/wzt/CVPR_2027/Video2PointCloud/checkpoints/amb3r/amb3r.pt \
   --output /home/wzt/wzt/CVPR_2027/Video2PointCloud/output/amb3r/base_20f_frontend \
@@ -142,7 +142,7 @@ Evaluate either NPZ by selecting `--mode vo` or `--mode base`:
 ```bash
 /home/wzt/.conda/envs/amb3r/bin/python \
   /home/wzt/wzt/CVPR_2027/Video2PointCloud/src/amb3r/evaluate_scannet.py \
-  --repo /home/wzt/wzt/CVPR_2027/Video2PointCloud/ThirdParty/amb3r \
+  --repo /home/seer/wzt/Reconstruction/Submodule/amb3r \
   --data /home/wzt/wzt/CVPR_2027/Video2PointCloud/data/scannet/scene0000_00_stride10_40f/input \
   --prediction /home/wzt/wzt/CVPR_2027/Video2PointCloud/output/amb3r/vo_40f/scene_scene0000_00_s0_n40_stride10_metric_head_results.npz \
   --mode vo \

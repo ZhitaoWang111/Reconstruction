@@ -6,7 +6,7 @@ This is an RGB-only reproduction of the official MapAnything image inference pat
 
 ## Frozen inputs and versions
 
-- Upstream: `/home/wzt/wzt/CVPR_2027/Video2PointCloud/ThirdParty/map-anything`
+- Upstream: `Submodule/map-anything` at the repository root
 - Upstream commit: `3d10cf7a3016fc0f9bb13a071ee66c47b10be0d9`
 - Model: `facebook/map-anything`, revision `a1d87e9086706fb9974f3be5a3e3a0ca5401c5aa`
 - Model file: `/home/wzt/HDD/models/map-anything-a1d87e9/model.safetensors`

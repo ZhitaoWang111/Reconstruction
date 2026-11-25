@@ -7,4 +7,4 @@
 - `single_frame_depth/`: ten-frame AMB3R/DA3 depth comparison.
 - `visualization/`: source and builder for the interactive point-cloud page.
 
-These files call the upstream repositories in `../ThirdParty/`; no local integration code belongs inside an upstream checkout.
+These files call the upstream repositories in the repository-root `../../Submodule/`; no local integration code belongs inside an upstream checkout.

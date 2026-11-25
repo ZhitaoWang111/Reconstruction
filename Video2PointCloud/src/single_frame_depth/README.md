@@ -14,7 +14,7 @@ The models must be run serially to fit the 24 GB GPU:
 
 ```bash
 /home/wzt/.conda/envs/amb3r/bin/python /home/wzt/wzt/CVPR_2027/Video2PointCloud/src/single_frame_depth/run_amb3r_single_frame.py \
-  --repo /home/wzt/wzt/CVPR_2027/Video2PointCloud/ThirdParty/amb3r \
+  --repo /home/seer/wzt/Reconstruction/Submodule/amb3r \
   --data /home/wzt/wzt/CVPR_2027/Video2PointCloud/data/scannet/scene0000_00_uniform500/input \
   --checkpoint /home/wzt/wzt/CVPR_2027/Video2PointCloud/checkpoints/amb3r/amb3r.pt \
   --output /home/wzt/wzt/CVPR_2027/Video2PointCloud/output/single_frame_depth/amb3r

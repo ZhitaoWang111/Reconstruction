@@ -32,14 +32,14 @@ fi
 if [[ ! -f "$reference/amb3r_frontend_metric_results.npz" ]]; then
   echo 'Running first-20 RGB metric-scale reference'
   "${runner[@]}" "$module_root/src/amb3r/run_headless_amb3r.py" \
-    --repo "$module_root/ThirdParty/amb3r" --data "$data/input" \
+    --repo "$project_root/Submodule/amb3r" --data "$data/input" \
     --checkpoint "$checkpoint" --output "$reference" \
     --num-frames 20 --frontend-only --sdpa-attention > "$logs/frontend.log" 2>&1
 fi
 if [[ ! -f "$prediction" ]]; then
   echo 'Running official AMB3R-VO on the 500 RGB frames'
   "${runner[@]}" "$module_root/src/amb3r/run_vo_headless.py" \
-    --repo "$module_root/ThirdParty/amb3r" --data "$data/rgb" \
+    --repo "$project_root/Submodule/amb3r" --data "$data/rgb" \
     --checkpoint "$checkpoint" --output "$geometry" --sdpa-attention \
     > "$logs/vo.log" 2>&1
 fi

@@ -1,20 +1,62 @@
 [submodule "sam3"]
-	path = InstanceRecognition/ThirdParty/SAM3
+	path = Submodule/SAM3
 	url = https://github.com/facebookresearch/sam3.git
 	ignore = untracked
 [submodule "wedetect"]
-	path = InstanceRecognition/ThirdParty/WeDetect
+	path = Submodule/WeDetect
 	url = https://github.com/WeChatCV/WeDetect.git
 	ignore = untracked
 [submodule "amb3r"]
-	path = Video2PointCloud/ThirdParty/amb3r
+	path = Submodule/amb3r
 	url = https://github.com/HengyiWang/amb3r.git
 	ignore = untracked
 [submodule "depth-anything-3"]
-	path = Video2PointCloud/ThirdParty/depth-anything-3
+	path = Submodule/depth-anything-3
 	url = https://github.com/ByteDance-Seed/Depth-Anything-3.git
 	ignore = untracked
 [submodule "map-anything"]
-	path = Video2PointCloud/ThirdParty/map-anything
+	path = Submodule/map-anything
 	url = https://github.com/facebookresearch/map-anything.git
+	ignore = untracked
+[submodule "pytorch3d"]
+	path = Submodule/pytorch3d
+	url = https://github.com/facebookresearch/pytorch3d.git
+[submodule "utils3d"]
+	path = Submodule/utils3d
+	url = https://github.com/EasternJournalist/utils3d.git
+[submodule "sam-3d-objects"]
+	path = Submodule/sam-3d-objects
+	url = https://github.com/facebookresearch/sam-3d-objects.git
+[submodule "mcp-for-blender"]
+	path = Submodule/mcp-for-blender
+	url = https://github.com/ahujasid/mcp-for-blender.git
+[submodule "dual-craft"]
+	path = Submodule/dual-craft
+	url = https://github.com/mlpchenxl/dual-craft.git
+[submodule "dinov2"]
+	path = Submodule/dinov2
+	url = https://github.com/facebookresearch/dinov2.git
+[submodule "articraft"]
+	path = Submodule/articraft
+	url = https://github.com/mattzh72/articraft.git
+	ignore = untracked
+[submodule "GenIA"]
+	path = Submodule/GenIA
+	url = https://github.com/facebookresearch/GenIA.git
+	ignore = untracked
+[submodule "LiteReality-Agent"]
+	path = Submodule/LiteReality-Agent
+	url = https://github.com/LiteReality/LiteReality-Agent.git
+	ignore = untracked
+[submodule "ReplicateAnyScene"]
+	path = Submodule/ReplicateAnyScene
+	url = https://github.com/xiac20/ReplicateAnyScene.git
+	ignore = untracked
+[submodule "scenesmith"]
+	path = Submodule/scenesmith
+	url = https://github.com/nepfaff/scenesmith.git
+	ignore = untracked
+[submodule "SimRecon"]
+	path = Submodule/SimRecon
+	url = https://github.com/xiac20/SimRecon.git
 	ignore = untracked
