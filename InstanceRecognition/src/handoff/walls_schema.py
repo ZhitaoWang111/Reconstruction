@@ -13,7 +13,9 @@ A sibling of the object handoff (`schema.py`, handoff/v2), and deliberately shap
 like it so one reader can open both:
 
 * the same coordinate frame - `amb3r_floor` (docs/amb3r-floor-frame.md): AMB3R's own
-  reconstruction scaled and stood upright, z = 0 on the floor, +Z up, metres;
+  reconstruction scaled and stood upright, z = 0 on the floor, +Z up, metres. The GT producer
+  writes `scannet_scan` instead (ScanNet's raw scan frame, +Z up, floor at `frame.floor_z`);
+  every height in the file (`height_m`, `z_floor`, corner z) is then measured from that floor;
 * the same `camera` block (pinhole intrinsics + the OpenCV camera-to-world convention);
 * the same key-frame record - up to three frames, roles primary/secondary/third,
   each with `rgb`, `mask`, `boxed`, `bbox_xyxy`, `visible_pixels`, `camera_to_world`.
@@ -49,6 +51,12 @@ from .schema import KEYFRAME_ROLES
 # `frame` is new.
 SCHEMA_VERSION = "walls/v2"
 FRAME = "amb3r_floor"
+# The frames a wall handoff may be written in. `amb3r_floor` is what the harness producer
+# delivers (the reconstruction's own frame). `scannet_scan` is the GT producer's: ScanNet's raw
+# scan frame, the frame of the annotated mesh and of the GT poses, like the old `gt/` object
+# handoff. A scannet_scan file carries `frame.to_amb3r_floor` so it can still be overlaid.
+FRAMES = ("amb3r_floor", "scannet_scan")
+SCAN_FRAME_REQUIRED = ("name", "definition", "floor_z", "to_amb3r_floor")
 
 ROLES = ("exterior", "interior")
 SEGMENT_KINDS = ("observed", "inferred")
@@ -58,7 +66,10 @@ VALUE_KINDS = ("measured", "assumed")
 NOT_INCLUDED = ("doors", "windows", "door_frames", "window_frames", "ceiling", "floor_mesh",
                 "mirrors", "furniture")
 
-OPENING_SOURCES = ("ray_test",)
+# How an opening was established. `ray_test` is the harness producer: scene rays pass through
+# the wall there. `gt_instance` is the GT producer: an annotated doorway with no door leaf -
+# the annotation says a hole is there, and nothing hangs in it.
+OPENING_SOURCES = ("ray_test", "gt_instance")
 
 TOP_REQUIRED = (
     "schema_version", "scene_id", "producer", "coordinate_frame", "units", "up_axis",

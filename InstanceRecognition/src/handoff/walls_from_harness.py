@@ -109,16 +109,28 @@ def line_intersection(p, d, q, e):
 
 
 # ---------------------------------------------------------------- the walls
+SHARP_DEG = 30.0           # an exterior corner sharper than this butts instead of mitring
+
+
+def corner_type(a: dict, b: dict) -> str:
+    """mitre, unless the two walls meet at less than SHARP_DEG (a mitre there spikes past the corner)."""
+    da = a["end"] - a["start"]; db = b["end"] - b["start"]
+    da = da / np.linalg.norm(da); db = db / np.linalg.norm(db)
+    interior_angle = 180.0 - np.degrees(np.arccos(np.clip(da @ db, -1, 1)))
+    return "butt" if interior_angle < SHARP_DEG else "mitre"
+
+
 def build_walls(closed: dict, planes: dict):
     """walls/v2 wall records (geometry, segments, joins, evidence) from the closed walls."""
-    names = {0: "ext_W", 1: "ext_S", 2: "ext_E", 3: "ext_N"}
-    side_of = {f"side{k}": v for k, v in names.items()}
+    # exterior walls keep the name close.py gave their outline edge; `ring` is their place round the room
+    ring = sorted((f for f in closed["final"] if f["role"] == "exterior"), key=lambda f: f.get("ring", f["side"]))
+    side_of = {f"side{f['side']}": f["id"] for f in ring}
     interior = [f for f in closed["final"] if f["role"] == "interior"]
     int_name = {f["walls"][0]: f"int_{i + 1}" for i, f in enumerate(sorted(interior, key=lambda f: f["walls"][0]))}
     src = {w["id"]: w for w in closed["walls"]}
     recs = []
     for f in closed["final"]:
-        wid = names[f["side"]] if f["role"] == "exterior" else int_name[f["walls"][0]]
+        wid = f["id"] if f["role"] == "exterior" else int_name[f["walls"][0]]
         p0 = np.asarray(f["pieces"][0]["p0"], dtype=np.float64)
         p1 = np.asarray(f["pieces"][-1]["p1"], dtype=np.float64)
         room = np.asarray(f["normal"], dtype=np.float64)
@@ -131,13 +143,16 @@ def build_walls(closed: dict, planes: dict):
             pieces = [{**pc, "p0": pc["p1"], "p1": pc["p0"]} for pc in reversed(pieces)]
         recs.append({"id": wid, "role": f["role"], "start": p0, "end": p1, "room": room,
                      "t": float(f["thickness_m"]), "pieces": pieces, "planes": list(f["walls"]),
-                     "hint": f.get("thickness_hint", []), "flip": bool(flip)})
+                     "hint": f.get("thickness_hint", []), "flip": bool(flip),
+                     "seen_beyond": f.get("seen_beyond", [])})
     by_id = {r["id"]: r for r in recs}
-    # joins: exterior corners mitred around the rectangle; interior ends from close.py's extension step
-    order = ["ext_W", "ext_S", "ext_E", "ext_N"]
+    # joins: exterior corners mitred round the outline, in ring order (any number of corners);
+    # a very sharp corner butts instead, because a mitre there runs far out past the corner
+    order = [f["id"] for f in ring]
     for i, wid in enumerate(order):
-        by_id[wid]["joins"] = {"start": {"wall": order[i - 1], "type": "mitre"},
-                               "end": {"wall": order[(i + 1) % 4], "type": "mitre"}}
+        prev_, next_ = order[i - 1], order[(i + 1) % len(order)]
+        by_id[wid]["joins"] = {"start": {"wall": prev_, "type": corner_type(by_id[prev_], by_id[wid])},
+                               "end": {"wall": next_, "type": corner_type(by_id[wid], by_id[next_])}}
     for f in interior:
         w = src[f["walls"][0]]
         j = {}
@@ -238,6 +253,10 @@ def build_walls(closed: dict, planes: dict):
                 "behind_seen": [round(pl["behind_seen"], 3) for pl in ev_planes],
                 "observed_top_m": [round(pl["z"][1], 3) for pl in ev_planes],
                 "thickness_hint": r["hint"],
+                # seen space reaching past this wall's line by less than one surface's depth drift
+                # (so the wall was not moved): along-wall stretch and depth, measured from the start
+                # of the outline edge before any flip to start -> end
+                "seen_beyond": r.get("seen_beyond", []),
             },
             "_planes": ev_planes, "_dir": d,
         })
@@ -530,7 +549,8 @@ def known_issues_zh(doc: dict) -> list[str]:
     return [
         "整个房间每边比 ScanNet GT 小 3–16 cm（抬升的尺度误差，这一步没有修正；GT 只用于评估）",
         f"层高 {doc['storey']['height_m']:.2f} m 和墙厚都是假定值，不是测出来的",
-        f"ext_W 有 {share('ext_W'):.0f}% 是推断补的，ext_N 有 {share('ext_N'):.0f}%：那几段没有任何墙 mask",
+        "外墙推断补的比例（那几段没有任何墙 mask）：" + "、".join(
+            f"{k} {share(k):.0f}%" for k in w if w[k]["role"] == "exterior"),
         "关键帧的相机位姿是 AMB3R 的估计；`reprojection_px` 表示每一帧的位姿和像素对得多准",
         "关键帧没有按运动模糊筛过：一帧可能整体清晰、局部糊（ext_N third，第 4582 帧，墙旁边的柜子是糊的）。"
         "`clarity` 是整帧拉普拉斯方差除以 50 帧中位数，和物体交接用的是同一个量，抓不到局部模糊",
@@ -615,8 +635,12 @@ def build(run: str, output: Path, scene: Path = SCENE, rectified: bool = False) 
 
     rect = closed["rectangle"]
     ext = {w["id"]: w for w in walls if w["role"] == "exterior"}
-    inner = [ext[k]["start_floor"] for k in ("ext_S", "ext_E", "ext_N", "ext_W")]
-    outer = [ext[k]["footprint_floor"][3] for k in ("ext_S", "ext_E", "ext_N", "ext_W")]
+    ring_ids = [f["id"] for f in sorted((f for f in closed["final"] if f["role"] == "exterior"),
+                                        key=lambda f: f.get("ring", f["side"]))]
+    inner = [ext[k]["start_floor"] for k in ring_ids]
+    outer = [ext[k]["footprint_floor"][3] for k in ring_ids]
+    C_ = np.asarray(inner)
+    inner_area = 0.5 * float(np.sum(C_[:, 0] * np.roll(C_[:, 1], -1) - np.roll(C_[:, 0], -1) * C_[:, 1]))
     doc = {
         "schema_version": ws.SCHEMA_VERSION, "scene_id": scene.name,
         "producer": {"name": "harness_structure", "run": run,
@@ -637,10 +661,17 @@ def build(run: str, output: Path, scene: Path = SCENE, rectified: bool = False) 
         "thickness_defaults": {"exterior_m": closed["thickness"]["exterior_m"],
                                "interior_m": closed["thickness"]["interior_m"], "kind": "assumed",
                                "applied": "behind the room-side face, along normal_to_back; the face stays where it was seen"},
-        "outline": {"shape": "rectangle", "axis_deg": round(closed["axis_deg"], 3),
+        "outline": {"shape": rect.get("shape", "rectangle"), "axis_deg": round(closed["axis_deg"], 3),
                     "inner_corners_floor": inner, "outer_corners_floor": outer,
-                    "order": "counter-clockwise from the south-west corner: SW, SE, NE, NW",
+                    "order": "counter-clockwise; corner i is where exterior wall i starts (`walls` order: "
+                             + ", ".join(ring_ids) + ")",
                     "inner_size_m": [round(rect["width_m"], 3), round(rect["depth_m"], 3)],
+                    "inner_size_note": "extent along the main axis and across it; the area is inner_area_m2",
+                    "inner_area_m2": round(inner_area, 3),
+                    "edges": [{"wall": f["id"], "direction": f.get("direction", "snapped"),
+                               "dev_from_axis_deg": f.get("dev_deg", 0.0), "position_from": f.get("position_from")}
+                              for f in sorted((f for f in closed["final"] if f["role"] == "exterior"),
+                                              key=lambda f: f.get("ring", f["side"]))],
                     "checks": {"seen_space_outside_share": round(rect["seen_outside_share"], 4),
                                "inside_seen_share": round(rect["inside_seen_share"], 3),
                                "largest_unseen_inside_m2": round(rect["largest_unseen_inside_m2"], 2)}},
@@ -650,9 +681,8 @@ def build(run: str, output: Path, scene: Path = SCENE, rectified: bool = False) 
             "the room comes out 3-16 cm smaller per side than the ScanNet GT (lifting scale error, "
             "not corrected here; measured against GT for evaluation only)",
             f"storey height {H:.2f} m and wall thickness are assumed, not measured",
-            "ext_W is %.0f%% inferred and ext_N %.0f%% inferred: no wall mask covers those stretches"
-            % (100 * ext["ext_W"]["evidence"]["inferred_m"] / ext["ext_W"]["length_m"],
-               100 * ext["ext_N"]["evidence"]["inferred_m"] / ext["ext_N"]["length_m"]),
+            "inferred share of each exterior wall (no wall mask covers those stretches): "
+            + ", ".join(f"{k} {100 * w['evidence']['inferred_m'] / w['length_m']:.0f}%" for k, w in ext.items()),
             "key-frame poses are AMB3R estimates; reprojection_px says how well each one fits",
             "key frames are not screened for motion blur: a frame can be sharp overall and smeared in part "
             "(ext_N third, frame 4582, smears the cabinets beside the wall); `clarity` is the whole-frame "

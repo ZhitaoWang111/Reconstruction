@@ -205,7 +205,8 @@ def test_convention_fields_match_the_object_handoff(tmp_path):
 
 
 @pytest.mark.parametrize("change,message", [
-    (lambda d: d.update(coordinate_frame="scannet_scan"), "coordinate_frame"),
+    (lambda d: d.update(coordinate_frame="opengl_world"), "coordinate_frame"),
+    (lambda d: d.update(coordinate_frame="scannet_scan"), "coordinate_frame scannet_scan"),
     (lambda d: d["frame"].update(native_to_frame=(np.eye(4) * [2, 3, 2, 1]).tolist()), "times a rotation"),
     (lambda d: d["frame"].update(scale={"value": 2.0, "source": "guess"}), "scale.source"),
     (lambda d: d["frame"].pop("scale"), "frame missing"),
@@ -311,3 +312,19 @@ def test_real_handoff_carries_the_measured_opening():
     assert o["z_floor"][0] == 0.0 and o["bounds"]["bottom"] == "floor" and o["seen_bottom_m"] == pytest.approx(0.2)
     assert o["closed_above"] is True
     assert "openings" not in doc["not_included"]
+
+
+def test_a_scan_frame_handoff_passes_with_its_own_frame_block(tmp_path):
+    doc = _square(tmp_path)
+    doc["coordinate_frame"] = "scannet_scan"
+    doc["frame"] = {"name": "scannet_scan", "definition": "test", "floor_z": 0.05,
+                    "to_amb3r_floor": {"matrix": np.eye(4).tolist()}}
+    assert _rewrite(tmp_path, doc) == []
+
+
+def test_a_scan_frame_needs_a_rigid_map_to_amb3r_floor(tmp_path):
+    doc = _square(tmp_path)
+    doc["coordinate_frame"] = "scannet_scan"
+    doc["frame"] = {"name": "scannet_scan", "definition": "test", "floor_z": 0.05,
+                    "to_amb3r_floor": {"matrix": (np.eye(4) * [2, 2, 2, 1]).tolist()}}
+    assert any("to_amb3r_floor" in p for p in _rewrite(tmp_path, doc))

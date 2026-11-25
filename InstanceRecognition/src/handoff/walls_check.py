@@ -44,6 +44,25 @@ def _dist_to_line(p, a, b) -> float:
     return float(abs(w[0] * d[1] - w[1] * d[0]))
 
 
+def scan_frame_problems(block) -> list[str]:
+    """The `frame` block of a scannet_scan file: what the frame is, where its floor is, and a rigid
+    map into amb3r_floor so the file can be overlaid with a harness handoff."""
+    if not isinstance(block, dict):
+        return ["frame is not an object"]
+    missing = [k for k in ws.SCAN_FRAME_REQUIRED if k not in block]
+    if missing:
+        return [f"frame missing {missing} (coordinate_frame scannet_scan)"]
+    out = []
+    if block["name"] != "scannet_scan":
+        out.append(f"frame.name {block['name']!r} != 'scannet_scan'")
+    T = np.asarray((block["to_amb3r_floor"] or {}).get("matrix"), dtype=np.float64)
+    if T.shape != (4, 4) or not _rigid(T):
+        out.append("frame.to_amb3r_floor.matrix is not a rigid 4x4")
+    if not isinstance(block["floor_z"], (int, float)):
+        out.append("frame.floor_z is not a number")
+    return out
+
+
 def check(directory: Path) -> list[str]:
     problems: list[str] = []
     path = directory / "walls.json"
@@ -57,9 +76,12 @@ def check(directory: Path) -> list[str]:
     missing = [k for k in ws.TOP_REQUIRED if k not in doc]
     if missing:
         return problems + [f"missing top-level fields {missing}"]
-    if (doc["coordinate_frame"], doc["units"], doc["up_axis"]) != (ws.FRAME, "meters", "Z"):
-        problems.append(f"coordinate_frame/units/up_axis differ from the object handoff ({ws.FRAME}, meters, Z)")
-    problems += frame_problems(doc["frame"])
+    if doc["coordinate_frame"] not in ws.FRAMES or (doc["units"], doc["up_axis"]) != ("meters", "Z"):
+        problems.append(f"coordinate_frame/units/up_axis must be one of {ws.FRAMES}, meters, Z")
+    elif doc["coordinate_frame"] == "amb3r_floor":
+        problems += frame_problems(doc["frame"])
+    else:
+        problems += scan_frame_problems(doc["frame"])
     cam = doc["camera"]
     cam_missing = [k for k in schema.CAMERA_REQUIRED if k not in cam]
     if cam_missing:
@@ -246,6 +268,14 @@ def check(directory: Path) -> list[str]:
         area = 0.5 * float(np.sum(corners[:, 0] * np.roll(corners[:, 1], -1) - np.roll(corners[:, 0], -1) * corners[:, 1]))
         if area <= 0:
             problems.append("outline.inner_corners_floor is not counter-clockwise")
+        # the outline is the exterior walls' own corners: as many corners as exterior walls, each
+        # one the start of some exterior wall (any number of corners, not only four)
+        if len(corners) != len(ext):
+            problems.append(f"outline has {len(corners)} corners but there are {len(ext)} exterior walls")
+        starts = np.array([w["start_floor"] for w in ext], float)
+        for i, c in enumerate(corners):
+            if np.abs(starts - c).max(1).min() > TOL:
+                problems.append(f"outline corner {i} {c.tolist()} is not where any exterior wall starts")
     return problems
 
 

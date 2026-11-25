@@ -66,11 +66,17 @@ def background(doc: dict, rays: Path, media: Path) -> dict | None:
     if not rays.is_file():
         return None
     z = np.load(rays)
-    M = np.asarray(doc["frame"]["native_to_frame"], dtype=np.float64)
-    if "native_to_frame" not in z.files or not np.allclose(z["native_to_frame"], M, atol=1e-6):
-        print(f"{rays} is not in this handoff's frame; no background")
-        return None
-    points = z["P"].astype(np.float64)
+    if doc["coordinate_frame"] == "amb3r_floor":
+        M = np.asarray(doc["frame"]["native_to_frame"], dtype=np.float64)
+        if "native_to_frame" not in z.files or not np.allclose(z["native_to_frame"], M, atol=1e-6):
+            print(f"{rays} is not in this handoff's frame; no background")
+            return None
+        points = z["P"].astype(np.float64)
+    else:
+        # A scannet_scan handoff (the GT producer): the rays are amb3r_floor, so bring them into
+        # the file's frame with the inverse of the map the file itself carries.
+        T = np.linalg.inv(np.asarray(doc["frame"]["to_amb3r_floor"]["matrix"], dtype=np.float64))
+        points = z["P"].astype(np.float64) @ T[:3, :3].T + T[:3, 3]
     plan = plan_image(points, media / "plan_density.png")
     plan["image"] = "media/plan_density.png"
     keys = np.floor(points / BACKGROUND_VOXEL).astype(np.int64)
@@ -82,6 +88,24 @@ def background(doc: dict, rays: Path, media: Path) -> dict | None:
             "pos": b64(quantised), "rgb": b64(rgb.astype(np.uint8)), "voxel_m": BACKGROUND_VOXEL,
             "rays": int(len(z["P"])), "frames": int(len(z["cams"])), "plan": plan,
             "source": "every 4th pixel of every frame (src.structure.rays), amb3r_floor"}
+
+
+def gt_issues_zh(doc: dict) -> list[str]:
+    """The GT file's known issues, in Chinese like the harness page's."""
+    hint = [w for w in doc["walls"] if any(h.get("why_not_measured") for h in w["evidence"].get("thickness_hint", []))]
+    few = [f"{w['id']}（{len(w['key_frames'])} 张）" for w in doc["walls"] if len(w["key_frames"]) < 3]
+    out = [
+        f"坐标系是 GT 的 scannet_scan，z 减去了 frame.floor_z（{doc['frame']['floor_z']:.3f} m）；和 walls_harness（amb3r_floor）对照时要先用 frame.to_amb3r_floor 转过去",
+        "开口只放没有门扇的门洞：门扇和窗是各自的东西，不在墙上开洞；没当作开口的标注实例记在 openings_not_taken",
+        "外墙厚度是假定值：标注只有房间一侧的墙面",
+    ]
+    if hint:
+        out.append("内墙厚度是假定值：" + "、".join(w["id"] for w in hint) + " 两面都标注了，但隔墙有直段和斜段，两面只重叠一小段，量出的值只作线索")
+    out.append("关键帧用 GT 位姿，没有 reprojection_px（按定义为 0）；mask_agreement 是这面墙的网格顶点投进这一帧后落在标注 mask 里的比例")
+    if few:
+        out.append("关键帧不足 3 张：" + "、".join(few) + "（要求墙自己的顶点至少一半落在该帧 mask 里，视角 ≤ 75°）")
+    out.append("外轮廓的外角（outline.outer_corners_floor）留空，下游用墙线和厚度自己算")
+    return out
 
 
 def build(handoff: Path, output: Path, rays: Path = RAYS) -> None:
@@ -99,8 +123,13 @@ def build(handoff: Path, output: Path, rays: Path = RAYS) -> None:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(handoff / frame[kind], target)
                 frame[kind] = str(target.relative_to(output))
-    payload = {"doc": doc, "background": background(doc, rays, media), "known_issues_zh": known_issues_zh(doc),
-               "handoff_dir": os.path.relpath(handoff, output), "handoff_abs": str(handoff)}
+    gt = doc.get("producer", {}).get("name") == "scannet_ground_truth"
+    payload = {"doc": doc, "background": background(doc, rays, media),
+               # the Chinese issue list is written for the harness file; a GT file carries its own
+               "known_issues_zh": gt_issues_zh(doc) if gt else known_issues_zh(doc),
+               "producer_kind": "gt" if gt else "harness",
+               "handoff_dir": os.path.relpath(handoff, output), "handoff_name": handoff.name,
+               "handoff_abs": str(handoff)}
     (output / "walls.js").write_text("window.WALLS=" + json.dumps(payload, ensure_ascii=False,
                                                                   separators=(",", ":")) + ";\n")
     for name in ("index.html", "page.css", "page.js"):
