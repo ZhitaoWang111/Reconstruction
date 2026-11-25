@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>交接文件内容 · handoff/v2 · InstanceRecognition</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --model:#7c3aed; --model-soft:#f3eefe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr); max-width:1180px; margin:0 auto; padding:0 28px 120px}
+  @media (min-width:1080px){
+    .wrap{grid-template-columns:230px minmax(0,1fr); gap:56px; padding-left:36px; padding-right:36px}
+    .rail{position:sticky; top:0; align-self:start; max-height:100vh; overflow:auto; padding:44px 0}
+  }
+  .rail{display:none}
+  @media (min-width:1080px){ .rail{display:block} }
+  .rail-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px}
+  .rail a{
+    display:block; padding:7px 12px; margin:1px 0; border-radius:6px;
+    color:var(--ink-2); text-decoration:none; font-size:13.5px; border-left:2px solid transparent;
+  }
+  .rail a:hover{background:var(--line-2); color:var(--ink)}
+  .rail a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+  .rail a .n{font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:7px}
+  .rail a.on .n{color:var(--accent)}
+
+  header.top{padding:56px 0 34px; border-bottom:1px solid var(--line); margin-bottom:8px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+  h1{margin:0 0 14px; font-size:clamp(28px,3.6vw,40px); line-height:1.2; letter-spacing:-.022em; font-weight:700}
+  .lede{margin:0; max-width:62ch; color:var(--ink-2); font-size:16.5px}
+  .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+
+  section{padding-top:56px; scroll-margin-top:24px}
+  h2{margin:0 0 6px; font-size:23px; letter-spacing:-.014em; font-weight:700; display:flex; align-items:baseline; gap:12px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; letter-spacing:.04em}
+  .sub{margin:0 0 22px; color:var(--ink-3); font-size:14px; font-family:var(--mono)}
+  h3{margin:34px 0 10px; font-size:16.5px; font-weight:650; letter-spacing:-.006em}
+  h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  ul,ol{margin:0 0 14px; padding-left:22px; line-height:1.8}
+  li{margin-bottom:4px}
+  code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.8px; line-height:1.65}
+  pre code{background:none; padding:0; color:inherit; font-size:inherit}
+  pre .c{color:#7d8894}
+  pre .k{color:#7dd3fc}
+  pre .s{color:#a5d6a7}
+
+  .io{border:1px solid var(--line); border-radius:10px; background:var(--card); margin:0 0 26px; overflow:hidden}
+  .io .row{display:grid; grid-template-columns:76px minmax(0,1fr); gap:16px; padding:13px 18px; border-bottom:1px solid var(--line-2)}
+  .io .row:last-child{border-bottom:none}
+  .io .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:700; padding-top:3px}
+  .io .val{font-size:14.5px; line-height:1.7}
+  .io .val code{font-size:12.8px}
+
+  .flow{display:grid; gap:0; margin:26px 0 8px}
+  .step{display:grid; grid-template-columns:34px minmax(0,1fr); gap:16px; align-items:start}
+  .step .dot{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:13px; font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .step .dot.m{background:var(--model-soft); color:var(--model); border-color:#ddd0fb}
+  .step .dot.w{background:var(--warn-soft); color:var(--warn); border-color:#f2ddb4}
+  .step .body{padding:5px 0 26px; border-bottom:1px dashed var(--line)}
+  .step:last-child .body{border-bottom:none}
+  .step .name{font-weight:650; font-size:15.5px; margin-bottom:3px}
+  .step .io2{font-family:var(--mono); font-size:12.3px; color:var(--ink-3); line-height:1.7}
+  .step .io2 em{font-style:normal; color:var(--ink-2)}
+
+  .marks{display:grid; gap:10px; margin:16px 0}
+  .mark{display:grid; grid-template-columns:74px minmax(0,1fr); gap:14px; padding:12px 15px; border-radius:8px; font-size:14.5px; line-height:1.65}
+  .mark .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding-top:2px}
+  .mark.a{background:var(--accent-soft); border:1px solid #bfe3dd}
+  .mark.a .who{color:var(--accent)}
+  .mark.m{background:var(--model-soft); border:1px solid #ddd0fb}
+  .mark.m .who{color:var(--model)}
+  .mark.w{background:var(--warn-soft); border:1px solid #f2ddb4}
+  .mark.w .who{color:var(--warn)}
+
+  .note{background:var(--accent-soft); border:1px solid #bfe3dd; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+  .warn{background:var(--warn-soft); border:1px solid #f2ddb4; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; border-bottom:1px solid var(--line); white-space:nowrap}
+  td code{font-size:12.6px}
+  tbody tr:hover{background:#f7f9fa}
+  table.tools td:nth-child(3){font-size:13px; line-height:1.6; color:var(--ink-2)}
+
+  .tree{font-family:var(--mono); font-size:13px; line-height:1.75; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 20px; margin:16px 0 20px; white-space:pre; overflow-x:auto; color:var(--ink)}
+  .tree i{color:var(--ink-3); font-style:normal}
+  .tree b{color:var(--accent)}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+  /* Vertical flow chart: one rounded node per step, colour-coded by who acts. */
+  .chain{display:flex; flex-direction:column; align-items:center; margin:26px 0 24px}
+  .node{
+    width:min(100%,540px); border:2px solid var(--line); border-radius:12px;
+    background:var(--card); padding:14px 18px; text-align:center;
+  }
+  .node .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-bottom:5px}
+  .node .t{font-weight:650; font-size:15px; line-height:1.45}
+  .node .d{font-size:13px; color:var(--ink-2); margin-top:6px; line-height:1.65}
+  .node .d code{font-size:11.8px}
+  .node.b{background:#eef4ff; border-color:#3b82f6}
+  .node.b .k{color:#2563eb}
+  .node.g{background:#ecfbf0; border-color:#22a552}
+  .node.g .k{color:#15803d}
+  .node.y{background:#fefbe8; border-color:#eab308}
+  .node.y .k{color:#a16207}
+  .node.r{background:#fdeeee; border-color:#dc2626}
+  .node.r .k{color:#b91c1c}
+  .node.p{background:#f4f0fd; border-color:#7c3aed}
+  .node.p .k{color:#6d28d9}
+  .arrow{width:2px; height:28px; background:#9aa4b2; position:relative}
+  .arrow::after{
+    content:""; position:absolute; left:50%; bottom:-2px; transform:translateX(-50%);
+    border-left:6px solid transparent; border-right:6px solid transparent; border-top:9px solid #9aa4b2;
+  }
+  .node.wide{width:min(100%,880px); text-align:left}
+  .node.wide .k,.node.wide .t{text-align:center}
+
+  .wrap{max-width:1360px}
+  table.f{font-size:13.6px; table-layout:fixed}
+  table.f th:nth-child(1){width:15%} table.f th:nth-child(2){width:27%}
+  table.f th:nth-child(3){width:28%} table.f th:nth-child(4){width:30%}
+  table.f td{line-height:1.6}
+  table.f td code{word-break:break-all}
+  table.f td:first-child code{font-size:12.4px}
+  table.f tr.grp td{background:var(--line-2); font-weight:650; color:var(--ink); font-size:13px; letter-spacing:.02em; padding:7px 12px}
+  table.f tr.grp:hover td{background:var(--line-2)}
+  .req{display:inline-block; font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.06em; padding:0 5px; border-radius:3px; margin-left:4px; vertical-align:1px}
+  .req.r{background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .req.o{background:var(--line-2); color:var(--ink-3); border:1px solid var(--line)}
+  .req.n{background:var(--warn-soft); color:var(--warn); border:1px solid #f2ddb4}
+  .who{font-family:var(--mono); font-size:11.5px; color:var(--model)}
+  .unused{color:var(--ink-3)}
+  .src-gt{color:#1d4ed8} .src-us{color:var(--warn)} .src-amb{color:#7c3aed}
+  .legend{display:flex; flex-wrap:wrap; gap:14px; font-size:13px; color:var(--ink-2); margin:6px 0 4px}
+</style>
+</head>
+<body>
+<div class="wrap" style="grid-template-columns:minmax(0,1fr)">
+<main>
+
+<header class="top">
+  <div class="eyebrow">InstanceRecognition · Handoff · handoff/v2</div>
+  <h1>交接文件里有什么、给谁用、从哪来</h1>
+  <p class="lede">
+    InstanceRecognition 交给 ObjectGeneration 和 SceneAssembly 的场景交接文件 <code>handoff/v2</code>，逐字段说明内容、下游用途和数据来源。
+    当前这份由 ScanNet 人工标注生成（<code>src/handoff/from_gt.py</code>），不经过 GPT、SAM 或 harness；格式按“harness 将来也能写出同样的文件”设计。
+  </p>
+  <div class="meta">
+    <span class="tag">schema <b>handoff/v2</b></span>
+    <span class="tag">场景 <b>scene0000_00</b></span>
+    <span class="tag">物体 <b>67</b>（结构件 15）</span>
+    <span class="tag">关键帧 <b>187</b></span>
+    <span class="tag">manifest <b>f167ab04</b> · objects <b>e20cf71f</b></span>
+    <span class="tag">更新 <b>2026-11-11</b>（c5afa05）</span>
+  </div>
+</header>
+
+<section id="where" style="padding-top:36px">
+  <h2><span class="no">01</span>位置与结构</h2>
+  <div class="tree"><b>InstanceRecognition/artifacts/handoff/scene0000_00/gt/</b>
+├── manifest.json                       <i># 场景级：坐标系、相机内参与外参约定、floor_z、轴对齐矩阵、选帧规则</i>
+├── objects.json                        <i># 67 条物体记录，每条带 1–3 个关键帧</i>
+├── clouds/obj_NNNN.ply                 <i># 每个物体的点云（1.3 MB）</i>
+└── keyframes/obj_NNNN/&lt;seq&gt;_rgb.jpg   <i># 关键帧原图 / _mask.png 二值 mask / _boxed.jpg 带框图（127 MB）</i></div>
+  <p>生成与校验（在 <code>InstanceRecognition/</code> 下）：</p>
+<pre><code>PYTHONPATH=. .venv/bin/python -m src.handoff.from_gt --output artifacts/handoff/scene0000_00/gt
+PYTHONPATH=. .venv/bin/python -m src.handoff.check artifacts/handoff/scene0000_00/gt</code></pre>
+</section>
+
+<section id="version" style="padding-top:36px">
+  <h2><span class="no">02</span>版本：v1 → v2</h2>
+  <p>2026-11-10 应下游要求补充了相机内参、外参约定、<code>floor_z</code> 和轴对齐矩阵，并把每个关键帧的 <code>camera_to_world</code> 改为必填。
+  v1 目录缺这些字段，过不了新的 <code>check.py</code>，所以版本号升为 <code>handoff/v2</code>。</p>
+  <ul>
+    <li><b>对读取方向后兼容</b>：v1 的字段一个没删、取值不变，628 个点云 / 图片逐字节不变。只读旧字段的代码不用改；ObjectGeneration 的 <code>handoff_io</code> 只检查前缀 <code>handoff/</code>，已实测能读 v2。</li>
+    <li><b>对生产方不兼容</b>：v1 目录在新 <code>check.py</code> 下报错（缺 <code>camera</code>、<code>floor_z</code>、<code>axis_alignment</code>、<code>camera_to_world</code>）。</li>
+    <li>下表里标“v2 新增”的就是这次加的字段。</li>
+  </ul>
+</section>
+
+<section id="table" style="padding-top:36px">
+  <h2><span class="no">03</span>字段一览</h2>
+  <div class="legend">
+    <span>来源：<b class="src-gt">ScanNet</b> = 原始数据原样或直接解码；<b class="src-us">本模块计算</b> = <code>from_gt.py</code> 由原始数据算出或选定；<b class="src-amb">AMB3R 估计</b> = 来自我们的重建，非真值</span>
+  </div>
+  <div class="legend">
+    <span><span class="req r">必填</span> <code>check.py</code> 强制存在</span><span><span class="req o">可选</span> 可缺省</span><span><span class="req n">v2 新增</span> 应下游要求补充</span>
+    <span>用途列的 <span class="who">模块名</span> 是在下游代码里核对过的实际读取方</span>
+  </div>
+  <table class="f">
+    <thead><tr><th>字段</th><th>内容</th><th>用处</th><th>来源</th></tr></thead>
+    <tbody>
+<tr class="grp"><td colspan="4">场景级 · <code>manifest.json</code></td></tr>
+<tr><td><code>schema_version</code> / <code>scene_id</code><span class="req r">必填</span></td><td><code>handoff/v2</code>；<code>scene0000_00</code></td><td>读取方校验格式版本（<code>handoff_io.load_handoff</code> 要求以 <code>handoff/</code> 开头、必须有 scene_id）；输出目录按 scene_id 分</td><td><b class="src-us">本模块计算</b>：写死的常量；scene_id 取场景目录名</td></tr>
+<tr><td><code>producer</code><span class="req r">必填</span></td><td>生产者名 <code>scannet_ground_truth</code>，各原始文件的绝对路径，2D 实例编码说明</td><td>说明这份是真值不是 harness 产物；追溯原始文件。下游 <code>assembly_handoff</code> 把它连同 manifest 哈希一起钉住</td><td><b class="src-us">本模块计算</b>：记录本次读取的文件路径</td></tr>
+<tr><td><code>coordinate_frame</code> / <code>units</code> / <code>up_axis</code><span class="req r">必填</span></td><td><code>scannet_scan</code>、米、Z 朝上</td><td>所有 3D 量（点云、质心、包围盒、外参、floor_z）都在这个坐标系；<code>check.py</code> 拒绝其他坐标系</td><td><b class="src-gt">ScanNet</b>：GT 网格的原始扫描坐标系，<b>未应用</b> <code>axisAlignment</code></td></tr>
+<tr><td><code>camera</code>：<code>fx fy cx cy K width height</code><span class="req r">必填</span><span class="req n">v2 新增</span></td><td>fx=fy=1170.188，cx=647.75，cy=483.75，1296×968，针孔，无畸变</td><td>把 3D 点投影到关键帧、用真实相机渲染对比图。<span class="who">SceneAssembly</span> 目前在 <code>assemble_batch.py</code> 里硬编码同一组值，可改读此处</td><td><b class="src-gt">ScanNet</b>：<code>scene0000_00.txt</code> 的 <code>fx_color / fy_color / mx_color / my_color / colorWidth / colorHeight</code>。不用 <code>.sens</code> 文件头那套（cy 差 6 px）：实测只有 <code>.txt</code> 与 2D 标注 (0,0) px 对齐</td></tr>
+<tr><td><code>camera.extrinsics</code><span class="req r">必填</span><span class="req n">v2 新增</span></td><td>外参约定：<code>key_frames[].camera_to_world</code> 是 camera→world，OpenCV 轴（+X 右、+Y 下、+Z 前），扫描坐标系，米，4×4 行主序</td><td>下游据此解释外参矩阵，不必再去别的文档里找约定</td><td><b class="src-us">本模块计算</b>：<code>schema.EXTRINSICS_CONVENTION</code> 常量。约定经实测：按此理解 87% 投影顶点落在 mask 内，当 world→camera 2.5%，当 OpenGL 0%</td></tr>
+<tr><td><code>floor_z</code><span class="req r">必填</span><span class="req n">v2 新增</span><br><code>floor</code><span class="req o">可选</span></td><td><code>floor_z = 0.0544</code> m；<code>floor</code> 附分位数（p05 0.029 / p95 0.123）、顶点数、地面倾斜 0.135°</td><td>判断物体是否落地、资产放置的地面高度。<span class="who">ObjectGeneration</span> <code>estimate_sizes.py</code> 目前自己从 floor 点云算同一个数，可改读此处</td><td><b class="src-us">本模块计算</b>：floor 实例（obj_0009）顶点 z 的<b>中位数</b>。floor 实例里混有地毯等，最高 0.36 m，最小值/均值都不可靠</td></tr>
+<tr><td><code>axis_alignment</code><span class="req r">必填</span><span class="req n">v2 新增</span></td><td>4×4 矩阵本体；<code>applied_to_this_handoff: false</code></td><td>需要 NYU 轴对齐坐标系的下游自己乘；ScanNet 浏览器页（<code>ScanNet/objects/</code>）用的是对齐后的坐标，混用前用它换算</td><td><b class="src-gt">ScanNet</b>：<code>scene0000_00.txt</code> 的 <code>axisAlignment</code>，原样写入</td></tr>
+<tr><td><code>keyframe_policy</code><span class="req o">可选</span></td><td>关键帧选取规则与全部参数：可见度门槛 20%（结构件 5%）、碰边扣 15%、视角分离 20/14/10/6°、帧距 ≥5、最多 3 张</td><td>让下游能复现或质疑关键帧为什么是这几张</td><td><b class="src-us">本模块计算</b>：直接取 <code>from_gt.py</code> 的常量生成（11-10 前是手写文本，和代码不一致，已修）</td></tr>
+<tr><td><code>source_frame_ids</code> / <code>frames</code><span class="req o">可选</span></td><td>500 个原始帧号；帧数 500</td><td><code>seq</code> 与原始帧号互查；和 harness 产物对齐时用</td><td><b class="src-us">本模块计算</b>：取自 <code>scene_amb3r_v1</code> 的 500 帧均匀采样</td></tr>
+<tr><td><code>objects</code> / <code>label_quality_counts</code> / <code>keyframe_view_counts</code><span class="req o">可选</span></td><td>67 个物体；具体类别 47 / 结构件 15 / 泛称 5；3 张关键帧 56 个、2 张 8 个、1 张 3 个</td><td>概览与 <code>check.py</code> 的数量核对</td><td><b class="src-us">本模块计算</b>：统计</td></tr>
+<tr><td><code>bbox_convention</code> / <code>structural_labels</code> / <code>generic_labels</code><span class="req o">可选</span></td><td>bbox 为原图像素、左上原点、右下开区间；结构件和泛称标签表</td><td>解释 <code>bbox_xyxy</code> 和 <code>label_quality</code></td><td><b class="src-us">本模块计算</b>：<code>schema.py</code> 常量</td></tr>
+<tr class="grp"><td colspan="4">物体级 · <code>objects.json[]</code>（67 条）</td></tr>
+<tr><td><code>object_id</code> / <code>semantic_id</code><span class="req r">必填</span></td><td><code>obj_0037</code> / 37</td><td><b>两份交接文件的关联键</b>：ObjectGeneration、assembly_handoff、SceneAssembly 都按 object_id 关联；输出目录也按它分</td><td><b class="src-gt">ScanNet</b>：<code>aggregation.json</code> 的 <code>objectId</code>，格式化为 <code>obj_NNNN</code>。只在本扫描内有效</td></tr>
+<tr><td><code>label</code><span class="req r">必填</span></td><td>类别名，如 <code>bed</code>、<code>kitchen cabinets</code></td><td><span class="who">ObjectGeneration</span>：物理参数估计（质量、刚体类型）、尺寸估计、页面；<span class="who">SceneAssembly</span>：展示与提示</td><td><b class="src-gt">ScanNet</b>：<code>aggregation.json</code> 的 <code>label</code>，原样</td></tr>
+<tr><td><code>label_quality</code> / <code>structural</code><span class="req r">必填</span></td><td><code>specific</code> / <code>structural</code> / <code>generic</code>；是否墙地顶门窗</td><td><span class="who">ObjectGeneration</span> 默认跳过 <code>structural=true</code> 的 15 个（<code>handoff_io.plan</code>）；<code>generic</code>（标签只写了 <code>object</code>）的 5 个需要人工补名</td><td><b class="src-us">本模块计算</b>：按 <code>schema.py</code> 的标签表分类</td></tr>
+<tr><td><code>cloud</code> / <code>point_count</code><span class="req r">必填</span></td><td><code>clouds/obj_NNNN.ply</code>（顶点 XYZ + RGB，无三角面）；点数</td><td><span class="who">ObjectGeneration</span> <code>estimate_sizes.py</code>：用扫描点云定资产的米制尺寸；<span class="who">SceneAssembly</span>：点云配准放置资产；页面预览</td><td><b class="src-gt">ScanNet</b>：<code>vh_clean_2.ply</code> 顶点，经 <code>segs.json</code>→<code>aggregation.json</code> 精确取得归属，不抽样不融合</td></tr>
+<tr><td><code>centroid</code> / <code>bounds</code><span class="req r">必填</span></td><td>点云均值；轴对齐包围盒 min/max</td><td>放置的初始位置提示；页面展示。<b>bounds 只是扫描覆盖范围，不是物体尺寸</b>（table Z 跨 1.21 m，L 形沙发 2.83×2.90 m）</td><td><b class="src-us">本模块计算</b>：由物体点云计算</td></tr>
+<tr><td><code>frames_visible</code><span class="req o">可选</span></td><td>500 帧里能看到它的帧数（如 bed 129）</td><td><span class="unused">下游目前未读取</span>；可判断物体的观测充分程度</td><td><b class="src-us">本模块计算</b>：统计 2D 实例图里出现过它的帧</td></tr>
+<tr><td><code>description</code> / <code>mesh</code><span class="req o">可选</span></td><td>均为 null</td><td><span class="unused">预留，未使用</span></td><td>—</td></tr>
+<tr class="grp"><td colspan="4">关键帧级 · <code>objects.json[].key_frames[]</code>（每物体 1–3 张，共 187 张）</td></tr>
+<tr><td><code>seq</code> / <code>source_frame_id</code><span class="req r">必填</span></td><td>采样序号（0–499）/ <code>.sens</code> 原始帧号</td><td><span class="who">SceneAssembly</span>：找对应帧、挑对比视角；与 harness 产物对齐时用 source_frame_id（两套采样的 seq 编号不同）</td><td><b class="src-us">本模块计算</b>：seq 来自 500 帧采样；原始帧号来自 <code>.sens</code></td></tr>
+<tr><td><code>role</code><span class="req r">必填</span></td><td><code>primary</code> / <code>secondary</code> / <code>third</code></td><td><span class="who">ObjectGeneration</span> 只用 primary 生成资产；其余视角用于对照检查</td><td><b class="src-us">本模块计算</b>：按 <code>keyframe_policy</code> 排序后的名次</td></tr>
+<tr><td><code>rgb</code><span class="req r">必填</span></td><td><code>keyframes/obj_NNNN/&lt;seq&gt;_rgb.jpg</code>，1296×968</td><td><span class="who">ObjectGeneration</span>：SAM3D 生成资产的输入图、外观估计；<span class="who">SceneAssembly</span>：与仿真渲染图并排对比</td><td><b class="src-gt">ScanNet</b>：<code>.sens</code> 里的原始彩色 JPEG，<b>字节原样复制</b>（实测与 <code>.sens</code> 帧逐字节相同），未重编码、未缩放</td></tr>
+<tr><td><code>mask</code><span class="req r">必填</span></td><td><code>keyframes/obj_NNNN/&lt;seq&gt;_mask.png</code>，0/255 二值</td><td><span class="who">ObjectGeneration</span>：SAM3D 的物体 mask 输入；<span class="who">SceneAssembly</span>：轮廓 IoU 对比</td><td><b class="src-gt">ScanNet</b>：<code>2d-instance.zip</code> 中该帧像素值 = objectId+1 的像素。实测与原始实例图逐像素相同（52/52）。注意它由 3D 标注渲染而来：会吸收贴附配件，镂空物体有空洞</td></tr>
+<tr><td><code>boxed</code><span class="req r">必填</span></td><td><code>…_boxed.jpg</code>：原图加黄框和标签</td><td>给人和视觉模型看是哪个物体</td><td><b class="src-us">本模块计算</b>：在 rgb 上按 bbox 画框（harness 同款样式）</td></tr>
+<tr><td><code>bbox_xyxy</code> / <code>bbox_convention</code><span class="req r">必填</span></td><td>原图像素，右下开区间</td><td>裁剪、定位；与 harness 观测的 bbox 直接可比</td><td><b class="src-us">本模块计算</b>：由 mask 计算</td></tr>
+<tr><td><code>visible_pixels</code> / <code>pixel_ratio</code><span class="req r">必填</span></td><td>mask 像素数；占全图比例</td><td><span class="who">SceneAssembly</span>、页面：衡量这一帧里物体有多大</td><td><b class="src-us">本模块计算</b>：由 mask 计算</td></tr>
+<tr><td><code>touches_border</code><span class="req r">必填</span></td><td>bbox 是否碰到画面边缘</td><td>提示物体可能被画面截断。<b>碰边 ≠ 被截断</b>：多数碰边帧的 mask 落在 8 px 边带内不到 2.5%</td><td><b class="src-us">本模块计算</b>：由 bbox 计算</td></tr>
+<tr><td><code>camera_to_world</code><span class="req r">必填</span><span class="req n">v2 新增</span></td><td>4×4，camera→world，OpenCV 轴，扫描坐标系，米（约定见 <code>manifest.camera.extrinsics</code>）</td><td>把资产或点云投影到这一帧、在仿真里摆同一个相机做对比渲染、把 SAM3D 相机系位姿换到场景系。<code>check.py</code> 要求必须存在且为刚体变换</td><td><b class="src-gt">ScanNet</b>：<code>.sens</code> 逐帧真值位姿，经 <code>extract_scannet_sens.py</code> 抽到 <code>Video2PointCloud/data/scannet/scene0000_00_uniform500/input/NNNN.npz</code> 的 <code>camera_pose</code>，原样写入</td></tr>
+<tr><td><code>camera_to_world_gt</code><span class="req o">可选</span></td><td>与 <code>camera_to_world</code> 逐元素相同的副本</td><td><span class="who">SceneAssembly</span> <code>assemble_batch.py</code> 现在读的是这个旧名；改读 <code>camera_to_world</code> 后可删</td><td>同上</td></tr>
+<tr><td><code>camera_center</code><span class="req o">可选</span></td><td>相机中心 3D 坐标</td><td>仅用于关键帧选取时算视角差。<b>定位相机不要用它</b>：和真值位姿平移相差中位 8.0 cm、最大 20.9 cm，用 <code>camera_to_world[:3,3]</code></td><td><b class="src-amb">AMB3R 估计</b>：AMB3R 视觉里程计位姿经 Sim(3) 对齐到扫描坐标系（<code>scene_amb3r_v1</code> 的 sim3 评估记录）</td></tr>
+<tr><td><code>view_angle_deg</code><span class="req o">可选</span></td><td>相对 primary 帧的视角夹角</td><td><span class="unused">下游目前未读取</span>；说明几张关键帧之间视角拉开多少</td><td><b class="src-us">本模块计算</b>：由 camera_center 和物体质心计算</td></tr>
+<tr><td><code>visibility</code> / <code>clarity</code> / <code>bbox_fill</code><span class="req o">可选</span></td><td>相对最佳帧的可见度；整帧 Laplacian 方差（清晰度）；mask 占 bbox 的比例</td><td><span class="unused">下游目前未读取</span>；是关键帧打分的依据，留着可复核</td><td><b class="src-us">本模块计算</b>：由 mask 与 RGB 计算</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="notes" style="padding-top:36px">
+  <h2><span class="no">04</span>使用时注意</h2>
+  <ul>
+    <li><b>内参只能用 manifest 里这套。</b><code>Video2PointCloud</code> 抽帧 manifest 里的 <code>intrinsic_color</code> 来自 <code>.sens</code> 文件头，和 2D 标注有约 6 px 竖直偏差。两套内参的实测对比见 <code>ScanNet/docs/raw-data-notes.md</code> 第 3 节。</li>
+    <li><b>不要叠加 <code>colorToDepthExtrinsics</code>。</b><code>camera_to_world</code> 直接就是彩色相机的位姿，标注按它 (0,0) px 对齐。</li>
+    <li><b>bounds 不是尺寸，扫描最低点不是落地点。</b>nightstand obj_0050 扫描最低 0.21 m、stool obj_0031 0.13 m，实际都立在地上；用 <code>floor_z</code> 判断时要考虑下半截没扫到。</li>
+    <li><b>相机位置用 <code>camera_to_world[:3,3]</code>，不用 <code>camera_center</code>。</b></li>
+    <li><b>两套帧编号。</b>本文件的 <code>seq</code> 属于 500 帧采样；harness 当前用的 100 帧 source 另有自己的 seq，跨数据对齐用 <code>source_frame_id</code>。</li>
+    <li><b>下游已生成的产物仍有效。</b>11-10 的更新只新增字段，原有字段和 628 个点云 / 图片逐字节不变；所以 <code>assembly_handoff</code> 里 <code>matches_generation_input=false</code> 不影响资产。</li>
+  </ul>
+</section>
+
+<section id="code" style="padding-top:36px">
+  <h2><span class="no">05</span>相关代码与文档</h2>
+  <table>
+    <thead><tr><th>位置</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr><td><code>src/handoff/schema.py</code></td><td>格式定义：必填字段表、外参约定常量、相机块和选帧规则的构造函数</td></tr>
+      <tr><td><code>src/handoff/from_gt.py</code></td><td>从 ScanNet 真值生成本目录；文件头记着四条原始数据的坑</td></tr>
+      <tr><td><code>src/handoff/check.py</code></td><td>校验：必填字段、K 与 fx/fy/cx/cy 一致、外参是刚体变换、点数与 PLY 一致、mask 像素数与记录一致</td></tr>
+      <tr><td><code>tests/test_handoff.py</code></td><td>14 条测试，覆盖新增字段与投影公式</td></tr>
+      <tr><td><code>ScanNet/docs/raw-data-notes.md</code></td><td>ScanNet 原始数据的实测经验（两套内参、位姿约定、实例 PNG 的 +1 编码等）</td></tr>
+      <tr><td><code>SceneAssembly/docs/scene-assembly-handoff.md</code></td><td>下游如何同时读本文件和 <code>assembly_handoff/v2</code>（该文档目前仍写作 handoff/v1）</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <p>InstanceRecognition · handoff/v2 字段说明 · 核对日期 2026-11-11</p>
+</footer>
+
+</main>
+</div>
+</body>
+</html>

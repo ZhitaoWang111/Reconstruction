@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>点选分割方案 · GPT 点选 + SAM3 · InstanceRecognition</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --model:#7c3aed; --model-soft:#f3eefe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr); max-width:1180px; margin:0 auto; padding:0 28px 120px}
+  @media (min-width:1080px){
+    .wrap{grid-template-columns:230px minmax(0,1fr); gap:56px; padding-left:36px; padding-right:36px}
+    .rail{position:sticky; top:0; align-self:start; max-height:100vh; overflow:auto; padding:44px 0}
+  }
+  .rail{display:none}
+  @media (min-width:1080px){ .rail{display:block} }
+  .rail-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px}
+  .rail a{
+    display:block; padding:7px 12px; margin:1px 0; border-radius:6px;
+    color:var(--ink-2); text-decoration:none; font-size:13.5px; border-left:2px solid transparent;
+  }
+  .rail a:hover{background:var(--line-2); color:var(--ink)}
+  .rail a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+  .rail a .n{font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:7px}
+  .rail a.on .n{color:var(--accent)}
+
+  header.top{padding:56px 0 34px; border-bottom:1px solid var(--line); margin-bottom:8px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+  h1{margin:0 0 14px; font-size:clamp(28px,3.6vw,40px); line-height:1.2; letter-spacing:-.022em; font-weight:700}
+  .lede{margin:0; max-width:62ch; color:var(--ink-2); font-size:16.5px}
+  .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+
+  section{padding-top:56px; scroll-margin-top:24px}
+  h2{margin:0 0 6px; font-size:23px; letter-spacing:-.014em; font-weight:700; display:flex; align-items:baseline; gap:12px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; letter-spacing:.04em}
+  .sub{margin:0 0 22px; color:var(--ink-3); font-size:14px; font-family:var(--mono)}
+  h3{margin:34px 0 10px; font-size:16.5px; font-weight:650; letter-spacing:-.006em}
+  h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  ul,ol{margin:0 0 14px; padding-left:22px; line-height:1.8}
+  li{margin-bottom:4px}
+  code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.8px; line-height:1.65}
+  pre code{background:none; padding:0; color:inherit; font-size:inherit}
+  pre .c{color:#7d8894}
+  pre .k{color:#7dd3fc}
+  pre .s{color:#a5d6a7}
+
+  .io{border:1px solid var(--line); border-radius:10px; background:var(--card); margin:0 0 26px; overflow:hidden}
+  .io .row{display:grid; grid-template-columns:76px minmax(0,1fr); gap:16px; padding:13px 18px; border-bottom:1px solid var(--line-2)}
+  .io .row:last-child{border-bottom:none}
+  .io .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:700; padding-top:3px}
+  .io .val{font-size:14.5px; line-height:1.7}
+  .io .val code{font-size:12.8px}
+
+  .flow{display:grid; gap:0; margin:26px 0 8px}
+  .step{display:grid; grid-template-columns:34px minmax(0,1fr); gap:16px; align-items:start}
+  .step .dot{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:13px; font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .step .dot.m{background:var(--model-soft); color:var(--model); border-color:#ddd0fb}
+  .step .dot.w{background:var(--warn-soft); color:var(--warn); border-color:#f2ddb4}
+  .step .body{padding:5px 0 26px; border-bottom:1px dashed var(--line)}
+  .step:last-child .body{border-bottom:none}
+  .step .name{font-weight:650; font-size:15.5px; margin-bottom:3px}
+  .step .io2{font-family:var(--mono); font-size:12.3px; color:var(--ink-3); line-height:1.7}
+  .step .io2 em{font-style:normal; color:var(--ink-2)}
+
+  .marks{display:grid; gap:10px; margin:16px 0}
+  .mark{display:grid; grid-template-columns:74px minmax(0,1fr); gap:14px; padding:12px 15px; border-radius:8px; font-size:14.5px; line-height:1.65}
+  .mark .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding-top:2px}
+  .mark.a{background:var(--accent-soft); border:1px solid #bfe3dd}
+  .mark.a .who{color:var(--accent)}
+  .mark.m{background:var(--model-soft); border:1px solid #ddd0fb}
+  .mark.m .who{color:var(--model)}
+  .mark.w{background:var(--warn-soft); border:1px solid #f2ddb4}
+  .mark.w .who{color:var(--warn)}
+
+  .note{background:var(--accent-soft); border:1px solid #bfe3dd; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+  .warn{background:var(--warn-soft); border:1px solid #f2ddb4; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; border-bottom:1px solid var(--line); white-space:nowrap}
+  td code{font-size:12.6px}
+  tbody tr:hover{background:#f7f9fa}
+  table.tools td:nth-child(3){font-size:13px; line-height:1.6; color:var(--ink-2)}
+
+  .tree{font-family:var(--mono); font-size:13px; line-height:1.75; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 20px; margin:16px 0 20px; white-space:pre; overflow-x:auto; color:var(--ink)}
+  .tree i{color:var(--ink-3); font-style:normal}
+  .tree b{color:var(--accent)}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+  /* Vertical flow chart: one rounded node per step, colour-coded by who acts. */
+  .chain{display:flex; flex-direction:column; align-items:center; margin:26px 0 24px}
+  .node{
+    width:min(100%,540px); border:2px solid var(--line); border-radius:12px;
+    background:var(--card); padding:14px 18px; text-align:center;
+  }
+  .node .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-bottom:5px}
+  .node .t{font-weight:650; font-size:15px; line-height:1.45}
+  .node .d{font-size:13px; color:var(--ink-2); margin-top:6px; line-height:1.65}
+  .node .d code{font-size:11.8px}
+  .node.b{background:#eef4ff; border-color:#3b82f6}
+  .node.b .k{color:#2563eb}
+  .node.g{background:#ecfbf0; border-color:#22a552}
+  .node.g .k{color:#15803d}
+  .node.y{background:#fefbe8; border-color:#eab308}
+  .node.y .k{color:#a16207}
+  .node.r{background:#fdeeee; border-color:#dc2626}
+  .node.r .k{color:#b91c1c}
+  .node.p{background:#f4f0fd; border-color:#7c3aed}
+  .node.p .k{color:#6d28d9}
+  .arrow{width:2px; height:28px; background:#9aa4b2; position:relative}
+  .arrow::after{
+    content:""; position:absolute; left:50%; bottom:-2px; transform:translateX(-50%);
+    border-left:6px solid transparent; border-right:6px solid transparent; border-top:9px solid #9aa4b2;
+  }
+  .node.wide{width:min(100%,880px); text-align:left}
+  .node.wide .k,.node.wide .t{text-align:center}
+
+  figure{margin:16px 0 22px}
+  figure img{width:100%; display:block; border:1px solid var(--line); border-radius:8px; background:#fff}
+  figcaption{font-size:13px; color:var(--ink-3); margin-top:7px; line-height:1.6}
+  .pair{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:12px 0 6px}
+  .pair figure{margin:0}
+  .pair .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700; margin-bottom:6px}
+  .pair .lbl.old{color:var(--stop)} .pair .lbl.new{color:var(--accent)}
+  .trio{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:12px 0 6px}
+  .trio figure{margin:0}
+  .case{border:1px solid var(--line); border-radius:10px; background:var(--card); padding:16px 18px 10px; margin:0 0 22px}
+  .case h3{margin:0 0 4px}
+  .case p{font-size:14.5px; margin-bottom:8px}
+  pre.prompt{white-space:pre-wrap; font-size:12.4px; max-height:560px; overflow:auto}
+  .num{font-family:var(--mono); font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="rail" id="rail">
+  <div class="rail-title">点选分割方案</div>
+  <a href="#overview"><span class="n">00</span>为什么改</a>
+  <a href="#idea"><span class="n">01</span>思路</a>
+  <a href="#sam"><span class="n">02</span>SAM 点提示的行为</a>
+  <a href="#loop"><span class="n">03</span>工具循环</a>
+  <a href="#tools"><span class="n">04</span>工具设计</a>
+  <a href="#prompt"><span class="n">05</span>prompt 组织</a>
+  <a href="#iter"><span class="n">06</span>三轮迭代</a>
+  <a href="#results"><span class="n">07</span>7 帧对比</a>
+  <a href="#cost"><span class="n">08</span>成本</a>
+  <a href="#open"><span class="n">09</span>遗留问题与下一步</a>
+  <a href="#files"><span class="n">10</span>文件与命令</a>
+</nav>
+
+<main>
+
+<header class="top">
+  <div class="eyebrow">InstanceRecognition · Perception · Point-prompt trial</div>
+  <h1>GPT 点选 + SAM3：让 mask 粒度由“什么算一个物体”决定</h1>
+  <p class="lede">
+    现行感知阶段由 GPT 报类别名、SAM 按文本找实例，粒度完全交给 SAM，于是一整面橱柜被切成一块块门板。
+    点选方案把粒度交还给 GPT：GPT 先列出要分割的物体，再在图上点选正负点，SAM3 按点出 mask，
+    GPT 看着渲染结果修正、组合、保留。本页记录这个方案的设计、它为什么这样设计，以及 7 帧小规模试验的结果。
+  </p>
+  <div class="meta">
+    <span class="tag">状态 <b>试验（未接入主流程）</b></span>
+    <span class="tag">日期 <b>2026-11-10</b></span>
+    <span class="tag">GPT <b>gpt-6-sol</b></span>
+    <span class="tag">SAM <b>sam3.pt 图像模型 · 交互式点提示</b></span>
+    <span class="tag">试验帧 <b>7</b></span>
+    <span class="tag">代码 <b>tmp/point_prompt/</b></span>
+  </div>
+</header>
+
+
+<!-- ============ 00 ============ -->
+<section id="overview">
+  <h2><span class="no">00</span>为什么改</h2>
+  <p class="sub">文本 prompt 下，粒度是 SAM 决定的</p>
+
+  <p>现行流程（<code>src/perception/</code>）分两步：GPT 看一帧图，返回一组<b>类别名</b>（规则明确写着
+  “List a category once … SAM determines the instances; do not return counts, boxes, coordinates”）；
+  SAM3.1 对每个类别名调用一次文本 prompt，返回它认为属于这个概念的<b>所有实例</b>，代码原样保留，不做合并。</p>
+
+  <p>问题出在“实例”的边界由 SAM 定。GPT 在帧 2794 正确地只写了一个 <code>built-in cabinet</code>，
+  SAM 对这个短语返回了 8 个 mask——每对柜门一个；帧 2571 的 <code>cabinet</code> 返回了 11 个。
+  这就是 v14 里 Object064（电视柜）和 Object059（书柜墙）被拆碎的源头：下游拿到的观测本身就是门板。</p>
+
+  <div class="pair">
+  <figure><div class="lbl old">现行 · GPT 类别 + SAM 文本</div><img src="assets/point-prompt/2794_text.jpg" loading="lazy"><figcaption>8 个 built-in cabinet，一对门一个；书架、侧框没有 mask</figcaption></figure>
+  <figure><div class="lbl new">点选 · GPT 点选 + SAM3</div><img src="assets/point-prompt/2794_point.jpg" loading="lazy"><figcaption>1 个整面墙柜 + 6 层书 / 碟 + 扶手椅</figcaption></figure>
+</div>
+
+  <div class="note">文本 prompt 本身没“框错”：每块门板都是对的门板。错的是粒度——SAM 认为“cabinet”的一个实例是一组门，而我们需要的是整件家具。
+  再写一个更长的 <code>sam_prompt</code> 或事后合并同类 mask 都只是绕着这个问题走；点选让真正知道“什么算一个物体”的那一方来定边界。</div>
+</section>
+
+
+<!-- ============ 01 ============ -->
+<section id="idea">
+  <h2><span class="no">01</span>思路</h2>
+  <p class="sub">GPT 定“分什么、分到多大”，SAM 只负责贴边</p>
+
+  <div class="marks">
+    <div class="mark m"><div class="who">GPT</div><div>决定画面里有哪些物体、每个物体包含哪些部分（整面墙柜算一个，书单独算），并通过正负点把这个判断告诉 SAM。看渲染结果，判断 mask 是否覆盖整个物体且只覆盖它，不对就改点。</div></div>
+    <div class="mark a"><div class="who">SAM3</div><div>把一组点变成一个贴着真实边缘的 mask。它擅长的是边缘，不需要它理解“一个物体”是什么。</div></div>
+    <div class="mark w"><div class="who">宿主</div><div>渲染 GPT 看得懂的图（网格、拼图、总览）、计算 GPT 用眼看容易漏的事实（点是否落在 mask 内、碎块、面积门槛、重叠），在结束时检查每个计划都有着落。</div></div>
+  </div>
+
+  <p>这和 harness 的设计立场一致：几何和像素统计由宿主算好作为证据，判断交给模型。和“一次性让 GPT 吐出所有点”不同，这里是<b>循环</b>：点完立刻看结果再改，坐标估得不准可以在下一轮补救。</p>
+
+  <h3>为什么是点，不是框</h3>
+  <p>框能一次限定范围，但 GPT 估计像素框的误差直接变成 mask 的误差（框小了切掉物体，框大了吃进邻居）。点只要求“落在物体表面内部”，容错大得多；
+  多个点散布在各部件上就能表达“这些部件是一个整体”，负点能精确切掉某个邻居。trial3 里 GPT 一共打了 276 个正点，只有 6 个最终落在 mask 外。</p>
+</section>
+
+
+<!-- ============ 02 ============ -->
+<section id="sam">
+  <h2><span class="no">02</span>SAM 点提示的行为</h2>
+  <p class="sub">三个探针实验，决定了 prompt 里的打点规则和宿主的细化次数</p>
+
+  <h3>用哪个模型、哪个入口</h3>
+  <p>现行流程用的 <code>sam3.1_multiplex.pt</code> 视频预测器，文本路径明确拒绝点（<code>sam3_multiplex_tracking.py</code>：“Point prompts not accepted”）。
+  试验改用同目录下的 <code>sam3.pt</code> 图像模型，以 <code>build_sam3_image_model(enable_inst_interactivity=True)</code> 构建，
+  调用 <code>model.predict_inst(state, point_coords, point_labels, mask_input, multimask_output)</code>。加载约 6 s，显存约 3.7 GB；每帧 <code>set_image</code> 一次，之后每组点都是毫秒级。</p>
+
+  <h3>发现 1：一个点只给最小的一块</h3>
+  <div class="trio">
+    <figure><img src="assets/point-prompt/probe_one.jpg" loading="lazy"><figcaption>单个正点（绿点）落在左上柜门：最高分 0.92 的 mask 只占画面 3.8%——就是这一扇门。</figcaption></figure>
+    <figure><img src="assets/point-prompt/probe_six.jpg" loading="lazy"><figcaption>每块门板、每个书架段上各一个点（8 个），单次推理：mask 扩到整面墙柜（45%），但碎得厉害。</figcaption></figure>
+    <figure><img src="assets/point-prompt/passes_3.jpg" loading="lazy"><figcaption>同一组点（GPT 在 smoke 运行里给的 12 正 6 负）细化 3 遍后：边缘贴合、碎块大幅减少。</figcaption></figure>
+  </div>
+  <p>结论写进 prompt：<b>多部件物体要在每个可见部件上各放一个正点，并覆盖到物体的四角</b>。单点时宿主开 <code>multimask_output</code>，取得分最高的一个。</p>
+
+  <h3>发现 2：要迭代细化</h3>
+  <p>SAM 支持把上一次输出的低分辨率 logits 作为 <code>mask_input</code> 再喂回去。同一组 GPT 给的点：</p>
+  <table>
+    <thead><tr><th>细化遍数</th><th>SAM 分数</th><th>面积</th><th>连通块数</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td class="num">0.32</td><td class="num">30.0%</td><td class="num">576</td></tr>
+      <tr><td class="num">2</td><td class="num">0.81</td><td class="num">37.9%</td><td class="num">160</td></tr>
+      <tr><td class="num">3</td><td class="num">0.89</td><td class="num">40.7%</td><td class="num">42</td></tr>
+    </tbody>
+  </table>
+  <p>宿主固定做 3 遍（第 1 遍点 → 第 2、3 遍点 + 上一遍 logits），GPT 只看到最终结果。prompt 里告诉它这一点，免得它为“第一遍的碎块”去加点。</p>
+
+  <h3>发现 3：负点要谨慎，框不划算</h3>
+  <p>只给正点不给负点，3 遍后 mask 会漫到 60% 的画面（把书和墙都吃进去）；负点是必要的。
+  直接用框（由正点外接矩形外扩 60 px）只得到 0.61 分、26% 面积的残缺 mask——框不能替代点。</p>
+</section>
+
+
+<!-- ============ 03 ============ -->
+<section id="loop">
+  <h2><span class="no">03</span>工具循环</h2>
+  <p class="sub">一帧一个对话；每轮恰好一个工具调用；默认上限 24 轮</p>
+
+  <div class="chain">
+    <div class="node b"><div class="k">输入</div><div class="t">原图 + 每 100 px 一条带坐标标签的网格图</div><div class="d">两张图都是原始分辨率 1296×968，坐标即原图像素</div></div>
+    <div class="arrow"></div>
+    <div class="node p"><div class="k">GPT · plan</div><div class="t">列出要分割的物体：label + 位置描述</div><div class="d">返回 P1, P2, …；可以后续再调用 plan 补漏</div></div>
+    <div class="arrow"></div>
+    <div class="node p"><div class="k">GPT · segment（≤6 个物体 / 次）</div><div class="t">每个计划给正点、负点</div><div class="d">宿主跑 SAM 3 遍细化，返回每个候选的拼图 tile + 数字 + 警告</div></div>
+    <div class="arrow"></div>
+    <div class="node y"><div class="k">GPT · 检查</div><div class="t">逐个候选对照原图：覆盖全了吗？吃进别的了吗？</div><div class="d">不对 → 再 segment（加点 / 加负点），或分块分割后 combine；需要细看 → zoom</div></div>
+    <div class="arrow"></div>
+    <div class="node g"><div class="k">GPT · keep</div><div class="t">保留合格的候选</div><div class="d">返回全帧已保留总览 + 重叠警告 + 还没保留的计划列表</div></div>
+    <div class="arrow"></div>
+    <div class="node r"><div class="k">GPT · finish</div><div class="t">每个计划要么已保留，要么写明跳过原因</div><div class="d">宿主不放行有遗漏的 finish；输出 masks/*.png + result.json</div></div>
+  </div>
+</section>
+
+
+<!-- ============ 04 ============ -->
+<section id="tools">
+  <h2><span class="no">04</span>工具设计</h2>
+  <p class="sub">每个工具对应一个具体需要；宿主算的是 GPT 用眼看容易漏的</p>
+
+  <table class="tools">
+    <thead><tr><th>工具</th><th>参数</th><th>返回与设计理由</th></tr></thead>
+    <tbody>
+      <tr><td><code>plan</code></td><td><code>objects[{label, where}]</code></td>
+        <td>返回计划 id。<b>先计划后分割</b>有两个作用：迫使 GPT 先通盘扫一遍画面再动手（试验里漏物体主要发生在没扫边缘时）；
+        给 <code>finish</code> 一个可以核对的清单——每个计划都必须有着落，模型不能悄悄放弃一个难分的大物体。</td></tr>
+      <tr><td><code>segment</code></td><td><code>items[{plan_id, positive[[x,y]…], negative[…]}]</code>，≤6 项；正点 ≤20，负点 ≤8</td>
+        <td>一次分割多个物体以节省轮次。返回一张拼图（每个候选一块 tile：mask 着色、其余压暗、绿点 = 正点、红叉 = 负点；小物体自动裁剪放大），
+        以及每个候选的面积占比、bbox、SAM 分数和<b>警告</b>：正点不在 mask 内、负点在 mask 内、碎成多块、面积低于下游门槛（0.5% 画面）、与已保留 mask 重叠 &gt;10%。</td></tr>
+      <tr><td><code>zoom</code></td><td><code>box [x0,y0,x1,y1]</code></td>
+        <td>返回放大到长边 1000 px 的裁剪，网格步长自适应（10–100 px），标签仍是<b>原图坐标</b>——GPT 不用做坐标换算。用于小物体和贴边打点。</td></tr>
+      <tr><td><code>combine</code></td><td><code>plan_id, union[C…], subtract[C…]</code></td>
+        <td>对同一计划的多个候选做并集，可减去其他候选。<b>为大物体分块分割而设</b>：一组点盖不全整面墙柜时，上柜、中段、下柜分三次分，再合起来；
+        也用于把书架段从书柜 mask 里减掉。trial1 里没有这个工具，GPT 在单组点失败后直接跳过了整面墙柜。</td></tr>
+      <tr><td><code>keep</code></td><td><code>candidates[C…]</code></td>
+        <td>保留候选；同一计划后保留的覆盖先保留的。返回全帧已保留总览（大的先画、小的叠在上面，带计划 id 标签）、未保留计划列表、
+        以及<b>已保留 mask 之间的重叠警告</b>（小的有 &gt;30% 在大的里面）——“书在书柜里”是合理的，“墙柜吃进了旁边的高柜”不是，由 GPT 判断。</td></tr>
+      <tr><td><code>finish</code></td><td><code>skipped[{plan_id, reason}]</code></td>
+        <td>结束这一帧。任何既没保留也没跳过的计划都会被拒绝并点名；跳过必须写原因（试验里的原因如“只露出一条看不出是什么的边”）。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>GPT 看到的图</h3>
+  <div class="pair">
+    <figure><img src="assets/point-prompt/2794_grid.jpg" loading="lazy"><figcaption>首条消息里的网格图：每 100 px 一条线，x 标在上沿、y 标在左沿。GPT 直接从网格读坐标。</figcaption></figure>
+    <figure><img src="assets/point-prompt/2794_zoom.jpg" loading="lazy" style="max-height:470px;width:auto;margin:auto"><figcaption>zoom 返回的放大图（帧 2794 右侧扶手椅附近），细网格仍标原图坐标。</figcaption></figure>
+  </div>
+  <figure><img src="assets/point-prompt/2794_segment.jpg" loading="lazy"><figcaption>segment 返回的拼图（帧 2794 第一次分割，6 个候选）：第一块是墙柜（15 正 3 负），后面是各层书；小物体 tile 自动裁剪并标 [crop]。</figcaption></figure>
+  <figure><img src="assets/point-prompt/2794_combine.jpg" loading="lazy" style="max-width:720px"><figcaption>combine 结果：墙柜两次分割取并集，再减去 6 个书 / 碟候选，得到整面墙柜（书架上的书单独成物体）。</figcaption></figure>
+</section>
+
+
+<!-- ============ 05 ============ -->
+<section id="prompt">
+  <h2><span class="no">05</span>prompt 组织</h2>
+  <p class="sub">约 1150 词，七段；先定义“什么算一个物体”，再讲坐标、SAM 怎么读点、工具、流程、失败时怎么办</p>
+
+  <table>
+    <thead><tr><th>段</th><th>内容</th><th>为什么放这里</th></tr></thead>
+    <tbody>
+      <tr><td>开头一段</td><td>任务一句话：你点、SAM 出 mask、你看、你保留；目标是“一个物理物体一个 mask，供 3D 重建用”</td><td>把“供重建用”放在最前，后面“太小就跳过”“不必像素级完美”都从这里推出来</td></tr>
+      <tr><td>WHAT COUNTS AS ONE OBJECT</td><td>能整体搬动或指认的东西算一个；<b>内建 / 多部件家具是一个物体</b>，门、抽屉、把手、层板、腿永远不单独算；放在家具上 / 里的东西单独算（每层书算一个）；重复的同类物体各算一个；成对的鞋算一个</td><td>这一段是整个方案的核心——粒度规则。它取代了现行 prompt 里“SAM determines the instances”。成对鞋子规则沿用现行 prompt</td></tr>
+      <tr><td>（同段）跳过与扫描</td><td>跳过墙、地、天花板和小于约 80×80 px 的东西（下游门槛）；部分出画但认得出的照样分；<b>规划前先扫四边、台面、家具底下</b></td><td>后两句是 trial1 → trial2 加的：GPT 漏掉了画面上沿的吊柜和侧边的冰箱</td></tr>
+      <tr><td>THE IMAGE AND ITS COORDINATES</td><td>坐标是原图像素；网格图怎么读；zoom 的坐标仍是原图</td><td>消除坐标系歧义，GPT 不需要做任何换算</td></tr>
+      <tr><td>HOW SAM READS YOUR POINTS</td><td>正点 / 负点含义；<b>单点有歧义，SAM 给最小的一块</b>，所以多部件物体每个部件一个点、覆盖到四角；正点离边缘 ≥15 px，别点在缝隙、反光、遮挡物上；负点用来切漏出去的部分；宿主细化 3 遍</td><td>把 02 节的探针结论直接翻译成打点规则。不让模型自己去猜 SAM 的行为</td></tr>
+      <tr><td>TOOLS</td><td>六个工具各一句</td><td>参数细节在工具 schema 里，这里只讲用途</td></tr>
+      <tr><td>HOW TO WORK</td><td>五步：plan → 批量 segment（大物体先）→ 逐部件检查、读警告、改点 → keep 并读重叠警告、看总览找漏 → finish</td><td>第 3 步“逐个部件看有没有暗着的”和第 4 步“读重叠警告”是 trial2 / trial3 加的</td></tr>
+      <tr><td>WHEN ONE POINT SET IS NOT ENOUGH</td><td>大物体一组点不行就分块分、再 combine；<b>不要因为一组点失败就跳过大物体</b>；mask 不必像素级完美：覆盖几乎全部、几乎不含别的就保留；缺一整块或盖到别的物体才拒绝</td><td>trial1 → trial2 加的：GPT 对墙柜 mask 要求过高，三次尝试后放弃，整面墙柜没有 mask</td></tr>
+    </tbody>
+  </table>
+
+  <h3>全文（trial3 版本）</h3>
+  <pre class="prompt">You segment one RGB frame from a static indoor scan. You do it by clicking: you choose points on the image, a promptable segmenter (SAM) turns each set of points into one mask, you look at the result, and you keep the masks that are right. The goal is one mask per physical object that a 3D reconstruction could use.
+
+## WHAT COUNTS AS ONE OBJECT
+
+An object is one thing you could pick up, move or point to as a unit: a chair, a pillow, a backpack, a television, a bed.
+
+Built-in and multi-part furniture is one object, not one per part. A cabinet with eight doors is one cabinet. A wall unit that combines cupboards and open shelves is one object. A desk with drawers is one desk. Doors, drawers, handles, shelves, legs and panels are never separate objects.
+
+Things resting on or stored in furniture are separate objects when they are separate things: a lamp on a nightstand, a backpack on a chair. A shelf full of books is one &quot;books&quot; object per shelf section you can outline, not one per book.
+
+Repeated identical objects are separate objects: four bar stools are four masks, six pillows are six masks. Matching footwear is one &quot;pair of shoes&quot; mask per pair.
+
+Skip walls, floors, ceilings, and anything smaller than about 80 x 80 pixels: such masks are too small to reconstruct and are discarded downstream. Skip objects so cut off by the frame edge or so occluded that you cannot tell what they are. An object that is only partly in frame but recognisable — wall cabinets along the top edge, an appliance at the side — is still planned and segmented: its visible part is useful.
+
+Scan the whole frame before planning: the top and side edges, the counter tops, the space under furniture. Objects there are easy to miss.
+
+## THE IMAGE AND ITS COORDINATES
+
+Coordinates are pixels of the original image: x from 0 at the left edge to the image width, y from 0 at the top edge to the image height. The first message gives you the frame twice: as it is, and with a labelled grid every 100 pixels. Read positions off the grid. `zoom` returns a magnified crop with a finer grid, still labelled in full-image pixels, for small objects and for placing points near edges.
+
+## HOW SAM READS YOUR POINTS
+
+A positive point says &quot;this pixel belongs to the object&quot;; a negative point says &quot;this pixel does not&quot;.
+
+One positive point is ambiguous. SAM answers with the smallest coherent region under it: click a cabinet door and you get that door; click a handle and you may get the handle. To get a whole multi-part object, put one positive point on every distinct visible part — each door, each shelf section, the frame between them — spread over the object&#x27;s full extent, including near its corners.
+
+Every positive point must lie on the object&#x27;s visible surface, well inside it (at least 15 pixels from its edge). A point on a gap, on a reflection, or on whatever is in front of the object will pull in the wrong thing.
+
+Use negative points to cut away leakage: if the mask spills onto a neighbouring object, add a negative point on that neighbour, well inside it.
+
+The host refines each point set three times, so you see the refined mask. A mask below the downstream minimum size cannot be kept; skip that object instead.
+
+## TOOLS
+
+- `plan` lists the objects you intend to segment, each with a label and where it is. It returns plan ids (P1, P2, ...). You can call it again to add objects you missed.
+- `segment` takes up to six planned objects, each with its points, and returns one candidate per object (C1, C2, ...) drawn on the frame with your points, plus per-candidate numbers and warnings: positive points the mask does not contain, negative points it does, overlap with masks you already kept.
+- `combine` builds one candidate for a plan id from the union of several of its candidates, optionally subtracting others (for example a books candidate cut out of a bookcase candidate).
+- `zoom` returns a magnified crop with a finer grid.
+- `keep` accepts candidates. A later keep for the same plan id replaces the earlier one. It returns the frame with everything kept so far.
+- `finish` ends the frame. Every plan id must be kept or listed in `skipped` with a reason.
+
+## HOW TO WORK
+
+1. Look at both images. Call `plan` with every object in the frame that meets the rules above. Use common, specific category names (&quot;office chair&quot;, &quot;nightstand&quot;, &quot;wall cabinet&quot;), the same name for the same kind of object, and English only.
+2. Call `segment` on several planned objects at once. Large objects first, then the things in front of or on them.
+3. Check every candidate against the image: does it cover the whole object and nothing else? For a multi-part object, go part by part over its visible extent — each door, each section, each end — and look for a part left dark in the tile; a missing part means a missing positive point there. Read the warnings. If a candidate is wrong, segment that plan id again with changed points — more positives on the missing parts, negatives on the leak. Do not keep a mask you would not accept as the object&#x27;s outline.
+4. `keep` the good ones. Read its overlap warnings — a large mask that swallowed a separate neighbour must be fixed, for example by `combine` with that neighbour&#x27;s candidate subtracted. Look at the returned picture of all kept masks: an object with no mask on it is either still to do, or missing from your plan.
+5. When every planned object is kept or skipped, call `finish`.
+
+## WHEN ONE POINT SET IS NOT ENOUGH
+
+Large multi-part objects sometimes come back with parts missing or with a leak that negative points do not remove. Then segment the object in pieces under the same plan id — for example the upper cupboards, the middle section and the lower cupboards as three `segment` items — and `combine` them. Do not skip a large object because a single point set failed: a combined mask covering the object is far more useful than none.
+
+A mask does not have to be pixel-perfect. Keep it when it covers nearly all of the object and nearly nothing else; small ragged edges or a few missing patches along a border are acceptable. Reject it when a whole part is missing or when it covers a different object.
+
+Each reply must contain exactly one tool call. Your budget is limited and the host warns you when two rounds remain; segmenting several objects per call and keeping several candidates per call is how you stay within it.
+</pre>
+</section>
+
+
+<!-- ============ 06 ============ -->
+<section id="iter">
+  <h2><span class="no">06</span>三轮迭代</h2>
+  <p class="sub">每轮只针对上一轮看到的具体失败改一处</p>
+
+  <div class="case">
+    <h3>trial1 → trial2：大物体被放弃 <span class="h">帧 2794</span></h3>
+    <p>trial1 的 GPT 对墙柜试了 3 组点：一组缺上柜，一组漏进书和旁边的高柜，一组仍缺右侧。它在 finish 里写“Candidates either omit substantial cabinet sections or leak into books … no reliable complete mask”，跳过了整面墙柜——这恰恰是我们最需要的那个 mask。</p>
+    <p><b>改动</b>：加 <code>combine</code> 工具；prompt 加“分块分割再合并”“不要因为一组点失败就跳过大物体”“不必像素级完美”。</p>
+    <div class="pair">
+      <figure><div class="lbl old">trial1</div><img src="assets/point-prompt/2794_trial1.jpg" loading="lazy"><figcaption>只有书和扶手椅，墙柜被跳过</figcaption></figure>
+      <figure><div class="lbl new">trial3</div><img src="assets/point-prompt/2794_point.jpg" loading="lazy"><figcaption>两次分割并集 − 6 个书 / 碟候选 = 整面墙柜</figcaption></figure>
+    </div>
+  </div>
+
+  <div class="case">
+    <h3>trial1 → trial2：漏掉画面边缘的物体 <span class="h">帧 4471</span></h3>
+    <p>trial1 只分了地柜、碗架、烤面包机三样，漏掉了上沿露出一截的吊柜和右侧的冰箱。</p>
+    <p><b>改动</b>：prompt 加“部分出画但认得出的照样分”“规划前先扫四边、台面、家具底下”。</p>
+    <div class="pair">
+      <figure><div class="lbl old">trial1</div><img src="assets/point-prompt/4471_trial1.jpg" loading="lazy"><figcaption>3 个 mask</figcaption></figure>
+      <figure><div class="lbl new">trial2</div><img src="assets/point-prompt/4471_trial2.jpg" loading="lazy"><figcaption>7 个：补上吊柜、冰箱、纸巾架、咖啡机</figcaption></figure>
+    </div>
+  </div>
+
+  <div class="case">
+    <h3>trial2 → trial3：大 mask 吞掉邻居</h3>
+    <p>trial2 帧 2794 的墙柜 mask 把左边相邻的高柜一并吃进去，又单独保留了那个高柜，两个 mask 大面积重叠，GPT 没察觉——两者是在同一次 keep 里保留的，segment 的重叠警告只对“已保留”的生效。</p>
+    <p><b>改动</b>：keep 返回已保留 mask 之间的两两重叠警告（小的 &gt;30% 在大的里），措辞说明“书在书柜里是合理的，大 mask 漏到另一个物体上则要修”；prompt 第 4 步要求读这个警告。</p>
+    <p>trial3 里这个问题减轻但没根除：GPT 不再单独保留左侧高柜，但墙柜左缘仍带着高柜的一些碎片（见 09 节）。</p>
+  </div>
+</section>
+
+
+<!-- ============ 07 ============ -->
+<section id="results">
+  <h2><span class="no">07</span>7 帧对比（trial3）</h2>
+  <p class="sub">左：现行 gpt_sam31_uniform500 产物（面积过滤后）；右：点选方案保留的 mask</p>
+
+  <table>
+    <thead><tr><th>帧</th><th>场景</th><th>现行</th><th>点选</th></tr></thead>
+    <tbody>
+      <tr><td class="num">2794</td><td>书柜墙（v14 Object059）</td><td>10：8 个 built-in cabinet（每对门一个）、window、sofa</td><td>8：整面墙柜、6 层书 / 碟、扶手椅</td></tr>
+      <tr><td class="num">2571</td><td>电视柜（v14 Object064）</td><td>16：11 个 cabinet（每块门板一个）、电视、2 书、自行车、窗帘</td><td>10：电视柜、右侧墙柜、左侧高柜、电视、3 层书、台灯、窗帘、自行车</td></tr>
+      <tr><td class="num">4471</td><td>厨房</td><td>10：7 个 kitchen cabinet + 2 个 wall cabinet、纸巾</td><td>7：地柜、吊柜、冰箱、碗架、纸巾、烤面包机、地垫</td></tr>
+      <tr><td class="num">1397</td><td>门厅</td><td>13：5 个 door、3 个 cabinet、冰箱、2 垃圾桶、洗衣篮、地垫</td><td>6：柜、门、冰箱、2 垃圾桶、地垫</td></tr>
+      <tr><td class="num">3018</td><td>沙发</td><td>10：6 个 throw pillow（含沙发靠背坐垫）、2 遥控器、吉他、脚凳</td><td>6：整个转角沙发、3 个靠枕、脚凳、床角；<b>漏掉 2 个遥控器</b>，吉他判为遮挡过重跳过</td></tr>
+      <tr><td class="num">5085</td><td>吧台椅</td><td>4：4 个 bar stool</td><td>5：4 个 bar stool + 吧台岛</td></tr>
+      <tr><td class="num">559</td><td>卧室</td><td>9</td><td>12：多出第二个枕头、两个包</td></tr>
+    </tbody>
+  </table>
+
+  <h3>帧 2571 · 电视柜（v14 Object064）</h3>
+  <div class="pair">
+  <figure><div class="lbl old">现行 · GPT 类别 + SAM 文本</div><img src="assets/point-prompt/2571_text.jpg" loading="lazy"><figcaption>11 个 cabinet：上下门板各一个</figcaption></figure>
+  <figure><div class="lbl new">点选 · GPT 点选 + SAM3</div><img src="assets/point-prompt/2571_point.jpg" loading="lazy"><figcaption>电视柜、右侧墙柜、左侧高柜各一个；电视、3 层书单独</figcaption></figure>
+</div>
+  <h3>帧 4471 · 厨房</h3>
+  <div class="pair">
+  <figure><div class="lbl old">现行 · GPT 类别 + SAM 文本</div><img src="assets/point-prompt/4471_text.jpg" loading="lazy"><figcaption>7 个 kitchen cabinet mask + 2 个 wall cabinet mask</figcaption></figure>
+  <figure><div class="lbl new">点选 · GPT 点选 + SAM3</div><img src="assets/point-prompt/4471_point.jpg" loading="lazy"><figcaption>地柜一个、吊柜一个；台面上的小家电各一个</figcaption></figure>
+</div>
+  <h3>帧 3018 · 沙发</h3>
+  <div class="pair">
+  <figure><div class="lbl old">现行 · GPT 类别 + SAM 文本</div><img src="assets/point-prompt/3018_text.jpg" loading="lazy"><figcaption>沙发本身没有 mask；“throw pillow” 里混着沙发靠背坐垫</figcaption></figure>
+  <figure><div class="lbl new">点选 · GPT 点选 + SAM3</div><img src="assets/point-prompt/3018_point.jpg" loading="lazy"><figcaption>整个转角沙发一个；靠枕单独；被遮挡的吉他被跳过；两个遥控器没有进计划，是点选版漏掉的</figcaption></figure>
+</div>
+  <h3>帧 1397 · 门厅</h3>
+  <div class="pair">
+  <figure><div class="lbl old">现行 · GPT 类别 + SAM 文本</div><img src="assets/point-prompt/1397_text.jpg" loading="lazy"><figcaption>5 个 door mask、3 个 cabinet mask</figcaption></figure>
+  <figure><div class="lbl new">点选 · GPT 点选 + SAM3</div><img src="assets/point-prompt/1397_point.jpg" loading="lazy"><figcaption>门、柜、冰箱各一个</figcaption></figure>
+</div>
+  <h3>帧 5085 · 吧台椅</h3>
+  <div class="pair">
+  <figure><div class="lbl old">现行 · GPT 类别 + SAM 文本</div><img src="assets/point-prompt/5085_text.jpg" loading="lazy"><figcaption>只有 4 把凳子</figcaption></figure>
+  <figure><div class="lbl new">点选 · GPT 点选 + SAM3</div><img src="assets/point-prompt/5085_point.jpg" loading="lazy"><figcaption>4 把凳子 + 吧台岛</figcaption></figure>
+</div>
+  <h3>帧 559 · 卧室</h3>
+  <div class="pair">
+  <figure><div class="lbl old">现行 · GPT 类别 + SAM 文本</div><img src="assets/point-prompt/559_text.jpg" loading="lazy"><figcaption>9 个</figcaption></figure>
+  <figure><div class="lbl new">点选 · GPT 点选 + SAM3</div><img src="assets/point-prompt/559_point.jpg" loading="lazy"><figcaption>12 个，补上第二个枕头、床边与床头柜里的包</figcaption></figure>
+</div>
+
+  <div class="note">两边数量不能直接比“谁多谁好”：现行的多，主要是门板碎片；点选的多，是补上了现行漏掉的独立物体。判断标准是“一个物理物体是否恰好对应一个 mask”。在多部件家具上点选 7 帧全部更好；但它也会漏小物体——帧 3018 的两个遥控器现行版有、点选版没有。</div>
+</section>
+
+
+<!-- ============ 08 ============ -->
+<section id="cost">
+  <h2><span class="no">08</span>成本</h2>
+  <p class="sub">GPT 调用从每帧 1 次变成每帧 4–7 轮</p>
+
+  <table>
+    <thead><tr><th>帧</th><th>轮数</th><th>prompt token</th><th>耗时</th><th>保留 / 跳过</th></tr></thead>
+    <tbody>
+      <tr><td class="num">559</td><td class="num">7</td><td class="num">99,913</td><td class="num">77 s</td><td class="num">12 / 0</td></tr>
+      <tr><td class="num">1397</td><td class="num">4</td><td class="num">41,512</td><td class="num">28 s</td><td class="num">6 / 0</td></tr>
+      <tr><td class="num">2571</td><td class="num">5</td><td class="num">65,255</td><td class="num">73 s</td><td class="num">10 / 0</td></tr>
+      <tr><td class="num">2794</td><td class="num">7</td><td class="num">105,628</td><td class="num">138 s</td><td class="num">8 / 1</td></tr>
+      <tr><td class="num">3018</td><td class="num">4</td><td class="num">45,821</td><td class="num">72 s</td><td class="num">6 / 1</td></tr>
+      <tr><td class="num">4471</td><td class="num">6</td><td class="num">81,972</td><td class="num">248 s</td><td class="num">7 / 0</td></tr>
+      <tr><td class="num">5085</td><td class="num">5</td><td class="num">54,983</td><td class="num">42 s</td><td class="num">5 / 0</td></tr>
+      <tr><td><b>平均</b></td><td class="num"><b>5.4</b></td><td class="num"><b>70,726</b></td><td class="num"><b>97 s</b></td><td></td></tr>
+    </tbody>
+  </table>
+  <p>每轮请求都带着全部历史图片，所以 token 随轮数近似线性增长；completion token 每帧只有约 750。按 100 帧估算约 700 万 prompt token、2.7 小时（串行）——
+  约是一次 100 帧 harness 运行（v14：2067 万）的三分之一。帧之间相互独立，可以并发。耗时里 SAM 只占很小一部分，大头是 GPT 往返。</p>
+</section>
+
+
+<!-- ============ 09 ============ -->
+<section id="open">
+  <h2><span class="no">09</span>遗留问题与下一步</h2>
+  <p class="sub">7 帧够看出方向，不够下结论</p>
+
+  <h3>遗留问题</h3>
+  <ul>
+    <li><b>大 mask 的边缘越界</b>：帧 2794 的墙柜左缘带着相邻高柜的碎片，帧 3018 的沙发下缘带少量地面。重叠警告只覆盖“两个都保留了”的情况；漏到一个没被计划的东西上，宿主看不出来，只能靠 GPT 看图。可以考虑的宿主侧手段：报告 mask 落在画面边缘之外 / 与 bbox 填充率异常的部分，或对大 mask 做一次“只保留包含正点的连通块”。</li>
+    <li><b>跨帧一致性</b>：每帧独立，同一件家具这帧叫 wall unit、那帧叫 bookcase，切分方式也可能不同（帧 2571 把一组家具分成电视柜 / 墙柜 / 高柜三件，别的视角未必同样分）。harness 不依赖标签，但切分不一致会在跨帧关联时制造“部分对整体”的情况。</li>
+    <li><b>小物体漏检</b>：每帧由 GPT 一次规划决定分什么，规划漏掉的物体就没有 mask（帧 3018 漏了两个遥控器）。现行流程由 SAM 按类别名搜全图，同类小物体不容易漏。</li>
+    <li><b>规模</b>：只有 7 帧，没跑完 lift → harness，不知道最终 Object 的质量变化。</li>
+    <li><b>模型与环境</b>：试验用的是 <code>sam3.pt</code> 图像模型，主流程用的是 <code>sam3.1_multiplex.pt</code>；两份权重共存，接入时需要定下来用哪个。</li>
+  </ul>
+
+  <h3>建议的下一步</h3>
+  <ol>
+    <li>用 trial3 的 prompt 跑完 100 帧（与 <code>scene_amb3r_full100_v1</code> 相同的帧），生成对比页人工抽查。</li>
+    <li>把输出写成与现行 <code>predictions.json</code> 相同的结构，复用 <code>assemble_perception_source</code> → <code>amb3r_mask_source</code> 生成 source，跑一次 harness，与 v14 对比 Object064 / Object059 及整体物体数。</li>
+    <li>效果确认后，再把 <code>tmp/point_prompt/run.py</code> 正式化为 <code>src/perception/</code> 下的一条新路径（保留现行文本路径作对照）。</li>
+  </ol>
+</section>
+
+
+<!-- ============ 10 ============ -->
+<section id="files">
+  <h2><span class="no">10</span>文件与命令</h2>
+  <p class="sub">试验代码不进仓库（<code>.gitignore</code> 已加 <code>tmp/</code>）；本页图片复制在 <code>docs/assets/point-prompt/</code></p>
+
+  <div class="tree"><b>tmp/point_prompt/</b>
+├── prompt.txt          <i># GPT 系统 prompt（trial3）</i>
+├── run.py              <i># 工具循环 + SAM 封装 + 渲染</i>
+├── compare.py          <i># 生成 runs/&lt;run&gt;/index.html，与现行结果并排</i>
+├── sam_probe*.py       <i># 02 节的 SAM 行为探针</i>
+├── README.md
+└── <b>runs/</b>
+    ├── trial1/  trial2/  trial3/
+    │   └── frame_&lt;id&gt;/
+    │       ├── result.json   <i># 计划、保留（点、分数、bbox、面积）、跳过原因、轮数、token</i>
+    │       ├── masks/*.png   <i># 每个保留物体一张二值 mask</i>
+    │       ├── kept.jpg      <i># 全帧总览</i>
+    │       ├── images/       <i># 每轮返回给 GPT 的图</i>
+    │       └── calls/        <i># 原始请求 / 响应 / 工具结果</i>
+    └── trial3/index.html     <i># 7 帧对比页</i></div>
+
+  <div class="flow">
+    <div class="step"><div class="dot m">1</div><div class="body"><div class="name">跑试验（SAM 环境）</div>
+      <div class="io2"><em>/home/seer/miniconda3/envs/scene-understanding/bin/python</em> tmp/point_prompt/run.py --run NAME --frames 2794 2571 …</div></div></div>
+    <div class="step"><div class="dot">2</div><div class="body"><div class="name">生成对比页</div>
+      <div class="io2"><em>python3</em> tmp/point_prompt/compare.py --run NAME</div></div></div>
+  </div>
+</section>
+
+<footer>
+  <p>InstanceRecognition · Perception · GPT 点选 + SAM3 试验 · 2026-11-10</p>
+</footer>
+
+</main>
+</div>
+<script>
+  const rail=document.getElementById('rail');
+  if(rail){
+    const links=[...rail.querySelectorAll('a')];
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){
+          links.forEach(l=>l.classList.remove('on'));
+          const a=rail.querySelector(`a[href="#${e.target.id}"]`);
+          if(a)a.classList.add('on');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section[id]').forEach(s=>obs.observe(s));
+  }
+</script>
+</body>
+</html>

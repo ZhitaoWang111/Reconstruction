@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>perception_agent 工作流程 · 帧 2571 · InstanceRecognition</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4;
+    --bg:#fbfcfd; --card:#ffffff;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --warn:#b45309; --warn-soft:#fef6e7;
+    --stop:#b91c1c; --stop-soft:#fdecec;
+    --model:#7c3aed; --model-soft:#f3eefe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr); max-width:1180px; margin:0 auto; padding:0 28px 120px}
+  @media (min-width:1080px){
+    .wrap{grid-template-columns:230px minmax(0,1fr); gap:56px; padding-left:36px; padding-right:36px}
+    .rail{position:sticky; top:0; align-self:start; max-height:100vh; overflow:auto; padding:44px 0}
+  }
+  .rail{display:none}
+  @media (min-width:1080px){ .rail{display:block} }
+  .rail-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px}
+  .rail a{
+    display:block; padding:7px 12px; margin:1px 0; border-radius:6px;
+    color:var(--ink-2); text-decoration:none; font-size:13.5px; border-left:2px solid transparent;
+  }
+  .rail a:hover{background:var(--line-2); color:var(--ink)}
+  .rail a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+  .rail a .n{font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:7px}
+  .rail a.on .n{color:var(--accent)}
+
+  header.top{padding:56px 0 34px; border-bottom:1px solid var(--line); margin-bottom:8px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+  h1{margin:0 0 14px; font-size:clamp(28px,3.6vw,40px); line-height:1.2; letter-spacing:-.022em; font-weight:700}
+  .lede{margin:0; max-width:62ch; color:var(--ink-2); font-size:16.5px}
+  .meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:8px}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--card); border:1px solid var(--line); border-radius:5px; padding:3px 9px}
+  .tag b{color:var(--accent); font-weight:600}
+
+  section{padding-top:56px; scroll-margin-top:24px}
+  h2{margin:0 0 6px; font-size:23px; letter-spacing:-.014em; font-weight:700; display:flex; align-items:baseline; gap:12px}
+  h2 .no{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; letter-spacing:.04em}
+  .sub{margin:0 0 22px; color:var(--ink-3); font-size:14px; font-family:var(--mono)}
+  h3{margin:34px 0 10px; font-size:16.5px; font-weight:650; letter-spacing:-.006em}
+  h3 .h{color:var(--ink-3); font-weight:500; font-family:var(--mono); font-size:12.5px; margin-left:8px}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  ul,ol{margin:0 0 14px; padding-left:22px; line-height:1.8}
+  li{margin-bottom:4px}
+  code{font-family:var(--mono); font-size:.875em; background:var(--line-2); padding:1.5px 5px; border-radius:4px; color:#243040}
+  pre{margin:14px 0 18px; padding:15px 17px; background:#1d2228; color:#dfe6ee; border-radius:8px; overflow-x:auto; font-family:var(--mono); font-size:12.8px; line-height:1.65}
+  pre code{background:none; padding:0; color:inherit; font-size:inherit}
+  pre .c{color:#7d8894}
+  pre .k{color:#7dd3fc}
+  pre .s{color:#a5d6a7}
+
+  .io{border:1px solid var(--line); border-radius:10px; background:var(--card); margin:0 0 26px; overflow:hidden}
+  .io .row{display:grid; grid-template-columns:76px minmax(0,1fr); gap:16px; padding:13px 18px; border-bottom:1px solid var(--line-2)}
+  .io .row:last-child{border-bottom:none}
+  .io .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:700; padding-top:3px}
+  .io .val{font-size:14.5px; line-height:1.7}
+  .io .val code{font-size:12.8px}
+
+  .flow{display:grid; gap:0; margin:26px 0 8px}
+  .step{display:grid; grid-template-columns:34px minmax(0,1fr); gap:16px; align-items:start}
+  .step .dot{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:13px; font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid #bfe3dd}
+  .step .dot.m{background:var(--model-soft); color:var(--model); border-color:#ddd0fb}
+  .step .dot.w{background:var(--warn-soft); color:var(--warn); border-color:#f2ddb4}
+  .step .body{padding:5px 0 26px; border-bottom:1px dashed var(--line)}
+  .step:last-child .body{border-bottom:none}
+  .step .name{font-weight:650; font-size:15.5px; margin-bottom:3px}
+  .step .io2{font-family:var(--mono); font-size:12.3px; color:var(--ink-3); line-height:1.7}
+  .step .io2 em{font-style:normal; color:var(--ink-2)}
+
+  .marks{display:grid; gap:10px; margin:16px 0}
+  .mark{display:grid; grid-template-columns:74px minmax(0,1fr); gap:14px; padding:12px 15px; border-radius:8px; font-size:14.5px; line-height:1.65}
+  .mark .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding-top:2px}
+  .mark.a{background:var(--accent-soft); border:1px solid #bfe3dd}
+  .mark.a .who{color:var(--accent)}
+  .mark.m{background:var(--model-soft); border:1px solid #ddd0fb}
+  .mark.m .who{color:var(--model)}
+  .mark.w{background:var(--warn-soft); border:1px solid #f2ddb4}
+  .mark.w .who{color:var(--warn)}
+
+  .note{background:var(--accent-soft); border:1px solid #bfe3dd; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+  .warn{background:var(--warn-soft); border:1px solid #f2ddb4; border-radius:8px; padding:12px 16px; margin:14px 0 20px; font-size:14.5px; line-height:1.7}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:650; border-bottom:1px solid var(--line); white-space:nowrap}
+  td code{font-size:12.6px}
+  tbody tr:hover{background:#f7f9fa}
+  table.tools td:nth-child(3){font-size:13px; line-height:1.6; color:var(--ink-2)}
+
+  .tree{font-family:var(--mono); font-size:13px; line-height:1.75; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 20px; margin:16px 0 20px; white-space:pre; overflow-x:auto; color:var(--ink)}
+  .tree i{color:var(--ink-3); font-style:normal}
+  .tree b{color:var(--accent)}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:13px}
+  /* Vertical flow chart: one rounded node per step, colour-coded by who acts. */
+  .chain{display:flex; flex-direction:column; align-items:center; margin:26px 0 24px}
+  .node{
+    width:min(100%,540px); border:2px solid var(--line); border-radius:12px;
+    background:var(--card); padding:14px 18px; text-align:center;
+  }
+  .node .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-bottom:5px}
+  .node .t{font-weight:650; font-size:15px; line-height:1.45}
+  .node .d{font-size:13px; color:var(--ink-2); margin-top:6px; line-height:1.65}
+  .node .d code{font-size:11.8px}
+  .node.b{background:#eef4ff; border-color:#3b82f6}
+  .node.b .k{color:#2563eb}
+  .node.g{background:#ecfbf0; border-color:#22a552}
+  .node.g .k{color:#15803d}
+  .node.y{background:#fefbe8; border-color:#eab308}
+  .node.y .k{color:#a16207}
+  .node.r{background:#fdeeee; border-color:#dc2626}
+  .node.r .k{color:#b91c1c}
+  .node.p{background:#f4f0fd; border-color:#7c3aed}
+  .node.p .k{color:#6d28d9}
+  .arrow{width:2px; height:28px; background:#9aa4b2; position:relative}
+  .arrow::after{
+    content:""; position:absolute; left:50%; bottom:-2px; transform:translateX(-50%);
+    border-left:6px solid transparent; border-right:6px solid transparent; border-top:9px solid #9aa4b2;
+  }
+  .node.wide{width:min(100%,880px); text-align:left}
+  .node.wide .k,.node.wide .t{text-align:center}
+
+  .wrap{max-width:1320px}
+  /* swimlane: three actor columns, one row per round */
+  .lanes{display:grid; grid-template-columns:120px 1fr 1fr 1fr; gap:0; margin:22px 0 10px; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--card)}
+  .lanes .hd{padding:12px 14px; font-weight:700; font-size:14px; text-align:center; border-bottom:2px solid var(--line)}
+  .lanes .hd small{display:block; font-weight:500; font-size:11.5px; color:var(--ink-3); font-family:var(--mono)}
+  .hd.g{background:var(--model-soft); color:var(--model)} .hd.h{background:var(--warn-soft); color:var(--warn)} .hd.s{background:var(--accent-soft); color:var(--accent)}
+  .hd.r{background:var(--line-2); color:var(--ink-2)}
+  .lanes .rd{padding:14px 10px; border-bottom:1px solid var(--line); background:var(--line-2); font-family:var(--mono); font-size:12px; color:var(--ink-2); text-align:center}
+  .lanes .rd b{display:block; font-size:15px; color:var(--ink); margin-bottom:4px}
+  .lanes .c{padding:12px 14px; border-bottom:1px solid var(--line); border-left:1px solid var(--line-2); font-size:13.4px; line-height:1.6; position:relative}
+  .lanes .c.empty{background:repeating-linear-gradient(45deg,#fff,#fff 6px,#fafbfc 6px,#fafbfc 12px)}
+  .lanes .c .box{border-radius:9px; padding:10px 12px; border:2px solid}
+  .box.g{background:var(--model-soft); border-color:#c4b2f5} .box.h{background:var(--warn-soft); border-color:#efd39b} .box.s{background:var(--accent-soft); border-color:#a9dcd3}
+  .box .t{font-weight:700; font-size:13.6px; margin-bottom:4px}
+  .box .t code{font-size:12.4px}
+  .box ul{margin:4px 0 0; padding-left:17px} .box li{margin:0}
+  .flow-arrow{font-family:var(--mono); font-size:12px; color:var(--ink-3); margin-top:6px}
+  .flow-arrow b{color:var(--ink-2)}
+  .warnchip{display:inline-block; background:#fff3cd; border:1px solid #f0c36d; color:#8a5a00; border-radius:4px; padding:0 5px; font-size:12px; font-family:var(--mono)}
+  .shot{margin:10px 0 0}
+  .shot img{width:100%; border:1px solid var(--line); border-radius:6px; display:block}
+  .shot figcaption{font-size:12px; color:var(--ink-3); margin-top:4px}
+  .imgrow{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:12px 0}
+  .imgrow figure{margin:0} .imgrow img{width:100%; border:1px solid var(--line); border-radius:8px}
+  .imgrow figcaption{font-size:12.5px; color:var(--ink-3); margin-top:5px}
+  table.pts td{font-family:var(--mono); font-size:12.4px}
+  .num{font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap" style="grid-template-columns:minmax(0,1fr)">
+<main>
+
+<header class="top">
+  <div class="eyebrow">InstanceRecognition · Perception · perception_agent walkthrough</div>
+  <h1>perception_agent 怎样给一帧出 mask：以帧 2571 为例</h1>
+  <p class="lede">
+    帧 2571 就是 v14 里 Object064（电视柜）被拆碎的那一帧：现行的文本 prompt 流程在这里给了 11 个 <code>cabinet</code> mask。
+    下面按 trial3 的真实记录，逐轮展示 GPT（agent）、宿主和 SAM3 各做了什么。整帧 5 轮、73 秒、10 个 mask。
+  </p>
+  <div class="meta">
+    <span class="tag">运行 <b>tmp/point_prompt/runs/trial3/frame_002571</b></span>
+    <span class="tag">GPT <b>gpt-6-sol</b> · reasoning none</span>
+    <span class="tag">SAM <b>sam3.pt</b> 交互式点提示 · 3 遍细化</span>
+    <span class="tag">轮数 <b>5</b></span>
+    <span class="tag">prompt token <b>65,255</b></span>
+    <span class="tag">耗时 <b>73 s</b></span>
+  </div>
+</header>
+
+<section id="actors" style="padding-top:36px">
+  <h2><span class="no">01</span>三个角色</h2>
+  <div class="marks">
+    <div class="mark m"><div class="who">GPT</div><div><b>agent 本体</b>。看图、决定分哪些物体、在哪里打点、哪些结果可以保留。每轮只能调用一个工具，看不到 mask 的像素，只能看宿主渲染的图和数字。</div></div>
+    <div class="mark w"><div class="who">宿主</div><div><b>工具的实现方</b>（<code>tmp/point_prompt/run.py</code>）。校验参数、调 SAM、把结果画成 GPT 看得懂的图、算 GPT 用眼看容易漏的事实（点是否在 mask 内、碎块、面积门槛、重叠），在 <code>finish</code> 时核对每个计划都有着落。</div></div>
+    <div class="mark a"><div class="who">SAM3</div><div><b>只负责贴边</b>。每组点 → 一个 mask：第 1 遍用点，第 2、3 遍把上一遍的 logits 作为 <code>mask_input</code> 再细化。不知道“一个物体”是什么。</div></div>
+  </div>
+</section>
+
+<section id="input" style="padding-top:36px">
+  <h2><span class="no">02</span>开局：agent 拿到什么</h2>
+  <p>第一条消息只有两张图和一句话：系统 prompt（约 1150 词，定义“什么算一个物体”、SAM 怎么读点、工具和工作流程）+ 原图 + 每 100 px 一条网格线的同一帧。坐标就是原图像素，GPT 从网格上读。</p>
+  <div class="imgrow">
+    <figure><img src="assets/point-prompt/2571_frame.jpg"><figcaption>原图（1296×968）：左侧窗帘、自行车、落地灯、高柜，中间带电视的组合柜，右侧带书架的墙柜。</figcaption></figure>
+    <figure><img src="assets/point-prompt/2571_grid.jpg"><figcaption>网格图：x 标在上沿，y 标在左沿。</figcaption></figure>
+  </div>
+</section>
+
+<section id="flow" style="padding-top:36px">
+  <h2><span class="no">03</span>逐轮流程</h2>
+  <p class="sub">每行一轮；左到右是一次工具调用的往返：GPT 发起 → 宿主处理（需要时调 SAM）→ 结果回到 GPT 进入下一轮</p>
+
+  <div class="lanes">
+    <div class="hd r">轮次</div>
+    <div class="hd g">GPT · agent<small>决定做什么</small></div>
+    <div class="hd h">宿主<small>执行工具、渲染、计算警告</small></div>
+    <div class="hd s">SAM3<small>点 → mask</small></div>
+
+    <!-- r0 -->
+    <div class="rd"><b>r0</b>19.0 s<br>9.4k tok</div>
+    <div class="c"><div class="box g">
+      <div class="t"><code>plan</code>：先通盘列出要分的物体</div>
+      看完两张图，一次列出 10 个，每个带位置描述：
+      <ul>
+        <li>窗帘、自行车、落地灯、<b>高柜</b>（左）</li>
+        <li><b>entertainment center</b>（中间整组电视柜，写明“upper cupboards, open shelves, and lower cupboards”）、电视</li>
+        <li><b>wall unit</b>（右侧，写明“upper cupboards, bookshelf and lower cupboards”）</li>
+        <li>右侧三层书，各写了 y 范围</li>
+      </ul>
+      <div class="flow-arrow">→ 粒度在这一步就定了：柜子按整件计划，门板不单列；书按层单列</div>
+    </div></div>
+    <div class="c"><div class="box h">
+      <div class="t">登记计划</div>
+      分配 P1–P10，原样返回清单。<br>
+      这份清单就是 <code>finish</code> 时的核对表：每个 P 都必须保留或写明理由跳过。
+    </div></div>
+    <div class="c empty"></div>
+
+    <!-- r1 -->
+    <div class="rd"><b>r1</b>14.7 s<br>9.9k tok</div>
+    <div class="c"><div class="box g">
+      <div class="t"><code>segment</code>：先分 6 个大物体</div>
+      按 prompt 的“大物体先”，一次提交 6 组点：
+      <ul>
+        <li>P5 电视柜：<b>7 正 3 负</b>——正点覆盖上柜两扇门、两侧立柱、开放格、下柜两扇门；负点打在电视、右侧墙柜、左侧高柜上</li>
+        <li>P7 墙柜：<b>8 正 2 负</b>——上柜、右侧立板、下柜各处；负点打在书上和电视柜上</li>
+        <li>P4 高柜 4 正 2 负；P6 电视 3 正 2 负；P1 窗帘 4 正 2 负；P2 自行车 3 正 2 负</li>
+      </ul>
+    </div></div>
+    <div class="c"><div class="box h">
+      <div class="t">校验 → 调 SAM → 渲染拼图 + 算警告</div>
+      每个候选一块 tile（mask 着蓝、其余压暗、绿点正、红叉负），附面积、bbox、SAM 分数和警告：
+      <ul>
+        <li>C1 电视柜 23.2%，0.93</li>
+        <li>C2 墙柜 21.2%，0.93</li>
+        <li>C3 高柜 12.3% <span class="warnchip">mask 分成 3 块</span></li>
+        <li>C4 电视 4.8%、C5 窗帘 9.9%、C6 自行车 2.0%</li>
+      </ul>
+    </div></div>
+    <div class="c"><div class="box s">
+      <div class="t">6 组点 × 3 遍细化</div>
+      第 1 遍：点 → 粗 mask + logits<br>
+      第 2、3 遍：点 + 上一遍 logits → 细化<br>
+      <span style="color:var(--ink-3);font-size:12.5px">（同一组点 1 遍时碎成数百块，3 遍后边缘贴合；见方案页 02 节）</span>
+    </div></div>
+    <div class="c" style="grid-column:2 / span 3; background:#fcfcfd">
+      <figure class="shot"><img src="assets/point-prompt/2571_seg1.jpg"><figcaption>r1 返回给 GPT 的拼图。C1 / C2 各自盖住了整件家具，书和电视被负点留在外面；C3 高柜被落地灯的灯杆切成几块——这是遮挡造成的，不是分错。</figcaption></figure>
+    </div>
+
+    <!-- r2 -->
+    <div class="rd"><b>r2</b>15.4 s<br>12.9k tok</div>
+    <div class="c"><div class="box g">
+      <div class="t"><code>segment</code>：再分 4 个前景 / 小物体</div>
+      <ul>
+        <li>P3 落地灯：4 正 2 负，正点打在三个灯头和灯杆上</li>
+        <li>P8–P10 三层书：每层 3 个正点沿书脊排开，负点打在上一层和下一层</li>
+      </ul>
+      <div class="flow-arrow">→ 没有重分 C3。GPT 没写理由；从图上看，碎块是灯杆挡住造成的</div>
+    </div></div>
+    <div class="c"><div class="box h">
+      <div class="t">同上：调 SAM、渲染、算警告</div>
+      <ul>
+        <li>C7 落地灯 1.7% <span class="warnchip">正点 (305,700) 不在 mask 内</span></li>
+        <li>C8–C10 三层书 1.4% / 1.8% / 2.0%，无警告</li>
+      </ul>
+      小物体的 tile 自动裁剪放大并标 [crop]。
+    </div></div>
+    <div class="c"><div class="box s">
+      <div class="t">4 组点 × 3 遍细化</div>
+      灯杆细，细化后 mask 收窄，杆上那个正点落在了边缘外。
+    </div></div>
+    <div class="c" style="grid-column:2 / span 3; background:#fcfcfd">
+      <figure class="shot"><img src="assets/point-prompt/2571_seg2.jpg"><figcaption>r2 返回的拼图。三层书各自一个 mask，负点把相邻层挡在外面；落地灯三个灯头和灯杆都在 mask 里。</figcaption></figure>
+    </div>
+
+    <!-- r3 -->
+    <div class="rd"><b>r3</b>12.4 s<br>15.6k tok</div>
+    <div class="c"><div class="box g">
+      <div class="t"><code>keep</code>：一次保留全部 10 个候选</div>
+      C1–C10 全部接受。两条警告（C3 碎块、C7 一个点在外）都没有触发重分。
+    </div></div>
+    <div class="c"><div class="box h">
+      <div class="t">登记保留 → 两两查重叠 → 渲染总览</div>
+      <ul>
+        <li><code>planned_not_kept</code>：空</li>
+        <li><code>overlap_warnings</code>：空（没有哪个 mask 有 &gt;30% 落在另一个里）</li>
+      </ul>
+      返回全帧总览图：大的先画，小的叠在上面，带计划 id 标签。
+    </div></div>
+    <div class="c empty"></div>
+
+    <!-- r4 -->
+    <div class="rd"><b>r4</b>10.4 s<br>17.5k tok</div>
+    <div class="c"><div class="box g">
+      <div class="t"><code>finish</code>：跳过列表为空</div>
+      收到总览图后直接结束，没有补计划、没有重分。
+    </div></div>
+    <div class="c"><div class="box h">
+      <div class="t">核对计划 → 写盘</div>
+      检查 P1–P10 都已保留、没有既保留又跳过的。写出 <code>masks/*.png</code>（10 张二值 mask）、<code>kept.jpg</code>、<code>result.json</code>（每个物体的点、分数、bbox、面积）。
+    </div></div>
+    <div class="c empty"></div>
+  </div>
+  <p style="font-size:13px;color:var(--ink-3)">耗时是每轮 GPT 往返的时间（SAM 推理是毫秒级，可忽略）；token 是该轮请求的 prompt token。每轮请求都带着前面所有的图，所以 token 逐轮增长。GPT 每轮只返回工具调用，没有附带文字说明（reasoning effort 为 none），它的判断只能从调用参数里看出来。</p>
+</section>
+
+<section id="result" style="padding-top:36px">
+  <h2><span class="no">04</span>结果</h2>
+  <div class="imgrow">
+    <figure><img src="assets/point-prompt/2571_text.jpg"><figcaption><b style="color:var(--stop)">现行文本 prompt</b>：16 个 mask，其中 11 个 <code>cabinet</code>，一块门板一个。</figcaption></figure>
+    <figure><img src="assets/point-prompt/2571_kept.jpg"><figcaption><b style="color:var(--accent)">perception_agent</b>：10 个 mask——三件柜子各一个，电视、三层书、落地灯、窗帘、自行车各一个。</figcaption></figure>
+  </div>
+</section>
+
+<section id="takeaways" style="padding-top:36px">
+  <h2><span class="no">05</span>这一帧说明了什么</h2>
+  <ul>
+    <li><b>粒度在 <code>plan</code> 就定下了。</b>GPT 把柜子按整件列进计划，后面打点只是兑现这个决定。现行流程里根本没有这一步，粒度由 SAM 对 “cabinet” 一词的理解决定。</li>
+    <li><b>多部件物体靠“每个部件一个点”。</b>电视柜 7 个正点分布在上柜、立柱、开放格、下柜上，SAM 才把它当一个整体；负点把电视、书、相邻柜子切出去。</li>
+    <li><b>这一帧的检查 / 修正环节没有被用到。</b>两条警告 GPT 都接受了，没有重分、没有 combine、没有 zoom——10 个候选一次通过。在帧 2794 里同一个环节才真正起作用（分两次再 combine，减去书）。trial3 的 7 帧里，最少 4 轮（1397、3018：plan → segment → keep → finish），最多 7 轮（2794、559）。</li>
+    <li><b>警告是证据，不是规则。</b>宿主只报告事实，接不接受由 GPT 决定。这里的“碎成 3 块”从图上看是灯杆遮挡造成的，保留是合理的；但 GPT 没有说明理由（reasoning none 下它只输出工具调用），所以我们只能从结果判断它的决定对不对，看不到它为什么这么决定。</li>
+  </ul>
+  <p>方案的整体设计、工具和 prompt 见 <a href="point-prompt-segmentation.html">点选分割方案</a>。</p>
+</section>
+
+<footer><p>InstanceRecognition · perception_agent · 帧 2571 流程 · 数据取自 trial3 原始记录（calls/r00–r04）</p></footer>
+</main>
+</div>
+</body>
+</html>

@@ -402,12 +402,12 @@
     <header class="intro">
       <p class="eyebrow">VIDEO TO SIMREADY · DESIGN V1</p>
       <h1>v1 方案设计</h1>
-      <p>这里维护当前增量式场景理解 Harness 的方法框架、执行顺序、工具职责、状态语义和代码入口。运行中遇到的问题及解决思路记录在<a href="scene-reconstruction-discussions.html">方案讨论页面</a>。</p>
+      <p>这里维护增量式场景理解 Harness 的 v1 历史方案、执行顺序、工具职责、状态语义和代码入口。当前实现和后续修订以 v2 方案页及源码为准。运行中遇到的问题及解决思路记录在<a href="scene-reconstruction-discussions.html">方案讨论页面</a>。</p>
       <p class="note">最后核对日期：2026-09-24。代码路径均相对于仓库根目录；页面内容以当前实现为准。</p>
       <nav class="utility-nav" aria-label="方案设计快捷入口">
         <a href="#design-current">从头阅读</a>
         <a href="#design-code-flow">直接看执行顺序</a>
-        <a href="harness-tools.html">查看真实交互记录</a>
+        <a href="../InstanceRecognition/runtime/experiments/harness-v1-gpt56-terra-30frames-20260921/records.html">查看 v1 历史交互记录</a>
       </nav>
     </header>
 
@@ -415,8 +415,8 @@
       <section id="design-current" class="design-chapter" aria-labelledby="design-current-title">
       <header class="round-header">
         <div class="round-meta"><span class="round-number">v1 方案设计</span><time datetime="2026-09-21">2026-09-21</time><span>依据当前源码逐项核对</span></div>
-        <h2 id="design-current-title"><span class="chapter-number">01</span>总体框架</h2><h3>1.1 · 增量式场景理解 Harness</h3><section class="record"><h4>当前输入方案 v2 · 2026-09-24 · 历史视觉证据按需查看</h4><p>窗口开始时只发送当前 5 帧的完整 RGB 和 mask overlay，共 10 张图（不足 5 帧时按实际帧数）。全部历史 Object 以文字记录、全局 3D 框和最近空间候选提供，不预先发送历史图片。每条当前观测最多列出 3 个最近历史 Object；候选不限定归属，不是类别结论或置信度。</p><p>Agent 需要确认某个历史物体时调用 inspect_object(object_id)，返回一张完整 RGB 上叠加原始 SAM3 mask bbox 与 Object 编号的代表图；需要其他视角或 mask 细节时调用 inspect_observations。窗口内相同证据图片不重复发送，列表中的观测编号不等于已经查看过的视觉证据。</p><p>代表图仍采用“相对清晰候选池中优先大 bbox”的选择方法；全局框与空间候选来自窗口开始时已提交状态。<a href="scene-reconstruction-design-v2.html">打开 v2 方案子页：按执行顺序查看输入与工具行为</a>。本次不增加提交前自动冲突审查，也不改写历史实验记录。</p></section><p class="warn">早期 overlay 输入修订 v2（与本次方案版本不同）：当时改为完整 RGB ＋ 按 mask 着色的整帧 overlay；单物体取证也不裁剪。新增原图像素 bbox_xyxy 与 image_size_wh。<a href="../InstanceRecognition/runtime/experiments/harness_input_v2_preview/index.html">查看前五帧新版输入预览</a>（已准备，未调用 API）。下方旧运行回放保留历史输入。</p>
-        <p>按下方编号从上往下读，再沿返回路径理解循环。蓝白模块由程序执行，绿色模块由模型判断。这里记录 v1 方案的框架、执行顺序、工具职责和代码入口；运行中发现的问题与解决思路继续记录在方案讨论页面。</p>
+        <h2 id="design-current-title"><span class="chapter-number">01</span>总体框架</h2><h3>1.1 · 增量式场景理解 Harness</h3><section class="record"><h4>当前输入方案 v2 · 2026-09-24 · 历史视觉证据按需查看</h4><p>窗口开始时只发送当前 5 帧的完整 RGB 和 mask overlay，共 10 张图（不足 5 帧时按实际帧数）。全部历史 Object 以文字记录、全局 3D 框和最近空间候选提供，不预先发送历史图片。每条当前观测最多列出 3 个最近历史 Object；候选不限定归属，不是类别结论或置信度。</p><p>Agent 需要确认某个历史物体时调用 inspect_object(object_id)，返回一张完整 RGB 上叠加原始 SAM3 mask bbox 与 Object 编号的代表图；需要其他视角或 mask 细节时调用 inspect_observations。窗口内相同证据图片不重复发送，列表中的观测编号不等于已经查看过的视觉证据。</p><p>代表图仍采用“相对清晰候选池中优先大 bbox”的选择方法；全局框与空间候选来自窗口开始时已提交状态。<a href="scene-reconstruction-design-v2.html">打开 v2 方案子页：按执行顺序查看输入与工具行为</a>。本次不增加提交前自动冲突审查，也不改写历史实验记录。</p></section><p class="warn">早期 overlay 输入修订 v2（与本次方案版本不同）：当时改为完整 RGB ＋ 按 mask 着色的整帧 overlay；单物体取证也不裁剪。新增原图像素 bbox_xyxy 与 image_size_wh。前五帧新版输入预览页面已清理（原页面仅准备、未调用 API）。下方旧运行回放保留历史输入。</p>
+        <p>按下方编号从上往下读，再沿返回路径理解循环。蓝白模块由程序执行，绿色模块由模型判断。这里记录 v1 版本的框架、执行顺序、工具职责和代码入口；运行中发现的问题与解决思路继续记录在方案讨论页面。</p>
       </header>
       </section>
 
@@ -436,7 +436,7 @@
 
 <section id="design-tools" class="design-chapter" aria-labelledby="design-tools-title">
         <h2 id="design-tools-title"><span class="chapter-number">03</span>工具、循环与提案</h2><h3>3.1 · Agent 如何取证与提交</h3>
-        <p><a href="harness-tools.html"><strong>打开逐窗口 Agent 交互记录 → 查看真实请求、响应、工具返回和报错</strong></a></p>
+        <p><a href="../InstanceRecognition/runtime/experiments/harness-v1-gpt56-terra-30frames-20260921/records.html"><strong>打开 v1 历史逐窗口 Agent 交互记录 → 查看真实请求、响应、工具返回和报错</strong></a></p>
         <p>把 Agent 理解为“负责判断的人”，工具就是它可以让程序代办的具体事情：查记录、取图片、算距离、检查修改、保存修改。<strong>这 6 个工具都是本地程序函数；不是 6 个额外的模型，也不要求每个窗口全部调用。</strong></p>
         <p class="note">工具定义：<a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:13</a>。以下路径相对于仓库根目录；行号核对于 2026-09-22。这里记录已实现的能力。</p>
         <figure class="algo-chart" aria-label="六个工具在窗口处理过程中的位置">

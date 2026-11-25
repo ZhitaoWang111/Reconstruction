@@ -31,7 +31,7 @@ h2{scroll-margin-top:28px}
 <nav class="chapter-nav" aria-label="本版章节">
 <a class="active" aria-current="location" href="#input"><span>01</span>模型输入</a>
 <a href="#execution"><span>02</span>执行顺序</a>
-<a href="#tool-updates"><span>03</span>工具更新</a>
+<a href="#tool-updates"><span>03</span>更新记录</a>
 <a href="#evidence"><span>04</span>代表图与空间信息</a>
 <a href="#scope"><span>05</span>版本边界与代码</a>
 </nav></aside><main>
@@ -39,7 +39,7 @@ h2{scroll-margin-top:28px}
 <h2 id="input">01 · 一开始，模型到底收到什么？</h2>
 <div class="grid"><section class="card"><h3>当前窗口：5 帧、10 张图片</h3><p>每帧提供完整原始 RGB + mask overlay，各一张；overlay 保留 mask 编号、颜色和 2D bbox。</p><p>同时提供观测编号、category_label、2D bbox、图像尺寸和三维摘要。最后一个窗口不足 5 帧时，按实际帧数发送。</p></section><section class="card"><h3>所有历史物体：文字与空间信息</h3><p>提供全部 Object 的编号、object_label、已有观测信息和全局 3D 框。每条当前观测另有最多 3 个最近历史 Object 候选。</p><p><strong>初始历史图片：0 张。</strong>候选只是查找线索，不删除其他 Object，也不限制 Agent 的归属选择。</p></section></div>
 <p class="note">Object 编号或观测编号出现在列表中，不代表模型已经看过对应图片，不能仅凭“列表中有这个 ID”就把它当作可引用的视觉证据。</p>
-<section class="tree-section" aria-labelledby="input-tree-title"><h3 id="input-tree-title">1.1 · 初始调用：当前观测 + 历史物体信息</h3><p class="note">历史代表观测的文字元数据会发送；<code>selection</code>（程序选帧指标）仅保留在本地审计记录，不进入模型输入。图片形式用 prompt 统一说明，不在每个 Object 下重复放置 <code>image_description</code>；历史图片仍由 <code>inspect_object</code> 按需返回。</p><p class="tree-caption">按 <code>inputs.py</code> 的实际组装顺序展开。树中的“图片”是实际发送的图像内容；全局 3D bbox 是数字 JSON，不是渲染图片。历史目录不提供可让模型自行打开的文件地址，取图由工具完成。</p><pre class="input-tree">一个窗口的初始输入
+<section class="tree-section" aria-labelledby="input-tree-title"><h3 id="input-tree-title">1.1 · 初始调用：当前观测 + 历史物体信息</h3><p class="note">初始请求不再逐个发送历史代表观测的文字元数据或图片；调用 <code>inspect_object</code> 时才一起返回代表观测文字和图片。<code>selection</code>（程序选帧指标）仅保留在本地审计记录，不进入模型输入。图片形式用 prompt 统一说明，不在每个 Object 下重复放置 <code>image_description</code>；历史图片仍由 <code>inspect_object</code> 按需返回。</p><p class="tree-caption">按 <code>inputs.py</code> 的实际组装顺序展开。树中的“图片”是实际发送的图像内容；全局 3D bbox 是数字 JSON，不是渲染图片。历史目录不提供可让模型自行打开的文件地址，取图由工具完成。</p><pre class="input-tree">一个窗口的初始输入
 │
 ├── 1. 当前观测（通常为 5 帧）
 │   │
@@ -70,18 +70,17 @@ h2{scroll-margin-top:28px}
     │   └── 框在世界坐标中的方向
     │       （发送数字 JSON，不发送 3D 框的渲染图）
     │
-    ├── 历史代表观测：每个 Object 选一条，只发文字
-    │   ├── 这条观测的编号、帧、category_label、2D bbox 等
-    │   └── 图片不在初始输入中；需要时调用 inspect_object 获取
+    ├── 历史查看方式：一条统一说明
+    │   └── 调用 inspect_object，按需获取代表观测文字 + RGB/bbox 图片
     │
     └── 其他历史状态
         ├── Object 合并后的旧编号映射
         └── 尚未归属的观测记录
 
-说明：selection（选帧指标）只保存在本地审计记录中；图片形式由 prompt 统一说明，不在每个 Object 下重复发送 image_description。</pre><p class="note">第二窗口的已验证例子：38 条当前观测 + 18 个历史 Object；初始只有 5 × 2 = 10 张当前图片，历史图片为 0 张。历史文字目录仍随物体数量增加。</p><h3>1.2 · 按需调用：历史图片如何补进来？</h3><pre class="input-tree">Agent 调用 inspect_object({&quot;object_id&quot;: &quot;Object5&quot;})【参数示意】
+说明：selection（选帧指标）只保存在本地审计记录中；图片形式由 prompt 统一说明，不在每个 Object 下重复发送 image_description。</pre><p class="note">先前版本第二窗口的输入规模参考（本轮尚未重跑 API）：38 条当前观测 + 18 个历史 Object；初始只有 5 × 2 = 10 张当前图片，历史图片为 0 张。历史文字目录仍随物体数量增加。</p><h3>1.2 · 按需调用：历史图片如何补进来？</h3><pre class="input-tree">Agent 调用 inspect_object({&quot;object_id&quot;: &quot;Object5&quot;})【参数示意】
 ├── Harness 返回 tool 消息【文字 JSON】
 │   ├── object：物体类别、状态、已归属观测编号等
-│   └── object_id、observation；图片按需返回
+│   ├── object_id、observation：物体编号与代表观测文字信息
 │   ├── observations[]：本次代表观测的元数据
 │   ├── visual_images[]：本次新增图片的观测编号、类型、文件地址
 │   └── reused_images[]：本窗口已发送、这次不再附送的图片记录
@@ -94,13 +93,14 @@ h2{scroll-margin-top:28px}
 它返回指定观测的 RGB / 目标 overlay；已发送的同一图片也会省略。</pre></section>
 <h2 id="execution">02 · 按执行顺序看一遍</h2>
 <div class="step"><span class="tag">1 · 程序</span><h3>读取窗口开始前已提交的状态</h3><p>固定历史物体及其点云、代表观测和全局框；当前窗口的判断基于这份状态进行。使用当前观测到历史物体表面的最近距离中位数，对空间候选排序。</p></div><div class="arrow">↓</div>
-<div class="step"><span class="tag">2 · 程序</span><h3>发送当前图像 + 全部历史文字信息</h3><p>5 帧 RGB/overlay 共 10 张图片；历史 Object 不预先附图。模型先看当前帧，再用文字状态、全局框和最近候选查找可能对应的物体。</p></div><div class="arrow">↓</div>
+<div class="step"><span class="tag">2 · 程序</span><h3>发送当前图像 + 全部历史文字信息</h3><p>5 帧 RGB/overlay 共 10 张图片；历史 Object 不预先附代表观测字段和图片。模型先看当前帧，再用文字状态、全局框和最近候选查找可能对应的物体。</p></div><div class="arrow">↓</div>
 <div class="step agent"><span class="tag">3 · Agent</span><h3>判断是否需要看某个历史物体</h3><p>已有证据足够：直接组织提案。需要核对外观或身份：调用 <code>inspect_object(object_id)</code>；需要指定观测、其他视角或 mask 细节：调用 <code>inspect_observations(ids)</code>。空间证据不足时可使用 <code>compare_geometry</code>。</p></div><div class="arrow">↓ 有需要时取证</div>
-<div class="grid"><div class="step"><h3>inspect_object：一张代表图</h3><p>返回完整 RGB，叠加<strong>一条原始 SAM3 mask 的 bbox</strong>和 Object 编号。不是物体裁剪图，不是融合后所有 mask 的外接框。</p><p>代表选择沿用“大 bbox 且相对清晰”的方法；返回代表观测编号和选择信息，便于继续查证。</p></div><div class="step"><h3>inspect_observations：补充原图与 overlay</h3><p>按指定观测返回元数据、完整 RGB 和目标 mask overlay，保留周围环境。用于补看其他视角或原始 mask 范围。</p><p>窗口内相同证据图片不重复发送。模型可复用本窗口消息中已经出现过的证据。</p></div></div><div class="arrow">↓ 等待工具结果和图片</div>
-<div class="step agent"><span class="tag">4 · Agent</span><h3>依据实际看过的证据提出修改</h3><p>决定关联、新建、暂缓、标记修复、合并或修正 object_label。每项操作带证据与理由；新 category_label 不同本身不足以证明既有 object_label 错误。</p><p>取证仍不足就暂缓，不能用空间最近或标签相同代替身份判断。</p></div><div class="arrow">↓ propose_update → 阅读预览 → commit_update</div>
+<div class="grid"><div class="step"><h3>inspect_object：一张代表图</h3><p>返回完整 RGB，叠加<strong>一条原始 SAM3 mask 的 bbox</strong>和 Object 编号。不是物体裁剪图，不是融合后所有 mask 的外接框。</p><p>代表选择沿用“大 bbox 且相对清晰”的方法；返回代表观测编号和观测元数据，便于继续查证；选帧指标仅保留在本地审计中。</p></div><div class="step"><h3>inspect_observations：补充原图与 overlay</h3><p>按指定观测返回元数据、完整 RGB 和目标 mask overlay，保留周围环境。用于补看其他视角或原始 mask 范围。</p><p>窗口内相同证据图片不重复发送。模型可复用本窗口消息中已经出现过的证据。</p></div></div><div class="arrow">↓ 等待工具结果和图片</div>
+<div class="step agent"><span class="tag">4 · Agent</span><h3>依据实际看过的证据提出修改</h3><p>决定关联、新建、暂缓、标记修复、合并或修正 object_label。每项操作带证据与<strong>简洁英文 reason</strong>；新 category_label 不同本身不足以证明既有 object_label 错误。</p><p>取证仍不足就暂缓，不能用空间最近或标签相同代替身份判断。模型不再被要求输出中文 reason。</p></div><div class="arrow">↓ propose_update → 阅读预览 → commit_update</div>
 <div class="step"><span class="tag">5 · 程序</span><h3>校验、保存新版本，再进入下一窗</h3><p>沿用现有提案和提交机制；按归属变化重算受影响点云，其余复用。图像去重限定在单个窗口；下一窗口重新建立输入和已发送证据记录。</p></div>
-<h2 id="tool-updates">03 · 工具更新记录</h2>
+<h2 id="tool-updates">03 · 更新记录</h2>
 <p>v2 · 2026-09-24：仍然是 6 个工具，调用名称和参数不变。前 3 个调整了返回内容或图片发送方式，后 3 个保持原有功能。</p>
+<section class="card"><h3>本轮更新 · 模型操作理由统一使用英文</h3><p>运行时 Prompt 不再要求模型输出中文 <code>reason</code>。现在每条操作的 <code>reason</code> 都要求使用简洁英文；<code>object_label</code> 和 <code>relabel</code> 的新类别名继续使用英文。</p><p>这项变化只调整模型输出语言，不改变 6 个工具的名称、参数、校验规则或执行顺序。交互记录页面后续可以在展示层把英文 reason 翻译成中文，同时保留原始英文。</p></section>
 <p class="note"><strong>先区分两件事：</strong>初始请求现在不主动附送每个历史 Object 的代表图片；需要查看时，由 Agent 调用工具获取。下面介绍各个工具本身的变化。</p>
 <section class="tool-card"><h3>3.1 · <code>inspect_object(object_id)</code></h3><p class="tool-purpose">用途：查看一个已归档 Object 的信息和历史外观。</p>
 <div class="tool-compare"><div class="tool-era"><h4>原来的功能</h4><p>返回 Object 信息，并从归属观测列表中取首条、中间条、末条，去重后最多 3 条。每条附送完整原始 RGB 和目标 mask 的 overlay，最多 <strong>6 张图</strong>。</p></div><div class="tool-era now"><h4>现在的功能</h4><p>返回 Object 信息和预先选定的 <strong>1 条历史代表观测</strong>：先筛掉相对模糊的图，再优先选 bbox 较大的图。附送 <strong>1 张完整 RGB</strong>，上面画该观测原始 SAM3 mask 的 2D bbox，并标上 Object 编号；缺少有效框时保留原图并注明。</p></div></div>
@@ -127,14 +127,15 @@ h2{scroll-margin-top:28px}
 <tr><td>最近 3 个候选</td><td>每条当前观测到历史物体表面的最近距离中位数排名；历史物体不足 3 个时按实际数量提供。</td><td>是几何检索结果，不是身份结论、类别结论或置信度；Agent 仍可考虑其他历史 Object。</td></tr>
 <tr><td>窗口内图像去重</td><td>同一证据图片已在当前窗口消息中发送，则后续调用不重复附送。</td><td>不意味着类别相同或 Object 相同的不同视角都被丢弃；未发送的补充图片仍可取证。</td></tr>
 </tbody></table></div>
-<h2 id="scope">05 · 版本边界与代码入口</h2>
-<p class="note">本版没有新增提交前自动冲突审查，没有重写既有实验日志或历史交互记录。此页描述输入与取证协议；具体效果需以采用该版本的新运行记录判断，不能据此声称历史任务已重跑。</p>
+<h2 id="scope">05 · 输出语言、版本边界与代码入口</h2>
+<section class="card"><h3>5.1 · 模型输出语言</h3><p>运行时加载 <code>InstanceRecognition/src/harness/prompt.txt</code>。模型输出的 <code>object_label</code> 和 <code>relabel</code> 新类别名使用英文；每条操作的 <code>reason</code> 也使用简洁英文。Prompt 不再要求模型输出中文 reason。</p><p>交互记录可以在展示层把英文 reason 翻译成中文，同时保留原始英文；翻译不回写模型原始响应，也不改变提案数据。</p></section>
+<p class="note">本版没有新增提交前自动冲突审查，没有重写既有实验日志或历史交互记录。此页描述输入、取证和输出语言协议；具体效果需以采用该版本的新运行记录判断，不能据此声称历史任务已重跑。</p>
 <div class="table"><table><thead><tr><th>职责</th><th>仓库相对路径</th></tr></thead><tbody>
 <tr><td>窗口输入、历史文字与当前图片</td><td><a href="../InstanceRecognition/src/harness/inputs.py"><code>InstanceRecognition/src/harness/inputs.py</code></a></td></tr>
 <tr><td>代表观测选择、完整 RGB + 原始 mask bbox</td><td><a href="../InstanceRecognition/src/harness/history.py"><code>InstanceRecognition/src/harness/history.py</code></a></td></tr>
 <tr><td>全局 3D 框、最近空间候选</td><td><a href="../InstanceRecognition/src/harness/spatial_context.py"><code>InstanceRecognition/src/harness/spatial_context.py</code></a></td></tr>
 <tr><td>工具返回、证据登记及图片去重</td><td><a href="../InstanceRecognition/src/harness/tools.py"><code>InstanceRecognition/src/harness/tools.py</code></a></td></tr>
-<tr><td>模型如何使用输入与证据</td><td><a href="../InstanceRecognition/src/harness/prompt.zh-CN.txt"><code>InstanceRecognition/src/harness/prompt.zh-CN.txt</code></a></td></tr>
+<tr><td>模型如何使用输入、证据与输出语言</td><td><a href="../InstanceRecognition/src/harness/prompt.txt"><code>InstanceRecognition/src/harness/prompt.txt</code></a></td></tr>
 </tbody></table></div>
 </main><script>
 const versionPicker=document.getElementById('design-version');

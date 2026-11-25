@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness Window 25 · Tool Inspection</title>
+<style>
+:root{--bg:#f4f7fb;--ink:#152238;--muted:#637089;--line:#dbe3ef;--card:#fff;--blue:#2563eb;--cyan:#0f766e;--amber:#a16207;--rose:#be123c;--shadow:0 14px 34px rgba(31,51,84,.09)}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.55} .page{max-width:1500px;margin:0 auto;padding:34px 28px 80px} .hero{background:linear-gradient(120deg,#132744,#1e4380 55%,#0f766e);color:#fff;border-radius:24px;padding:34px 38px;box-shadow:var(--shadow);position:relative;overflow:hidden} .hero:after{content:"";position:absolute;width:380px;height:380px;border:1px solid rgba(255,255,255,.18);border-radius:50%;right:-90px;top:-180px} .hero h1{font-size:clamp(28px,4vw,48px);line-height:1.1;margin:8px 0 14px;letter-spacing:-.03em} .hero p{margin:0;max-width:920px;color:#dce9ff} .meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px} .chip{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);padding:6px 11px;border-radius:999px;font-size:13px} .section{margin-top:28px} .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:34px 0 14px} .section h2{margin:0;font-size:26px;letter-spacing:-.02em} .section-head p{margin:0;color:var(--muted);font-size:14px;max-width:720px} .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:var(--shadow);margin-top:14px} .call-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px} @media(max-width:900px){.call-grid{grid-template-columns:1fr}} .label{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:750;margin-bottom:7px} .json{margin:0;background:#0d1728;color:#dce7f9;border-radius:12px;padding:16px;overflow:auto;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:560px} .call-arg .json{max-height:170px} .notice{border-left:4px solid #f59e0b;background:#fff8e7;color:#6b4d0a;border-radius:10px;padding:13px 15px;margin:14px 0;font-size:14px} .info-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0} @media(max-width:850px){.info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}} .stat{background:#f7faff;border:1px solid #e5edf8;border-radius:12px;padding:13px} .stat span{display:block;color:var(--muted);font-size:12px} .stat strong{display:block;font-size:19px;margin-top:3px} .image-card{margin:0;background:#f8fafc;border:1px solid var(--line);border-radius:14px;overflow:hidden} .image-wrap{background:#07111d;display:flex;align-items:center;justify-content:center;min-height:190px} .image-wrap img{display:block;width:100%;height:auto;max-height:680px;object-fit:contain} figcaption{padding:10px 12px;display:flex;gap:8px;flex-direction:column;font-size:12px} figcaption strong{font-size:13px;color:var(--ink)} figcaption span{color:var(--muted);font-family:ui-monospace,monospace;word-break:break-all} .single-image{max-width:1000px} .two-images{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px} @media(max-width:750px){.two-images{grid-template-columns:1fr}} .obs-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px} @media(max-width:1100px){.obs-grid{grid-template-columns:1fr}} .obs-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(31,51,84,.06)} .obs-card.target{border:2px solid #0f766e;box-shadow:0 10px 30px rgba(15,118,110,.15)} .obs-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px} .eyebrow{font-size:11px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;font-weight:800} .obs-card h3{margin:2px 0 0;font:700 22px ui-monospace,monospace} .pill{border-radius:999px;padding:4px 9px;background:#e6fffb;color:#0f766e;border:1px solid #b7eee4;font-size:12px} .mini-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:15px 0} @media(max-width:600px){.mini-grid{grid-template-columns:repeat(2,1fr)}} .mini-grid>div{border:1px solid #e7edf5;border-radius:9px;padding:8px;background:#fbfdff} .mini-grid span{display:block;color:var(--muted);font-size:11px} .mini-grid b{display:block;font-size:13px;margin-top:2px;word-break:break-word} .color-value{display:flex;align-items:center;gap:5px} .color-value i,.swatch{width:12px;height:12px;border-radius:3px;display:inline-block;vertical-align:-1px;border:1px solid rgba(0,0,0,.15)} details{margin-top:14px;border-top:1px solid var(--line);padding-top:11px} summary{cursor:pointer;color:var(--blue);font-weight:650;font-size:13px} table{width:100%;border-collapse:collapse;font-size:13px} th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top} th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;background:#f7faff} td code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word} .footnote{color:var(--muted);font-size:13px;margin-top:15px} .two-col{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:18px;align-items:start} @media(max-width:950px){.two-col{grid-template-columns:1fr}} .tag{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:7px;background:#edf3ff;color:#2453a5;font-size:12px;font-weight:700} .tag.legacy{background:#fff0f3;color:#be123c} .legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;color:var(--muted);font-size:12px} .legend span{display:inline-flex;align-items:center;gap:5px} .footer{margin-top:32px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<main class="page">
+<header class="hero">
+  <div class="chip">Harness · harness-v2-gpt6-sol-500frames-20260924 · Window 25</div>
+  <h1>工具调用后，模型实际拿到什么？</h1>
+  <p>这是一份针对第 25 个窗口的独立检查页。它把 <code>inspect_object(Object54)</code> 和包含 <code>0120:005</code> 的批量 <code>inspect_observations</code> 返回内容，以及窗口第一帧的完整 overlay 放在一起，便于逐项核对。</p>
+  <div class="meta"><span class="chip">sampled sequence 120–124</span><span class="chip">base version 24</span><span class="chip">source frames 1341–1386</span><span class="chip">historical run snapshot</span></div>
+</header>
+
+<section class="section">
+  <div class="section-head"><div><h2>01 · inspect_object(Object54)</h2><p>模型查看 Object 054 的历史档案与代表观测。返回中包含文字字段和一张历史代表图。</p></div><span class="tag">Object54 · wooden wardrobe</span></div>
+  <div class="panel call-grid">
+    <div class="call-arg"><div class="label">实际调用参数</div><pre class="json">{
+  &quot;object_id&quot;: &quot;Object54&quot;
+}</pre></div>
+    <div><div class="label">调用记录</div><div class="stat"><span>Call</span><strong>call00 · tool00</strong></div><div class="stat" style="margin-top:10px"><span>工具返回图像</span><strong>1 张</strong></div></div>
+  </div>
+  <div class="two-col">
+    <div class="panel"><div class="label">工具返回的完整 JSON</div><pre class="json">{
+  &quot;object&quot;: {
+    &quot;id&quot;: &quot;Object54&quot;,
+    &quot;object_label&quot;: &quot;wooden wardrobe&quot;,
+    &quot;created_at&quot;: 74,
+    &quot;status&quot;: &quot;provisional&quot;,
+    &quot;observation_count&quot;: 50,
+    &quot;observation_ids&quot;: [
+      &quot;0073:004&quot;,
+      &quot;0074:011&quot;,
+      &quot;0075:007&quot;,
+      &quot;0076:016&quot;,
+      &quot;0098:001&quot;,
+      &quot;0099:001&quot;,
+      &quot;0100:001&quot;,
+      &quot;0101:001&quot;,
+      &quot;0101:002&quot;,
+      &quot;0101:003&quot;,
+      &quot;0102:004&quot;,
+      &quot;0102:005&quot;,
+      &quot;0103:001&quot;,
+      &quot;0104:001&quot;,
+      &quot;0104:002&quot;,
+      &quot;0104:003&quot;,
+      &quot;0104:005&quot;,
+      &quot;0104:006&quot;,
+      &quot;0104:007&quot;,
+      &quot;0104:009&quot;,
+      &quot;0105:001&quot;,
+      &quot;0105:002&quot;,
+      &quot;0106:001&quot;,
+      &quot;0106:002&quot;,
+      &quot;0106:003&quot;,
+      &quot;0107:001&quot;,
+      &quot;0108:001&quot;,
+      &quot;0109:001&quot;,
+      &quot;0109:003&quot;,
+      &quot;0109:004&quot;,
+      &quot;0109:005&quot;,
+      &quot;0109:006&quot;,
+      &quot;0110:001&quot;,
+      &quot;0111:001&quot;,
+      &quot;0112:001&quot;,
+      &quot;0112:002&quot;,
+      &quot;0112:003&quot;,
+      &quot;0113:001&quot;,
+      &quot;0113:002&quot;,
+      &quot;0113:003&quot;,
+      &quot;0114:001&quot;,
+      &quot;0115:001&quot;,
+      &quot;0116:001&quot;,
+      &quot;0117:001&quot;,
+      &quot;0118:001&quot;,
+      &quot;0118:002&quot;,
+      &quot;0118:003&quot;,
+      &quot;0119:001&quot;,
+      &quot;0119:003&quot;,
+      &quot;0119:004&quot;
+    ],
+    &quot;representative_observation_id&quot;: &quot;0111:001&quot;
+  },
+  &quot;object_id&quot;: &quot;Object54&quot;,
+  &quot;observation&quot;: {
+    &quot;id&quot;: &quot;0111:001&quot;,
+    &quot;seq&quot;: 111,
+    &quot;source_frame_id&quot;: 1241,
+    &quot;category_label&quot;: &quot;cabinet&quot;,
+    &quot;bbox_xyxy&quot;: [
+      81,
+      29,
+      619,
+      960
+    ],
+    &quot;image_size_wh&quot;: [
+      1296,
+      968
+    ],
+    &quot;overlay_color_rgb&quot;: [
+      242,
+      61,
+      61
+    ],
+    &quot;mask_id&quot;: &quot;M01&quot;,
+    &quot;point_count&quot;: 68164,
+    &quot;centroid&quot;: [
+      7.287437438964844,
+      4.578368663787842,
+      1.4810582399368286
+    ],
+    &quot;bounds&quot;: [
+      [
+        7.145468711853027,
+        4.096768856048584,
+        0.535922110080719
+      ],
+      [
+        7.419832706451416,
+        5.086178302764893,
+        2.4161272048950195
+      ]
+    ]
+  },
+  &quot;observations&quot;: [
+    {
+      &quot;id&quot;: &quot;0111:001&quot;,
+      &quot;seq&quot;: 111,
+      &quot;source_frame_id&quot;: 1241,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [
+        81,
+        29,
+        619,
+        960
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        242,
+        61,
+        61
+      ],
+      &quot;mask_id&quot;: &quot;M01&quot;,
+      &quot;point_count&quot;: 68164,
+      &quot;centroid&quot;: [
+        7.287437438964844,
+        4.578368663787842,
+        1.4810582399368286
+      ],
+      &quot;bounds&quot;: [
+        [
+          7.145468711853027,
+          4.096768856048584,
+          0.535922110080719
+        ],
+        [
+          7.419832706451416,
+          5.086178302764893,
+          2.4161272048950195
+        ]
+      ]
+    }
+  ],
+  &quot;visual_images&quot;: [
+    {
+      &quot;observation_id&quot;: &quot;0111:001&quot;,
+      &quot;object_id&quot;: &quot;Object54&quot;,
+      &quot;kind&quot;: &quot;historical_rgb_bbox&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/history_bbox_a663eadfc0e8ee93ba0a.jpg&quot;
+    }
+  ],
+  &quot;reused_images&quot;: []
+}</pre></div>
+    <div class="panel"><div class="label">返回给模型的历史代表图</div><figure class="image-card single-image">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/history_bbox_a663eadfc0e8ee93ba0a.jpg" alt="Object54 historical representative observation" loading="lazy"></div>
+      <figcaption><strong>historical_rgb_bbox · representative observation 0111:001</strong><span>../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/history_bbox_a663eadfc0e8ee93ba0a.jpg</span></figcaption>
+    </figure><div class="footnote">这张图是完整 RGB 上叠加代表观测的原始 2D bbox。它不是窗口 25 的当前帧 overlay。</div></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div><h2>02 · inspect_observations（包含 0120:005）</h2><p>窗口 25 实际执行的是一次批量检查。工具返回四条观测的结构化信息，并为每条观测提供 target overlay；已在初始请求中出现的原始 RGB 被标记为复用。</p></div><span class="tag">batch · 4 observations</span></div>
+  <div class="panel call-grid">
+    <div class="call-arg"><div class="label">实际调用参数</div><pre class="json">{
+  &quot;ids&quot;: [
+    &quot;0120:005&quot;,
+    &quot;0121:007&quot;,
+    &quot;0123:009&quot;,
+    &quot;0124:011&quot;
+  ]
+}</pre></div>
+    <div><div class="label">返回策略</div><div class="notice">返回顺序约定为：每条观测的 original RGB，然后是 target overlay。若 original RGB 已在当前窗口初始输入中提供，则放入 <code>reused_images</code>，不重复发送。</div><div class="legend"><span><i class="swatch" style="background:#0f766e"></i>绿色边框 = 用户点名的 0120:005</span><span><i class="swatch" style="background:#64748b"></i>其他卡片 = 同一次批量调用的其余观测</span></div></div>
+  </div>
+  <div class="panel"><div class="label">inspect_observations 返回的完整 JSON</div><pre class="json">{
+  &quot;image_order&quot;: &quot;For each observation: original RGB, then target overlay; already supplied images are omitted&quot;,
+  &quot;observations&quot;: [
+    {
+      &quot;id&quot;: &quot;0120:005&quot;,
+      &quot;seq&quot;: 120,
+      &quot;source_frame_id&quot;: 1341,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [
+        405,
+        8,
+        806,
+        625
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        61,
+        242,
+        212
+      ],
+      &quot;mask_id&quot;: &quot;M05&quot;,
+      &quot;point_count&quot;: 35868,
+      &quot;centroid&quot;: [
+        7.262135982513428,
+        4.562709331512451,
+        0.9189974665641785
+      ],
+      &quot;bounds&quot;: [
+        [
+          7.131576061248779,
+          4.139039039611816,
+          0.20692658424377441
+        ],
+        [
+          7.403238296508789,
+          5.023812770843506,
+          1.5638056993484497
+        ]
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0121:007&quot;,
+      &quot;seq&quot;: 121,
+      &quot;source_frame_id&quot;: 1352,
+      &quot;category_label&quot;: &quot;trash can&quot;,
+      &quot;bbox_xyxy&quot;: [
+        10,
+        450,
+        107,
+        767
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        106,
+        61,
+        242
+      ],
+      &quot;mask_id&quot;: &quot;M07&quot;,
+      &quot;point_count&quot;: 3826,
+      &quot;centroid&quot;: [
+        6.7932610511779785,
+        5.9001946449279785,
+        0.4656972289085388
+      ],
+      &quot;bounds&quot;: [
+        [
+          6.55224084854126,
+          5.8048787117004395,
+          0.1252906322479248
+        ],
+        [
+          7.057351589202881,
+          6.120366096496582,
+          0.7307644486427307
+        ]
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0123:009&quot;,
+      &quot;seq&quot;: 123,
+      &quot;source_frame_id&quot;: 1375,
+      &quot;category_label&quot;: &quot;wastebasket&quot;,
+      &quot;bbox_xyxy&quot;: [
+        11,
+        637,
+        228,
+        852
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        242,
+        61,
+        121
+      ],
+      &quot;mask_id&quot;: &quot;M09&quot;,
+      &quot;point_count&quot;: 5682,
+      &quot;centroid&quot;: [
+        6.468781471252441,
+        5.928760051727295,
+        0.33306702971458435
+      ],
+      &quot;bounds&quot;: [
+        [
+          6.362984657287598,
+          5.788106918334961,
+          0.12115225195884705
+        ],
+        [
+          6.750720500946045,
+          6.156301975250244,
+          0.4722194969654083
+        ]
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0124:011&quot;,
+      &quot;seq&quot;: 124,
+      &quot;source_frame_id&quot;: 1386,
+      &quot;category_label&quot;: &quot;doormat&quot;,
+      &quot;bbox_xyxy&quot;: [
+        289,
+        702,
+        690,
+        812
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        227,
+        242,
+        61
+      ],
+      &quot;mask_id&quot;: &quot;M11&quot;,
+      &quot;point_count&quot;: 5551,
+      &quot;centroid&quot;: [
+        6.957244396209717,
+        5.404630661010742,
+        0.11899738758802414
+      ],
+      &quot;bounds&quot;: [
+        [
+          6.651756763458252,
+          4.965424060821533,
+          0.10638948529958725
+        ],
+        [
+          7.295587539672852,
+          5.853950023651123,
+          0.1340891569852829
+        ]
+      ]
+    }
+  ],
+  &quot;visual_images&quot;: [
+    {
+      &quot;observation_id&quot;: &quot;0120:005&quot;,
+      &quot;kind&quot;: &quot;target_overlay&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0120_005.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0121:007&quot;,
+      &quot;kind&quot;: &quot;target_overlay&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0121_007.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0123:009&quot;,
+      &quot;kind&quot;: &quot;target_overlay&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0123_009.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0124:011&quot;,
+      &quot;kind&quot;: &quot;target_overlay&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0124_011.jpg&quot;
+    }
+  ],
+  &quot;reused_images&quot;: [
+    {
+      &quot;observation_id&quot;: &quot;0120:005&quot;,
+      &quot;kind&quot;: &quot;original_rgb&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/frames/scene0000_00/frame_001341.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0121:007&quot;,
+      &quot;kind&quot;: &quot;original_rgb&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/frames/scene0000_00/frame_001352.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0123:009&quot;,
+      &quot;kind&quot;: &quot;original_rgb&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/frames/scene0000_00/frame_001375.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0124:011&quot;,
+      &quot;kind&quot;: &quot;original_rgb&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/frames/scene0000_00/frame_001386.jpg&quot;
+    }
+  ]
+}</pre></div>
+  <div class="obs-grid"><article class="obs-card target">
+      <div class="obs-card-head"><div><span class="eyebrow">Observation</span><h3>0120:005</h3></div><span class="pill">cabinet</span></div>
+      <div class="mini-grid"><div><span>seq</span><b>120</b></div><div><span>source frame</span><b>1341</b></div><div><span>points</span><b>35,868</b></div><div><span>mask color</span><b class="color-value"><i style="background:rgb(61,242,212)"></i>[61, 242, 212]</b></div></div>
+      <div class="two-images"><figure class="image-card compact">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/frames/scene0000_00/frame_001341.jpg" alt="Original RGB for 0120:005" loading="lazy"></div>
+      <figcaption><strong>Original RGB · reused from initial window input</strong><span>../InstanceRecognition/runtime/frames/scene0000_00/frame_001341.jpg</span></figcaption>
+    </figure><figure class="image-card compact">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0120_005.jpg" alt="Target overlay for 0120:005" loading="lazy"></div>
+      <figcaption><strong>Target overlay returned by inspect_observations</strong><span>../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0120_005.jpg</span></figcaption>
+    </figure></div>
+      <details><summary>该观测的完整字段</summary><pre class="json">{
+  &quot;id&quot;: &quot;0120:005&quot;,
+  &quot;seq&quot;: 120,
+  &quot;source_frame_id&quot;: 1341,
+  &quot;category_label&quot;: &quot;cabinet&quot;,
+  &quot;bbox_xyxy&quot;: [
+    405,
+    8,
+    806,
+    625
+  ],
+  &quot;image_size_wh&quot;: [
+    1296,
+    968
+  ],
+  &quot;overlay_color_rgb&quot;: [
+    61,
+    242,
+    212
+  ],
+  &quot;mask_id&quot;: &quot;M05&quot;,
+  &quot;point_count&quot;: 35868,
+  &quot;centroid&quot;: [
+    7.262135982513428,
+    4.562709331512451,
+    0.9189974665641785
+  ],
+  &quot;bounds&quot;: [
+    [
+      7.131576061248779,
+      4.139039039611816,
+      0.20692658424377441
+    ],
+    [
+      7.403238296508789,
+      5.023812770843506,
+      1.5638056993484497
+    ]
+  ]
+}</pre></details>
+    </article><article class="obs-card ">
+      <div class="obs-card-head"><div><span class="eyebrow">Observation</span><h3>0121:007</h3></div><span class="pill">trash can</span></div>
+      <div class="mini-grid"><div><span>seq</span><b>121</b></div><div><span>source frame</span><b>1352</b></div><div><span>points</span><b>3,826</b></div><div><span>mask color</span><b class="color-value"><i style="background:rgb(106,61,242)"></i>[106, 61, 242]</b></div></div>
+      <div class="two-images"><figure class="image-card compact">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/frames/scene0000_00/frame_001352.jpg" alt="Original RGB for 0121:007" loading="lazy"></div>
+      <figcaption><strong>Original RGB · reused from initial window input</strong><span>../InstanceRecognition/runtime/frames/scene0000_00/frame_001352.jpg</span></figcaption>
+    </figure><figure class="image-card compact">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0121_007.jpg" alt="Target overlay for 0121:007" loading="lazy"></div>
+      <figcaption><strong>Target overlay returned by inspect_observations</strong><span>../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0121_007.jpg</span></figcaption>
+    </figure></div>
+      <details><summary>该观测的完整字段</summary><pre class="json">{
+  &quot;id&quot;: &quot;0121:007&quot;,
+  &quot;seq&quot;: 121,
+  &quot;source_frame_id&quot;: 1352,
+  &quot;category_label&quot;: &quot;trash can&quot;,
+  &quot;bbox_xyxy&quot;: [
+    10,
+    450,
+    107,
+    767
+  ],
+  &quot;image_size_wh&quot;: [
+    1296,
+    968
+  ],
+  &quot;overlay_color_rgb&quot;: [
+    106,
+    61,
+    242
+  ],
+  &quot;mask_id&quot;: &quot;M07&quot;,
+  &quot;point_count&quot;: 3826,
+  &quot;centroid&quot;: [
+    6.7932610511779785,
+    5.9001946449279785,
+    0.4656972289085388
+  ],
+  &quot;bounds&quot;: [
+    [
+      6.55224084854126,
+      5.8048787117004395,
+      0.1252906322479248
+    ],
+    [
+      7.057351589202881,
+      6.120366096496582,
+      0.7307644486427307
+    ]
+  ]
+}</pre></details>
+    </article><article class="obs-card ">
+      <div class="obs-card-head"><div><span class="eyebrow">Observation</span><h3>0123:009</h3></div><span class="pill">wastebasket</span></div>
+      <div class="mini-grid"><div><span>seq</span><b>123</b></div><div><span>source frame</span><b>1375</b></div><div><span>points</span><b>5,682</b></div><div><span>mask color</span><b class="color-value"><i style="background:rgb(242,61,121)"></i>[242, 61, 121]</b></div></div>
+      <div class="two-images"><figure class="image-card compact">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/frames/scene0000_00/frame_001375.jpg" alt="Original RGB for 0123:009" loading="lazy"></div>
+      <figcaption><strong>Original RGB · reused from initial window input</strong><span>../InstanceRecognition/runtime/frames/scene0000_00/frame_001375.jpg</span></figcaption>
+    </figure><figure class="image-card compact">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0123_009.jpg" alt="Target overlay for 0123:009" loading="lazy"></div>
+      <figcaption><strong>Target overlay returned by inspect_observations</strong><span>../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0123_009.jpg</span></figcaption>
+    </figure></div>
+      <details><summary>该观测的完整字段</summary><pre class="json">{
+  &quot;id&quot;: &quot;0123:009&quot;,
+  &quot;seq&quot;: 123,
+  &quot;source_frame_id&quot;: 1375,
+  &quot;category_label&quot;: &quot;wastebasket&quot;,
+  &quot;bbox_xyxy&quot;: [
+    11,
+    637,
+    228,
+    852
+  ],
+  &quot;image_size_wh&quot;: [
+    1296,
+    968
+  ],
+  &quot;overlay_color_rgb&quot;: [
+    242,
+    61,
+    121
+  ],
+  &quot;mask_id&quot;: &quot;M09&quot;,
+  &quot;point_count&quot;: 5682,
+  &quot;centroid&quot;: [
+    6.468781471252441,
+    5.928760051727295,
+    0.33306702971458435
+  ],
+  &quot;bounds&quot;: [
+    [
+      6.362984657287598,
+      5.788106918334961,
+      0.12115225195884705
+    ],
+    [
+      6.750720500946045,
+      6.156301975250244,
+      0.4722194969654083
+    ]
+  ]
+}</pre></details>
+    </article><article class="obs-card ">
+      <div class="obs-card-head"><div><span class="eyebrow">Observation</span><h3>0124:011</h3></div><span class="pill">doormat</span></div>
+      <div class="mini-grid"><div><span>seq</span><b>124</b></div><div><span>source frame</span><b>1386</b></div><div><span>points</span><b>5,551</b></div><div><span>mask color</span><b class="color-value"><i style="background:rgb(227,242,61)"></i>[227, 242, 61]</b></div></div>
+      <div class="two-images"><figure class="image-card compact">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/frames/scene0000_00/frame_001386.jpg" alt="Original RGB for 0124:011" loading="lazy"></div>
+      <figcaption><strong>Original RGB · reused from initial window input</strong><span>../InstanceRecognition/runtime/frames/scene0000_00/frame_001386.jpg</span></figcaption>
+    </figure><figure class="image-card compact">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0124_011.jpg" alt="Target overlay for 0124:011" loading="lazy"></div>
+      <figcaption><strong>Target overlay returned by inspect_observations</strong><span>../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/0124_011.jpg</span></figcaption>
+    </figure></div>
+      <details><summary>该观测的完整字段</summary><pre class="json">{
+  &quot;id&quot;: &quot;0124:011&quot;,
+  &quot;seq&quot;: 124,
+  &quot;source_frame_id&quot;: 1386,
+  &quot;category_label&quot;: &quot;doormat&quot;,
+  &quot;bbox_xyxy&quot;: [
+    289,
+    702,
+    690,
+    812
+  ],
+  &quot;image_size_wh&quot;: [
+    1296,
+    968
+  ],
+  &quot;overlay_color_rgb&quot;: [
+    227,
+    242,
+    61
+  ],
+  &quot;mask_id&quot;: &quot;M11&quot;,
+  &quot;point_count&quot;: 5551,
+  &quot;centroid&quot;: [
+    6.957244396209717,
+    5.404630661010742,
+    0.11899738758802414
+  ],
+  &quot;bounds&quot;: [
+    [
+      6.651756763458252,
+      4.965424060821533,
+      0.10638948529958725
+    ],
+    [
+      7.295587539672852,
+      5.853950023651123,
+      0.1340891569852829
+    ]
+  ]
+}</pre></details>
+    </article></div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div><h2>03 · 窗口 25 第一帧的当前 overlay</h2><p>这是 sampled sequence 120 的完整多 mask overlay，初始请求中以 “full-frame colored mask overlay” 发送。它与上面的 <code>0120_005.jpg</code> 不同：后者只针对单条观测。</p></div><span class="tag">sequence 120 · source frame 1341</span></div>
+  <div class="two-col">
+    <div class="panel"><figure class="image-card single-image">
+      <div class="image-wrap"><img src="../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/frame_0120.jpg" alt="Window 25 first frame full-frame mask overlay" loading="lazy"></div>
+      <figcaption><strong>frame_0120.jpg · full-frame colored mask overlay</strong><span>../InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/evidence/frame_0120.jpg</span></figcaption>
+    </figure><div class="notice">这张历史 overlay 图中的标签仍是旧实验保存的 <code>M01…M09</code> 形式。它是旧运行记录的证据，不代表当前代码新生成的 Agent-facing 请求格式。</div></div>
+    <div class="panel"><div class="label">第一帧的实例与 2D bbox</div><table><thead><tr><th>instance</th><th>category</th><th>bbox_xyxy</th><th>mask color</th></tr></thead><tbody><tr><td><code>01</code></td><td>door</td><td><code>[410, 19, 620, 623]</code></td><td><span class="swatch" style="background:rgb(206,245,78)"></span>[206, 245, 78]</td></tr><tr><td><code>02</code></td><td>door</td><td><code>[5, 4, 361, 640]</code></td><td><span class="swatch" style="background:rgb(78,159,245)"></span>[78, 159, 245]</td></tr><tr><td><code>03</code></td><td>door</td><td><code>[619, 25, 806, 600]</code></td><td><span class="swatch" style="background:rgb(245,78,112)"></span>[245, 78, 112]</td></tr><tr><td><code>04</code></td><td>door</td><td><code>[600, 7, 812, 25]</code></td><td><span class="swatch" style="background:rgb(78,245,92)"></span>[78, 245, 92]</td></tr><tr><td><code>05</code></td><td>cabinet</td><td><code>[405, 8, 805, 624]</code></td><td><span class="swatch" style="background:rgb(139,78,245)"></span>[139, 78, 245]</td></tr><tr><td><code>06</code></td><td>floor mat</td><td><code>[10, 627, 409, 759]</code></td><td><span class="swatch" style="background:rgb(245,187,78)"></span>[245, 187, 78]</td></tr><tr><td><code>07</code></td><td>sink</td><td><code>[955, 262, 1137, 591]</code></td><td><span class="swatch" style="background:rgb(78,245,234)"></span>[78, 245, 234]</td></tr><tr><td><code>08</code></td><td>toilet</td><td><code>[1160, 322, 1221, 460]</code></td><td><span class="swatch" style="background:rgb(245,78,209)"></span>[245, 78, 209]</td></tr><tr><td><code>09</code></td><td>towel</td><td><code>[1083, 190, 1138, 286]</code></td><td><span class="swatch" style="background:rgb(162,245,78)"></span>[162, 245, 78]</td></tr></tbody></table><div class="footnote">表格来自本地 manifest 的 sequence 120；图片上的旧 M 编号与当前 manifest 的实例顺序对应，但本页保留原图，不重绘历史证据。</div></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div><h2>阅读提示</h2><p>这页区分了“工具返回的文字 JSON”“工具返回或复用的图片”和“窗口初始输入里的完整 overlay”。</p></div></div>
+  <div class="panel">
+    <ul>
+      <li><strong>inspect_object</strong> 返回 Object54 档案、代表观测字段，以及 <code>history_bbox_…jpg</code> 历史代表图。</li>
+      <li><strong>inspect_observations</strong> 实际是四条观测的批量调用；<code>0120:005</code> 的结构化记录和 <code>0120_005.jpg</code> 在同一个返回中。</li>
+      <li>对 <code>0120:005</code>，原始 RGB 已经在窗口初始输入中出现，因此工具返回里是 <code>reused_images</code> 的引用，不是重新发送一张相同 RGB。</li>
+      <li><span class="tag legacy">Historical record field</span> 本页原样展示旧实验记录中的 <code>mask_id</code>。当前代码的新 Agent 输入已改用 <code>instance_id</code> 和完整 observation ID。</li>
+    </ul>
+  </div>
+</section>
+
+<footer class="footer">Generated from the saved Window 25 call records under <code>InstanceRecognition/runtime/experiments/harness-v2-gpt6-sol-500frames-20260924/calls/</code>. The JSON blocks are embedded from the original tool record so this page remains inspectable without running the harness.</footer>
+</main>
+</body>
+</html>

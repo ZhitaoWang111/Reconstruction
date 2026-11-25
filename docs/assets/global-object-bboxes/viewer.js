@@ -129,6 +129,25 @@
     bbox.addEventListener('change', () => { objectVisibility.get(o.object_id).bbox = bbox.checked; refresh(); });
     row.append(button, count, cloudLabel, bboxLabel); $('object-list').append(row); rows.set(o.object_id, {row, cloud, bbox});
   });
+  function updateArchiveStats() {
+    const validCount = usable.length;
+    const cloudObjectCount = objects.filter(o => (instanceIndicesByObject.get(numericId(o)) || []).length > 0).length;
+    const selectedCloudCount = objects.filter(o => objectVisibility.get(o.object_id)?.cloud && (instanceIndicesByObject.get(numericId(o)) || []).length > 0).length;
+    const selectedBboxCount = usable.filter(o => objectVisibility.get(o.object_id)?.bbox).length;
+    const totalObservations = objects.reduce((sum, o) => sum + (Number.isFinite(Number(o.observation_count)) ? Number(o.observation_count) : 0), 0);
+    const visibleBboxCount = $('show-bboxes')?.checked ? selectedBboxCount : 0;
+    const visibleCloudCount = $('show-instances')?.checked ? selectedCloudCount : 0;
+    const set = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+    set('archive-object-total', objects.length.toLocaleString());
+    set('archive-bbox-total', `${validCount.toLocaleString()} / ${objects.length.toLocaleString()}`);
+    set('archive-cloud-total', `${cloudObjectCount.toLocaleString()} / ${objects.length.toLocaleString()}`);
+    set('archive-cloud-detail', `${instancePoints.length.toLocaleString()} 个实例点 · 当前显示 ${visibleCloudCount.toLocaleString()} 个 Object`);
+    set('archive-observation-total', totalObservations.toLocaleString());
+    set('archive-visible-total', `${visibleBboxCount.toLocaleString()} 框 · ${visibleCloudCount.toLocaleString()} 个 Object 点云`);
+    set('archive-mode', modeName());
+    set('archive-stats-context', `${data.scene_id || '当前场景'} · cutoff seq ${data.cutoff_seq ?? '—'}`);
+  }
+
   function details() {
     const o = objects.find(o => o.object_id === focused); const el = $('object-details'); el.replaceChildren();
     if (!o) { const p = document.createElement('p'); p.className = 'placeholder'; p.textContent = '当前没有可查看的对象。'; el.append(p); return; }
@@ -154,9 +173,10 @@
       if (o.filtering) { const detail = document.createElement('details'), summary = document.createElement('summary'), pre = document.createElement('pre'); detail.className = 'filter-record'; summary.textContent = '查看过滤参数'; pre.textContent = JSON.stringify(o.filtering, null, 2); detail.append(summary, pre); el.append(detail); }
     }
   }
-  function refresh() { rows.forEach(({row,cloud,bbox}, id) => { row.classList.toggle('focused', id===focused); cloud.checked=objectVisibility.get(id)?.cloud ?? false; bbox.checked=objectVisibility.get(id)?.bbox ?? false; }); details(); draw(); }
+  function refresh() { rows.forEach(({row,cloud,bbox}, id) => { row.classList.toggle('focused', id===focused); cloud.checked=objectVisibility.get(id)?.cloud ?? false; bbox.checked=objectVisibility.get(id)?.bbox ?? false; }); updateArchiveStats(); details(); draw(); }
   const edgeIndices = [[0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]];
   rebuildInstanceBuffers();
+  updateArchiveStats();
   function project(p, matrix) {
     const clip = [0,0,0,0].map((_, row) => matrix[row]*p[0] + matrix[4+row]*p[1] + matrix[8+row]*p[2] + matrix[12+row]);
     if (clip[3] <= 0 || clip[2] < -clip[3] || clip[2] > clip[3]) return null;
@@ -267,8 +287,8 @@
   }
   document.querySelectorAll('[data-bbox]').forEach(button => button.addEventListener('click', () => { bboxMode = button.dataset.bbox; document.querySelectorAll('[data-bbox]').forEach(b => b.classList.toggle('active', b.dataset.bbox === bboxMode)); refresh(); }));
   $('show-scene').addEventListener('change', draw);
-  $('show-instances').addEventListener('change', draw);
-  $('show-bboxes').addEventListener('change', draw);
+  $('show-instances').addEventListener('change', () => { updateArchiveStats(); draw(); });
+  $('show-bboxes').addEventListener('change', () => { updateArchiveStats(); draw(); });
   $('show-labels').addEventListener('change', draw);
   $('show-category-labels').addEventListener('change', draw);
   $('cloud-opacity').addEventListener('input', draw);

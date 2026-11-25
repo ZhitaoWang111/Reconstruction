@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GT 里的结构件 · scene0000_00 · 3D</title>
+<style>
+  :root{
+    color-scheme:light;
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4; --bg:#fbfcfd; --card:#ffffff; --surface:#fcfcfb;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --c-wall:#2a78d6; --c-window:#1baf7a; --c-door:#eda100; --c-doorframe:#a86f00;
+    --c-mirror:#e87ba4; --c-curtain:#008300; --c-floor:#d9d6cd; --c-ceiling:#8f8d86; --c-other:#e4e3df;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1500px; margin:0 auto; padding:28px 28px 100px}
+  h1{font-size:24px; line-height:1.35; margin:0 0 6px}
+  h2{font-size:18px; margin:40px 0 10px}
+  p{margin:8px 0}
+  .lead{color:var(--ink-2); max-width:980px}
+  code{font-family:var(--mono); font-size:.9em; background:var(--line-2); padding:1px 5px; border-radius:4px}
+  .small{font-size:13px; color:var(--ink-3)}
+
+  .bar{display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center; margin:18px 0 10px; font-size:13.5px}
+  .bar .grp{display:flex; align-items:center; gap:6px}
+  .bar .grp > span{color:var(--ink-3)}
+  .seg{display:inline-flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; background:var(--card)}
+  .seg button{border:0; background:none; padding:4px 11px; font:inherit; color:var(--ink-2); cursor:pointer}
+  .seg button + button{border-left:1px solid var(--line)}
+  .seg button.on{background:var(--accent-soft); color:var(--accent); font-weight:600}
+  label.chk{display:inline-flex; align-items:center; gap:5px; cursor:pointer; color:var(--ink-2)}
+  label.chk input{accent-color:var(--accent)}
+
+  .stage{display:grid; grid-template-columns:minmax(0,1fr) 350px; gap:14px}
+  @media (max-width:1050px){ .stage{grid-template-columns:minmax(0,1fr)} }
+  .view{position:relative; height:74vh; min-height:520px; max-height:860px; background:var(--surface); border:1px solid var(--line); border-radius:10px; overflow:hidden}
+  .view canvas{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab}
+  .view canvas.drag{cursor:grabbing}
+  #svg{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+  #tags{position:absolute; inset:0; pointer-events:none}
+  .tag{position:absolute; transform:translate(-50%,-50%); white-space:nowrap; font-size:12px; line-height:1.3; color:var(--ink);
+    background:rgba(255,255,255,.92); border:1px solid var(--line); border-radius:5px; padding:1px 6px; display:flex; align-items:center; gap:5px}
+  .tag.sel{border-color:var(--ink); font-weight:600}
+  .tag.gap{font-family:var(--mono); font-size:11.5px}
+  .chip{display:inline-block; width:9px; height:9px; border-radius:2px; flex:none}
+  .legend{position:absolute; left:10px; bottom:10px; background:rgba(255,255,255,.94); border:1px solid var(--line); border-radius:8px;
+    padding:8px 11px; font-size:12.5px; line-height:1.75; color:var(--ink-2)}
+  .legend div{display:flex; align-items:center; gap:7px}
+  .legend .num{margin-left:auto; padding-left:14px; font-family:var(--mono); font-size:11.5px; color:var(--ink-3)}
+  .hint{position:absolute; right:10px; bottom:10px; font-size:12px; color:var(--ink-3); background:rgba(255,255,255,.9); border-radius:6px; padding:3px 8px}
+  #tip{position:absolute; display:none; pointer-events:none; background:var(--ink); color:#fff; font-size:12.5px; line-height:1.5; padding:5px 9px; border-radius:6px; max-width:300px; z-index:5}
+  #tip b{font-weight:600}
+  #err{position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:#b91c1c; padding:30px; text-align:center}
+
+  .side{border:1px solid var(--line); border-radius:10px; background:var(--card); height:74vh; min-height:520px; max-height:860px; overflow:auto; font-size:13.5px}
+  .side h3{font-size:12px; letter-spacing:.08em; color:var(--ink-3); margin:0; padding:12px 14px 5px; font-weight:600}
+  .row{display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; align-items:center; padding:5px 14px; cursor:pointer; border-left:3px solid transparent}
+  .row:hover{background:var(--line-2)}
+  .row.on{background:var(--accent-soft); border-left-color:var(--accent)}
+  .row .k{font-family:var(--mono); font-size:12px; color:var(--ink-3); min-width:22px}
+  .row .v{font-family:var(--mono); font-size:12px; color:var(--ink-2); text-align:right}
+  .row .sub{display:block; font-size:11.5px; color:var(--ink-3); line-height:1.35}
+  .side .clear{margin:10px 14px 14px; font:inherit; font-size:12.5px; padding:4px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink-2); cursor:pointer}
+
+  table{border-collapse:collapse; width:100%; font-size:13.5px; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  th,td{padding:7px 10px; border-bottom:1px solid var(--line-2); text-align:left; vertical-align:top}
+  th{font-size:12px; color:var(--ink-3); font-weight:600; background:#f6f8fa; white-space:nowrap}
+  td.n,th.n{text-align:right; font-family:var(--mono); font-size:12.5px; white-space:nowrap}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:var(--line-2)}
+  tbody tr.on{background:var(--accent-soft)}
+  .scroll{overflow-x:auto}
+  .note{border-left:3px solid var(--line); padding:2px 0 2px 14px; color:var(--ink-2); margin:12px 0; max-width:980px}
+  ul{margin:8px 0; padding-left:22px; max-width:980px}
+  li{margin:3px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>GT 里的结构件：墙、门、窗（scene0000_00）</h1>
+  <p class="lead">这一页只展示从 ScanNet 标注里读出来的东西：GT 网格上每个顶点的标签，以及由它们直接量出的平面、矩形和厚度。没有补全被挡住的墙，没有求墙角，也没有定层高。唯一一处推算是卫生间的门洞，图上用虚线画。</p>
+  <p class="small">坐标是 ScanNet 的轴对齐坐标（只为了看图方便），单位米，z 朝上。数字都在这一个场景上实测。</p>
+
+  <div class="bar">
+    <div class="grp"><span>视角</span>
+      <div class="seg" id="views">
+        <button data-view="iso" class="on">斜视</button><button data-view="top">俯视</button>
+        <button data-view="s">看南墙</button><button data-view="e">看东墙</button><button data-view="n">看北墙</button><button data-view="w">看西墙</button><button data-view="bath">卫生间</button>
+      </div>
+    </div>
+    <div class="grp"><span>上色</span>
+      <div class="seg" id="modes"><button data-mode="0" class="on">按标签</button><button data-mode="1">扫描原色</button></div>
+    </div>
+    <label class="chk"><input type="checkbox" id="vOther" checked>家具等其他物体</label>
+    <label class="chk"><input type="checkbox" id="vFloor" checked>地面</label>
+    <label class="chk"><input type="checkbox" id="vCeil" checked>天花板</label>
+    <label class="chk"><input type="checkbox" id="vCurtain" checked>窗帘</label>
+    <label class="chk"><input type="checkbox" id="vRect" checked>拟合的矩形</label>
+    <label class="chk"><input type="checkbox" id="vTags" checked>文字标注</label>
+    <label class="chk"><input type="checkbox" id="vCull" checked>隐藏背对镜头的面</label>
+  </div>
+
+  <div class="stage">
+    <div class="view" id="view">
+      <canvas id="gl"></canvas>
+      <svg id="svg"></svg>
+      <div id="tags"></div>
+      <div class="legend" id="legend"></div>
+      <div class="hint">左键拖动旋转 · 右键或 Shift 拖动平移 · 滚轮缩放 · 悬停看标签</div>
+      <div id="tip"></div>
+      <div id="err"></div>
+    </div>
+    <div class="side" id="side"></div>
+  </div>
+
+  <h2>墙面</h2>
+  <p class="lead">GT 的 9 个 <code>wall</code> 实例按平面拆开后是 9 个墙面。一个实例可能含两个面（wall#26 有直段和斜段），一面墙也可能被分成两个实例（南墙是 wall#19 和 wall#27）。</p>
+  <div class="scroll"><table id="tFaces"></table></div>
+  <ul class="small">
+    <li><b>外接矩形</b>是这个面上有墙标签的顶点在拟合平面上的外接矩形（去掉两端各 0.5% 的顶点），3D 图里的细线框就是它。它只说明"墙标签覆盖到哪里"，不是这面墙的真实范围。</li>
+    <li><b>标签占矩形</b>是有墙标签的面积除以外接矩形面积。其余部分是被家具或窗帘挡住的、门窗占掉的，或者没有扫到的。</li>
+    <li><b>偏离竖直</b>是拟合平面的法向和水平面的夹角。南墙 4.1°、卫生间隔墙外侧 3.2°–3.5°，原因没有查。</li>
+  </ul>
+
+  <h2>墙上的门、窗和其他东西</h2>
+  <p class="lead">每一项都表示成它所在墙面上的一个矩形：沿墙的宽度、离地的高度范围、相对墙面的前后位置。</p>
+  <div class="scroll"><table id="tItems"></table></div>
+  <ul class="small">
+    <li><b>相对墙面</b>：负数表示比墙面凹进去，正数表示凸到房间里。</li>
+    <li><b>标签占矩形</b>：门框是一圈边，所以只有 37%–41%；窗只标了玻璃，窗套被标成了墙。</li>
+    <li>两块窗帘后面很可能有窗或落地门，GT 没有标，这里也没有推算。</li>
+  </ul>
+
+  <h2>能量到的厚度</h2>
+  <div class="scroll"><table id="tGaps"></table></div>
+  <p class="small">只有卫生间的隔墙两面都被扫到，所以只有它能量厚度。外墙只有入户门凹进的深度可以当下限。</p>
+
+  <h2>地面和天花板</h2>
+  <div id="fc"></div>
+</div>
+
+<script src="assets/structure-gt/data.js"></script>
+<script>
+"use strict";
+(function () {
+  const D = window.STRUCT, $ = (id) => document.getElementById(id);
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  // category index per vertex: what the shader colours and hides by
+  const CATS = ["other", "wall", "floor", "ceiling", "window", "door", "doorframe", "mirror", "curtain"];
+  const ZH = { other: "家具等其他物体", wall: "墙", floor: "地面", ceiling: "天花板", window: "窗", door: "门扇", doorframe: "门框", mirror: "镜子", curtain: "窗帘", opening: "门洞（推算）" };
+  const COLOR = Object.fromEntries(CATS.map((c) => [c, css("--c-" + c)]));
+  COLOR.opening = css("--ink");
+  const f1 = (x) => x.toFixed(1), f2 = (x) => x.toFixed(2), pct = (x) => Math.round(x * 100) + "%";
+
+  // ---------- decode
+  function bytes(b64) { const s = atob(b64), a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  const q = new Uint16Array(bytes(D.pos).buffer), nV = D.vertices;
+  const pos = new Float32Array(nV * 3);
+  for (let i = 0; i < nV * 3; i++) { const k = i % 3; pos[i] = D.lo[k] + q[i] / 65535 * (D.hi[k] - D.lo[k]); }
+  const idx = new Uint32Array(bytes(D.idx).buffer), rgb = bytes(D.rgb), owner = bytes(D.owner), face = bytes(D.face);
+  const meta = new Uint8Array(nV * 3);
+  for (let i = 0; i < nV; i++) {
+    const lab = owner[i] ? D.labels[owner[i] - 1] : null;
+    const c = CATS.indexOf(lab);
+    meta[3 * i] = c > 0 ? c : 0; meta[3 * i + 1] = face[i]; meta[3 * i + 2] = owner[i];
+  }
+
+  // ---------- state
+  const S = { az: -2.2, el: 0.75, dist: 12.5, target: [0, 0, 1.1], mode: 0, sel: null, cull: true, rect: true, tags: true,
+    vis: { other: true, floor: true, ceiling: true, curtain: true } };
+  const VIEWS = {
+    iso: { az: -2.2, el: 0.75, dist: 12.5, target: [0, 0, 1.1] }, top: { az: -Math.PI / 2, el: 1.5607, dist: 13.2, target: [-0.4, 0, 1] },
+    s: { az: Math.PI / 2, el: 0.16, dist: 9.5, target: [-0.3, -3.5, 1.3] }, e: { az: Math.PI, el: 0.16, dist: 9.5, target: [3.3, 0, 1.3] },
+    n: { az: -Math.PI / 2, el: 0.16, dist: 9.5, target: [0, 3.4, 1.3] }, w: { az: 0, el: 0.16, dist: 9.5, target: [-3.4, 0, 1.3] },
+    bath: { az: 2.45, el: 0.42, dist: 5.6, target: [2.0, -2.2, 1.1] },
+  };
+
+  // ---------- WebGL
+  const canvas = $("gl");
+  const gl = canvas.getContext("webgl2", { antialias: true });
+  if (!gl) { $("err").style.display = "flex"; $("err").textContent = "这个浏览器不支持 WebGL2，3D 视图无法显示。下面的表格仍然可以看。"; }
+  const VS = `#version 300 es
+    in vec3 aPos; in vec3 aRgb; in vec3 aMeta; uniform mat4 uMVP;
+    out vec3 vWorld; out vec3 vRgb; flat out vec3 vMeta;
+    void main(){ vWorld=aPos; vRgb=aRgb; vMeta=aMeta; gl_Position=uMVP*vec4(aPos,1.0); }`;
+  const FS = `#version 300 es
+    precision highp float;
+    in vec3 vWorld; in vec3 vRgb; flat in vec3 vMeta;
+    uniform vec3 uPal[9]; uniform float uVis[9]; uniform int uMode; uniform float uSelFace; uniform float uSelOwner;
+    uniform vec3 uEye; uniform vec3 uSurface;
+    out vec4 o;
+    void main(){
+      int c=int(vMeta.x+0.5);
+      if(uVis[c]<0.5) discard;
+      if(uMode==2){ o=vec4(vMeta/255.0,1.0); return; }
+      vec3 n=normalize(cross(dFdx(vWorld),dFdy(vWorld)));
+      vec3 v=normalize(uEye-vWorld);
+      float shade=0.60+0.22*abs(n.z)+0.18*abs(dot(n,v));
+      vec3 col=(uMode==1? vRgb : uPal[c])*shade;
+      bool any=uSelFace>=0.0||uSelOwner>=0.0;
+      bool sel=(uSelFace>=0.0&&abs(vMeta.y-uSelFace)<0.5)||(uSelOwner>=0.0&&abs(vMeta.z-uSelOwner)<0.5);
+      if(any&&!sel) col=mix(col,uSurface,0.70);
+      o=vec4(col,1.0);
+    }`;
+  let prog, U = {}, fbo, fboTex, fboDepth, fboSize = [0, 0];
+  function shader(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+  function initGL() {
+    prog = gl.createProgram(); gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    for (const n of ["uMVP", "uPal", "uVis", "uMode", "uSelFace", "uSelOwner", "uEye", "uSurface"]) U[n] = gl.getUniformLocation(prog, n);
+    const attr = (name, data, size, type, norm) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      const l = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, type, norm, 0, 0); };
+    attr("aPos", pos, 3, gl.FLOAT, false); attr("aRgb", rgb, 3, gl.UNSIGNED_BYTE, true); attr("aMeta", meta, 3, gl.UNSIGNED_BYTE, false);
+    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    gl.uniform3fv(U.uPal, new Float32Array(CATS.flatMap((c) => hex(COLOR[c]))));
+    gl.uniform3fv(U.uSurface, new Float32Array(hex(css("--surface"))));
+    gl.enable(gl.DEPTH_TEST);
+    fbo = gl.createFramebuffer(); fboTex = gl.createTexture(); fboDepth = gl.createRenderbuffer();
+  }
+
+  // ---------- camera maths (column-major)
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = (a) => { const l = Math.hypot(...a) || 1; return a.map((x) => x / l); };
+  function eye() { const c = Math.cos(S.el); return [S.target[0] + S.dist * c * Math.cos(S.az), S.target[1] + S.dist * c * Math.sin(S.az), S.target[2] + S.dist * Math.sin(S.el)]; }
+  function basis() { const e = eye(), f = norm(sub(S.target, e)); let r = cross(f, [0, 0, 1]); if (Math.hypot(...r) < 1e-4) r = [-Math.sin(S.az), Math.cos(S.az), 0]; r = norm(r); return { e, f, r, u: cross(r, f) }; }
+  let MVP = new Float32Array(16);
+  function updateMVP(aspect) {
+    const { e, f, r, u } = basis(), near = 0.05, far = 80, t = 1 / Math.tan(0.5 * 38 * Math.PI / 180);
+    const V = [r[0], u[0], -f[0], 0, r[1], u[1], -f[1], 0, r[2], u[2], -f[2], 0, -dot(r, e), -dot(u, e), dot(f, e), 1];
+    const P = [t / aspect, 0, 0, 0, 0, t, 0, 0, 0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far), 0];
+    for (let c = 0; c < 4; c++) for (let rr = 0; rr < 4; rr++) { let s = 0; for (let k = 0; k < 4; k++) s += P[k * 4 + rr] * V[c * 4 + k]; MVP[c * 4 + rr] = s; }
+    return e;
+  }
+  function project(p) {
+    const x = MVP[0] * p[0] + MVP[4] * p[1] + MVP[8] * p[2] + MVP[12], y = MVP[1] * p[0] + MVP[5] * p[1] + MVP[9] * p[2] + MVP[13], w = MVP[3] * p[0] + MVP[7] * p[1] + MVP[11] * p[2] + MVP[15];
+    if (w <= 0.02) return null;
+    return [(x / w * 0.5 + 0.5) * canvas.clientWidth, (1 - (y / w * 0.5 + 0.5)) * canvas.clientHeight];
+  }
+
+  // ---------- selection
+  const faceIndex = (key) => D.faces.findIndex((f) => f.key === key);
+  function selUniforms() {
+    let sf = -1, so = -1;
+    if (S.sel) {
+      if (S.sel.kind === "face") sf = faceIndex(S.sel.key);
+      else if (S.sel.kind === "item") { const it = D.items.find((i) => i.key === S.sel.key); if (it.object !== null) so = it.object + 1; else sf = faceIndex(it.host); }
+      else if (S.sel.kind === "gap") sf = faceIndex(D.gaps[S.sel.key].a);
+    }
+    return [sf, so];
+  }
+  function visArray() {
+    const v = new Float32Array(9).fill(1);
+    v[0] = S.vis.other ? 1 : 0; v[2] = S.vis.floor ? 1 : 0; v[3] = S.vis.ceiling ? 1 : 0; v[8] = S.vis.curtain ? 1 : 0;
+    return v;
+  }
+
+  // ---------- draw
+  let dirty = true;
+  function resize() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(2, Math.floor(canvas.clientWidth * dpr)), h = Math.max(2, Math.floor(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    return [w, h];
+  }
+  function setCommon(mode) {
+    const [sf, so] = selUniforms();
+    gl.uniformMatrix4fv(U.uMVP, false, MVP); gl.uniform1fv(U.uVis, visArray()); gl.uniform1i(U.uMode, mode);
+    gl.uniform1f(U.uSelFace, sf); gl.uniform1f(U.uSelOwner, so);
+    if (S.cull) { gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); } else gl.disable(gl.CULL_FACE);
+  }
+  function draw() {
+    dirty = false;
+    if (!gl) return;
+    const [w, h] = resize();
+    const e = updateMVP(w / h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, w, h);
+    const bg = hex(css("--surface")); gl.clearColor(bg[0], bg[1], bg[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.uniform3fv(U.uEye, new Float32Array(e)); setCommon(S.mode);
+    gl.drawElements(gl.TRIANGLES, idx.length, gl.UNSIGNED_INT, 0);
+    overlay();
+  }
+  function pick(cx, cy) {
+    const [w, h] = resize();
+    if (fboSize[0] !== w || fboSize[1] !== h) {
+      gl.bindTexture(gl.TEXTURE_2D, fboTex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, fboDepth); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, fboDepth);
+      fboSize = [w, h];
+    }
+    const x = Math.floor(cx * w / canvas.clientWidth), y = h - 1 - Math.floor(cy * h / canvas.clientHeight);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, w, h);
+    gl.enable(gl.SCISSOR_TEST); gl.scissor(x, y, 1, 1);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    setCommon(2); gl.drawElements(gl.TRIANGLES, idx.length, gl.UNSIGNED_INT, 0);
+    const px = new Uint8Array(4); gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.disable(gl.SCISSOR_TEST); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return px[3] ? { cat: px[0], face: px[1], owner: px[2] } : null;
+  }
+
+  // ---------- overlay: fitted rectangles, thickness segments, text
+  const svg = $("svg"), tags = $("tags");
+  const isSel = (kind, key) => S.sel && S.sel.kind === kind && S.sel.key === key;
+  function poly(corners) { const p = corners.map(project); return p.some((x) => !x) ? null : p; }
+  function overlay() {
+    let out = "", html = "";
+    const list = [], e = eye();
+    // a wall or item whose front faces away from the camera is drawn faintly and not labelled while back faces are hidden
+    const away = (n, c) => S.cull && dot(n, sub(e, c)) < 0;
+    const tag = (p, text, color, cls, rank) => { const s = project(p); if (s) list.push({ s, text, color, cls: cls || "", rank }); };
+    const hostSel = S.sel && S.sel.kind === "item" ? D.items.find((i) => i.key === S.sel.key).host : S.sel && S.sel.kind === "gap" ? D.gaps[S.sel.key].a : null;
+    for (const f of D.faces) {
+      const on = isSel("face", f.key), rel = on || hostSel === f.key, back = away(f.n, f.c);
+      if (S.rect) { const p = poly(f.corners); if (p) out += `<polygon points="${p.map((x) => x.map((v) => v.toFixed(1)).join(",")).join(" ")}" fill="none" stroke="${css("--ink")}" stroke-opacity="${back ? 0.14 : S.sel ? (rel ? 0.95 : 0.18) : 0.55}" stroke-width="${on ? 2.5 : 1.2}"/>`; }
+      if (S.tags && !back && (!S.sel || rel)) tag(f.anchor, on ? `${f.key} ${f.name}` : f.key, COLOR.wall, on ? "sel" : "", on ? 0 : 3);
+    }
+    for (const it of D.items) {
+      if (it.label === "curtain" && !S.vis.curtain) continue;
+      const on = isSel("item", it.key), rel = on || (S.sel && S.sel.kind === "face" && S.sel.key === it.host) || hostSel === it.host;
+      if (S.sel && !rel) continue;
+      const hf = D.faces[faceIndex(it.host)], back = !it.inferred && away(hf.n, hf.c);
+      if (S.rect) { const p = poly(it.corners); if (p) out += `<polygon points="${p.map((x) => x.map((v) => v.toFixed(1)).join(",")).join(" ")}" fill="${it.inferred ? "rgba(22,25,29,0.06)" : "none"}" stroke="${it.inferred ? css("--ink") : COLOR[it.label]}" stroke-opacity="${back ? 0.25 : 1}" stroke-width="${on ? 3 : 2}" ${it.inferred ? 'stroke-dasharray="7 5"' : ""}/>`; }
+      if (S.tags && !back) tag(it.anchor, on ? `${it.name} ${f2(it.width_m)} × ${f2(it.height_m)} m` : (it.inferred ? "门洞（推算）" : `${ZH[it.label]}#${it.object}`), COLOR[it.label], on ? "sel" : "", on ? 0 : 1);
+    }
+    D.gaps.forEach((g, i) => {
+      const on = isSel("gap", i);
+      if (S.sel && !on && hostSel !== g.a && !(S.sel.kind === "face" && (S.sel.key === g.a || S.sel.key === g.b))) return;
+      const a = project(g.p0), b = project(g.p1); if (!a || !b) return;
+      if (S.rect) out += `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${css("--ink")}" stroke-width="${on ? 4 : 2.5}" stroke-linecap="round"/>`
+        + `<circle cx="${a[0].toFixed(1)}" cy="${a[1].toFixed(1)}" r="3.5" fill="${css("--ink")}" stroke="#fff" stroke-width="1.5"/><circle cx="${b[0].toFixed(1)}" cy="${b[1].toFixed(1)}" r="3.5" fill="${css("--ink")}" stroke="#fff" stroke-width="1.5"/>`;
+      // thickness values are small print: only when zoomed in or selected
+      if (S.tags && (S.sel || S.dist < 8)) { const m = [0, 1, 2].map((k) => (g.p0[k] + g.p1[k]) / 2 + (k === 2 ? 0.16 : 0)); tag(m, `${f1(g.cm)} cm`, null, "gap" + (on ? " sel" : ""), on ? 0 : 2); }
+    });
+    // place labels in rank order; a label that would cover another moves down or up one or two rows, else it is left out
+    const placed = [], W = canvas.clientWidth, H = canvas.clientHeight;
+    const width = (t) => { let w = 14; for (const ch of t) w += ch.charCodeAt(0) > 255 ? 12.5 : 7; return w; };
+    list.sort((a, b) => a.rank - b.rank);
+    for (const t of list) {
+      const w = width(t.text) + (t.color ? 14 : 0), h = 20;
+      for (const dy of [0, 21, -21, 42, -42]) {
+        const x = t.s[0], y = t.s[1] + dy;
+        if (x < 0 || x > W || y < 8 || y > H - 8) continue;
+        if (placed.some((b) => Math.abs(b.x - x) < (b.w + w) / 2 + 3 && Math.abs(b.y - y) < h)) continue;
+        placed.push({ x, y, w });
+        html += `<div class="tag ${t.cls}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px">${t.color ? `<span class="chip" style="background:${t.color}"></span>` : ""}${t.text}</div>`;
+        break;
+      }
+    }
+    svg.innerHTML = out; tags.innerHTML = html;
+  }
+
+  // ---------- camera moves
+  let anim = null;
+  function flyTo(v) {
+    const from = { az: S.az, el: S.el, dist: S.dist, target: S.target.slice() }, t0 = performance.now();
+    let daz = v.az - from.az; daz = Math.atan2(Math.sin(daz), Math.cos(daz));
+    anim = () => {
+      const t = Math.min(1, (performance.now() - t0) / 450), k = t * t * (3 - 2 * t);
+      S.az = from.az + daz * k; S.el = from.el + (v.el - from.el) * k; S.dist = from.dist + (v.dist - from.dist) * k;
+      S.target = from.target.map((x, i) => x + (v.target[i] - x) * k);
+      dirty = true; if (t >= 1) anim = null;
+    };
+  }
+  function viewOfFace(f, extra) { return { az: Math.atan2(f.nh[1], f.nh[0]) + 0.35, el: 0.28, dist: Math.max(4.2, f.length_m * 1.25) + (extra || 0), target: [f.c[0], f.c[1], 1.25] }; }
+  function select(sel, fly) {
+    S.sel = sel && S.sel && S.sel.kind === sel.kind && S.sel.key === sel.key ? null : sel;
+    if (S.sel && fly !== false) {
+      const host = S.sel.kind === "face" ? S.sel.key : S.sel.kind === "item" ? D.items.find((i) => i.key === S.sel.key).host : D.gaps[S.sel.key].a;
+      const f = D.faces[faceIndex(host)], v = viewOfFace(f);
+      if (S.sel.kind !== "face") { const a = S.sel.kind === "item" ? D.items.find((i) => i.key === S.sel.key).anchor : D.gaps[S.sel.key].p0; v.target = [a[0], a[1], Math.max(0.9, a[2])]; v.dist = Math.min(v.dist, 5); }
+      flyTo(v);
+    }
+    document.querySelectorAll("[data-kind]").forEach((n) => n.classList.toggle("on", !!S.sel && n.dataset.kind === S.sel.kind && n.dataset.key === String(S.sel.key)));
+    document.querySelectorAll("#views button").forEach((b) => b.classList.remove("on"));
+    dirty = true;
+  }
+
+  // ---------- side list, legend, tables
+  const faceName = (key) => { const f = D.faces[faceIndex(key)]; return f ? `${f.key} ${f.name}` : key; };
+  function buildSide() {
+    let h = "<h3>墙面（9 个）</h3>";
+    for (const f of D.faces) h += `<div class="row" data-kind="face" data-key="${f.key}"><span class="k">${f.key}</span><span>${f.name}<span class="sub">wall#${f.ids.join("、#")}</span></span><span class="v">${f2(f.area_m2)} m²</span></div>`;
+    h += "<h3>墙上的门、窗和其他</h3>";
+    for (const it of D.items) h += `<div class="row" data-kind="item" data-key="${it.key}"><span class="chip" style="background:${COLOR[it.label]}"></span><span>${it.name}<span class="sub">${it.object === null ? "从 doorframe#63 推算" : it.label + "#" + it.object} · 在 ${it.host}</span></span><span class="v">${f2(it.width_m)} × ${f2(it.height_m)}</span></div>`;
+    h += "<h3>能量到的厚度</h3>";
+    D.gaps.forEach((g, i) => { h += `<div class="row" data-kind="gap" data-key="${i}"><span class="k">↔</span><span>${g.name}</span><span class="v">${f1(g.cm)} cm</span></div>`; });
+    h += '<button class="clear" id="clear">取消选中</button>';
+    $("side").innerHTML = h;
+  }
+  function buildLegend() {
+    const a = D.cat_area, rows = [["wall", a.wall], ["door", a.door], ["doorframe", a.doorframe], ["window", a.window], ["mirror", a.mirror], ["curtain", a.curtain], ["floor", a.floor], ["ceiling", a.ceiling], ["other", a.other + a.unannotated]];
+    $("legend").innerHTML = rows.map(([c, v]) => `<div><span class="chip" style="background:${COLOR[c]}"></span>${ZH[c]}<span class="num">${f1(v)} m²</span></div>`).join("")
+      + `<div><svg width="22" height="10" style="flex:none"><rect x="1" y="1" width="20" height="8" fill="none" stroke="${css("--ink")}" stroke-dasharray="4 3" stroke-width="1.5"/></svg>门洞（推算）</div>`;
+  }
+  function buildTables() {
+    $("tFaces").innerHTML = "<thead><tr><th>墙面</th><th>GT 实例</th><th class='n'>有墙标签的面积</th><th class='n'>外接矩形</th><th class='n'>标签占矩形</th><th class='n'>沿墙长度</th><th class='n'>高度范围 z</th><th class='n'>平面残差</th><th class='n'>偏离竖直</th><th class='n'>两个实例之间的台阶</th></tr></thead><tbody>"
+      + D.faces.map((f) => `<tr data-kind="face" data-key="${f.key}"><td><b>${f.key}</b> ${f.name}</td><td>wall#${f.ids.join("、#")}</td><td class="n">${f2(f.area_m2)} m²</td><td class="n">${f2(f.rect_m2)} m²</td><td class="n">${pct(f.area_m2 / f.rect_m2)}</td><td class="n">${f2(f.length_m)} m</td><td class="n">${f2(f.z[0])} – ${f2(f.z[1])} m</td><td class="n">${f1(f.rms_cm)} cm</td><td class="n">${f1(f.tilt_deg)}°</td><td class="n">${f.offset_between_ids_cm === null ? "—" : f1(f.offset_between_ids_cm) + " cm"}</td></tr>`).join("") + "</tbody>";
+    $("tItems").innerHTML = "<thead><tr><th>内容</th><th>GT 实例</th><th>所在墙面</th><th class='n'>宽 × 高</th><th class='n'>高度范围 z</th><th class='n'>相对墙面</th><th class='n'>标签面积</th><th class='n'>标签占矩形</th></tr></thead><tbody>"
+      + D.items.map((it) => `<tr data-kind="item" data-key="${it.key}"><td><span class="chip" style="background:${COLOR[it.label]}"></span> ${it.name}</td><td>${it.object === null ? "无（从 doorframe#63 的两根立边和横梁推算）" : it.label + "#" + it.object}</td><td>${faceName(it.host)}</td><td class="n">${f2(it.width_m)} × ${f2(it.height_m)} m</td><td class="n">${f2(it.z[0])} – ${f2(it.z[1])} m</td><td class="n">${it.offset_cm === null ? "—" : (it.offset_cm > 0 ? "+" : "") + f1(it.offset_cm) + " cm"}</td><td class="n">${it.area_m2 === null ? "矩形内网格 " + it.mesh_inside_m2.toFixed(2) + " m²" : f2(it.area_m2) + " m²"}</td><td class="n">${it.fill === null ? "—" : pct(Math.min(1, it.fill))}</td></tr>`).join("") + "</tbody>";
+    $("tGaps").innerHTML = "<thead><tr><th>量的是什么</th><th>从</th><th>到</th><th class='n'>距离（中位数）</th><th class='n'>四分位距</th><th class='n'>两面沿墙重叠</th></tr></thead><tbody>"
+      + D.gaps.map((g, i) => `<tr data-kind="gap" data-key="${i}"><td>${g.name}</td><td>${faceName(g.a)}</td><td>${/^F\d$/.test(g.b) ? faceName(g.b) : g.b}</td><td class="n">${f1(g.cm)} cm</td><td class="n">${f1(g.spread_cm)} cm</td><td class="n">${f2(g.overlap_m)} m</td></tr>`).join("") + "</tbody>";
+    const fl = D.floor, ce = D.ceiling;
+    $("fc").innerHTML = `<ul>
+      <li><b>地面</b>：${f1(fl.area_m2)} m² 有标签，z 的中位数 ${f2(fl.z_median)} m。${pct(fl.planes[0].share)} 的面积在一个平面上（z ${f2(fl.planes[0].z[0])} – ${f2(fl.planes[0].z[1])} m），另有 ${pct(fl.planes[1].share)} 高出几厘米（z ${f2(fl.planes[1].z[0])} – ${f2(fl.planes[1].z[1])} m）。</li>
+      <li><b>天花板</b>：只有 ${f1(ce.area_m2)} m² 有标签，而且不是水平面。最大的两块分别在北侧和南侧，坡度 ${f1(ce.planes[0].slope_deg)}° 和 ${f1(ce.planes[1].slope_deg)}°，高度 ${f2(ce.planes[0].z[0])} – ${f2(ce.planes[0].z[1])} m 和 ${f2(ce.planes[1].z[0])} – ${f2(ce.planes[1].z[1])} m。所以层高读不出来。</li>
+      <li><b>没有标签的网格</b>：${f1(D.cat_area.unannotated)} m²（全部 ${f1(D.cat_area.total)} m² 里），图里和家具画成同一种灰色。</li>
+      <li><b>没有落在 9 个墙面上的墙顶点</b>：${pct(1 - D.wall_vertices_on_faces)}，主要是墙角和窗套的转折处。它们仍按"墙"上色，但不属于任何一个墙面。</li></ul>`;
+  }
+
+  // ---------- events
+  function bind() {
+    document.querySelectorAll("#views button").forEach((b) => b.addEventListener("click", () => { flyTo(VIEWS[b.dataset.view]); document.querySelectorAll("#views button").forEach((x) => x.classList.toggle("on", x === b)); }));
+    document.querySelectorAll("#modes button").forEach((b) => b.addEventListener("click", () => { S.mode = +b.dataset.mode; document.querySelectorAll("#modes button").forEach((x) => x.classList.toggle("on", x === b)); dirty = true; }));
+    const chk = (id, fn) => $(id).addEventListener("change", (e) => { fn(e.target.checked); dirty = true; });
+    chk("vOther", (v) => S.vis.other = v); chk("vFloor", (v) => S.vis.floor = v); chk("vCeil", (v) => S.vis.ceiling = v); chk("vCurtain", (v) => S.vis.curtain = v);
+    chk("vRect", (v) => S.rect = v); chk("vTags", (v) => S.tags = v); chk("vCull", (v) => S.cull = v);
+    document.addEventListener("click", (e) => {
+      const n = e.target.closest("[data-kind]"); if (n) { select({ kind: n.dataset.kind, key: n.dataset.kind === "gap" ? +n.dataset.key : n.dataset.key }); if (n.tagName === "TR") $("view").scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+      if (e.target.id === "clear") select(null);
+    });
+    let drag = null, moved = false;
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    canvas.addEventListener("mousedown", (e) => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; moved = false; canvas.classList.add("drag"); $("tip").style.display = "none"; });
+    window.addEventListener("mouseup", () => { drag = null; canvas.classList.remove("drag"); });
+    window.addEventListener("mousemove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+      if (Math.abs(dx) + Math.abs(dy) > 1) moved = true;
+      if (drag.pan) { const { r, u } = basis(), k = S.dist * 0.0016; S.target = S.target.map((v, i) => v - r[i] * dx * k + u[i] * dy * k); }
+      else { S.az -= dx * 0.006; S.el = Math.max(-0.2, Math.min(1.5607, S.el + dy * 0.006)); }
+      document.querySelectorAll("#views button").forEach((b) => b.classList.remove("on"));
+      dirty = true;
+    });
+    canvas.addEventListener("wheel", (e) => { e.preventDefault(); S.dist = Math.max(1.2, Math.min(40, S.dist * Math.exp(e.deltaY * 0.0012))); dirty = true; }, { passive: false });
+    let pending = null;
+    const describe = (hit) => {
+      if (!hit) return null;
+      const lab = hit.owner ? D.labels[hit.owner - 1] : null, f = hit.face < 255 ? D.faces[hit.face] : null;
+      let s = lab ? `<b>${lab}#${hit.owner - 1}</b> · ${ZH[lab] || "其他物体"}` : "<b>没有标签的网格</b>";
+      if (f) s += `<br>墙面 ${f.key} ${f.name}`;
+      const it = lab && D.items.find((i) => i.object === hit.owner - 1); if (it) s += `<br>${it.name}，${f2(it.width_m)} × ${f2(it.height_m)} m，在 ${it.host}`;
+      return s;
+    };
+    canvas.addEventListener("mousemove", (e) => {
+      if (drag || !gl) return;
+      const r = canvas.getBoundingClientRect(); pending = [e.clientX - r.left, e.clientY - r.top];
+      requestAnimationFrame(() => {
+        if (!pending || drag) return;
+        const [x, y] = pending; pending = null;
+        const text = describe(pick(x, y)), tip = $("tip");
+        if (!text) { tip.style.display = "none"; return; }
+        tip.innerHTML = text; tip.style.display = "block";
+        tip.style.left = Math.min(x + 14, canvas.clientWidth - tip.offsetWidth - 6) + "px"; tip.style.top = Math.max(6, y - tip.offsetHeight - 10) + "px";
+      });
+    });
+    canvas.addEventListener("mouseleave", () => { pending = null; $("tip").style.display = "none"; });
+    canvas.addEventListener("click", (e) => {
+      if (moved || !gl) return;
+      const r = canvas.getBoundingClientRect(), hit = pick(e.clientX - r.left, e.clientY - r.top);
+      if (!hit) return;
+      const it = hit.owner && D.items.find((i) => i.object === hit.owner - 1);
+      if (it) select({ kind: "item", key: it.key }, false); else if (hit.face < 255) select({ kind: "face", key: D.faces[hit.face].key }, false);
+    });
+    window.addEventListener("resize", () => { dirty = true; });
+  }
+  // #view=top&sel=F2&others=0&floor=0&mode=1 : open the page in a given state
+  function fromHash() {
+    const p = new URLSearchParams(location.hash.slice(1));
+    const set = (id, key, fn) => { if (p.has(key)) { const v = p.get(key) !== "0"; $(id).checked = v; fn(v); } };
+    set("vOther", "others", (v) => S.vis.other = v); set("vFloor", "floor", (v) => S.vis.floor = v); set("vCeil", "ceiling", (v) => S.vis.ceiling = v);
+    set("vCurtain", "curtain", (v) => S.vis.curtain = v); set("vTags", "tags", (v) => S.tags = v); set("vCull", "cull", (v) => S.cull = v); set("vRect", "rect", (v) => S.rect = v);
+    if (p.has("mode")) { S.mode = +p.get("mode"); document.querySelectorAll("#modes button").forEach((x) => x.classList.toggle("on", +x.dataset.mode === S.mode)); }
+    if (p.has("view") && VIEWS[p.get("view")]) { Object.assign(S, JSON.parse(JSON.stringify(VIEWS[p.get("view")]))); document.querySelectorAll("#views button").forEach((x) => x.classList.toggle("on", x.dataset.view === p.get("view"))); }
+    if (p.has("sel")) { const k = p.get("sel"); const sel = /^F\d$/.test(k) ? { kind: "face", key: k } : /^gap\d$/.test(k) ? { kind: "gap", key: +k.slice(3) } : { kind: "item", key: k }; select(sel); if (anim) { const a = anim; anim = null; const now = performance.now; performance.now = () => now.call(performance) + 1000; a(); performance.now = now; } }
+    for (const k of ["az", "el", "dist"]) if (p.has(k)) S[k] = +p.get(k);
+  }
+
+  buildSide(); buildLegend(); buildTables();
+  try { if (gl) initGL(); } catch (err) { $("err").style.display = "flex"; $("err").textContent = "3D 视图初始化失败：" + err.message; }
+  bind(); fromHash();
+  (function loop() { if (anim) anim(); if (dirty) draw(); requestAnimationFrame(loop); })();
+})();
+</script>
+</body>
+</html>

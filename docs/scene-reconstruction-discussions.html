@@ -220,14 +220,13 @@
         <a href="#round-11">第十一轮 · 改进方向与待讨论边界</a>
         <a href="#round-10">第十轮 · 衣柜部件误关联分析</a>
         <a href="#round-09">第九轮 · 三类状态定义</a>
-        <a href="scene-reconstruction-design.html">当前方案设计 · Harness 框架与代码入口</a>
+        <a href="scene-reconstruction-design-v2.html">当前方案设计 v2 · Harness 框架与代码入口</a>
         <a href="#round-09-overview-title">第九轮 · 三类状态定义</a>
         <a href="#round-07">第七轮 · 初版按执行顺序讲解</a>
         <a href="#round-07-algorithm">算法流程图</a>
         <a href="#round-07-sequence">窗口执行循环</a>
         <a href="#round-07-example">新建与纠错示例</a>
         <a href="#round-06">第六轮 · Harness 的组成与职责</a>
-        <a href="agent-harness-studies.html">Agent / Harness 工作笔记 · Articraft</a>
         <a href="#round-06-components">八个组成部分</a>
         <a href="#round-06-framework">运行架构图</a>
         <a href="#round-06-example">一次更新怎么完成</a>
@@ -313,7 +312,7 @@
         <p class="code-ref"><a href="assets/global-object-bboxes/build_bboxes.py">docs/assets/global-object-bboxes/build_bboxes.py</a><br><code>main()</code>：来源与预过滤 → <code>exterior_planes()</code>：外表面候选 → <code>oriented_bounds()</code>：朝向与范围 → <code>supported_quantile_bounds()</code>：尾部检查 → <code>fit_plane_faces()</code>：框面约束。</p>
         <p class="note">源码核对发现的问题及后续修正：<code>fit_plane_faces()</code> 调整 Z 边界后，尺寸使用新边界，但 <code>center.z</code> 仍由调整前的 <code>z_lower / z_upper</code> 计算。因此水平框面调整时，实际角点可能与记录的目标框面位置不一致。后续接入结果页面时已在共享拟合模块中修复：<code>center.z</code> 使用最终边界的中点，并验证角点与框面边界一致。结果页面的六窗口 bbox 已重新导出；本讨论对应的旧全局可视化静态数据尚未重新导出。</p>
         <p>结果在 <a href="assets/global-object-bboxes/bboxes.json">docs/assets/global-object-bboxes/bboxes.json</a> 的 <code>bbox_3d_obb</code> 中：<code>center_xyz</code>、<code>size_xyz</code>、<code>axes_world</code>、<code>corners_xyz</code> 表达框；<code>plane_heading_used</code> 记录是否使用竖直平面朝向，<code>plane_faces</code> 记录约束轴、侧别、支持点数、平面位置、调整前后边界。<code>axes_world</code> 每行为一根框轴；第三行固定为 <code>[0,0,1]</code>。</p>
-        <p>已完成：36个框重新生成；合成数据检查直立法线对齐、外侧面定位、内部隔板拒绝和切向范围保留；检查框轴与尺寸，以及页面渲染和交互。查看：<a href="global-object-bboxes.html">全局 bbox 与实例点云对照</a>。</p>
+        <p>已完成：36个框重新生成；合成数据检查直立法线对齐、外侧面定位、内部隔板拒绝和切向范围保留；检查框轴与尺寸，以及页面渲染和交互。查看：全局 bbox 与实例点云对照页面已清理。</p>
         <div class="recommendation"><strong>当前仍是几何启发式，不保证框住所有真实点。</strong><p>单侧检查基于已观测、已过滤的点云；漏观测可能让内部面看起来像外表面。过滤仍可能移除真实稀疏部件，1%～99%逐轴范围也不等于最终框必含98%的原始点。错误归属、密集混入或非箱形几何仍可能导致不准确。框里出现其他物体的点，本身不能证明实例归属错误。</p></div>
       </section>
     </article>
@@ -327,7 +326,7 @@
       <details><summary>展开具体参数与实现位置</summary><p>代码：<code>docs/assets/global-object-bboxes/build_bboxes.py</code> 中 <code>supported_quantile_bounds</code>。过滤后至少 800 点、该轴范围至少 0.10 米才审查。弱段阈值为内部非空段点数中位数的 25%；至少连续 3 段，最多检查 8 段，候选尾部不得超过总点数的 8%。连接半径为点云最近邻距离中位数的 3 倍，限制在 0.025～0.05 米。尾部最大连通分量占比至少 60%，且距主体不超过连接半径时保留；其余弱尾部才收缩。</p><p>这些是可调启发式参数，不是物体归属真值。原来的统计过滤、世界轴弱裁剪和 1%～99% 基础边界仍保留，因此不能保证所有真实稀疏部件都完整进入框。</p></details>
       <div class="table-wrap"><table><thead><tr><th>检查对象</th><th>结果</th><th>含义</th></tr></thead><tbody><tr><td>Object003 · desk</td><td>0.640 × 1.079 × 0.965 米，保持不变</td><td>上方候选尾部 285 点（3.90%），最大连通分量占 100%，距主体约 1.63 厘米；连接半径约 4.06 厘米，因此保留。</td></tr><tr><td>Object005 · fabric wardrobe</td><td>0.980 × 0.520 × 1.553 米，保持不变</td><td>没有触发边界收缩。</td></tr></tbody></table></div>
       <p class="boundary"><strong>结论：</strong>本轮实现了边界支撑审查，但没有解决 Object003 的语义混入问题。中间只按密度收缩的试验会把其高度缩到约 0.874 米，该版本已撤回。最终版本保护连在一起的细结构；若这些点实际来自另一个物体，需要结合来源观测／RGB 判断，不能把几何连通性当作身份正确的证据。</p>
-      <p class="sources">验证：孤立尾部收缩、连续细结构保留、平移不变性、空云／单点；36 个框的轴与角点、来源哈希；无头页面检查 492,555 个背景点、框绘制、旋转／平移／缩放和标签，无运行时异常。<a href="global-object-bboxes.html">打开可视化页面</a>。</p>
+      <p class="sources">验证：孤立尾部收缩、连续细结构保留、平移不变性、空云／单点；36 个框的轴与角点、来源哈希；无头页面检查 492,555 个背景点、框绘制、旋转／平移／缩放和标签，无运行时异常。全局 bbox 可视化页面已清理。</p>
     </article>
 
     <article id="round-13" class="harness-visual" aria-labelledby="round-13-title">
@@ -501,12 +500,12 @@
         <p>这两条解释表明：Agent 将“宽幅布面”和“窄幅布面”解释为两个不同实体。需要修正的是 <strong>observation → Object 的归属</strong>；单独 relabel 只改类别名，无法把错误的点云移回去。</p>
       </section>
       <section><h3>10.2 · Agent 实际看到的图像</h3>
-        <p>以下均为该次运行保存的 overlay，可点击看原尺寸。实际请求还同时提供原始 RGB、bbox、类别、世界坐标 centroid/bounds，以及物体状态；不是仅凭下面三张图推理。</p>
-        <div class="case-gallery">
-          <figure><a href="../InstanceRecognition/runtime/experiments/harness_window01_v3/evidence/0014_002.jpg"><img loading="lazy" src="../InstanceRecognition/runtime/experiments/harness_window01_v3/evidence/0014_002.jpg" alt="Object4历史代表：画面最右侧窄条窗帘M02"></a><figcaption><strong>Object4 · 0014:002</strong>目标是最右侧 M02，不是中央衣柜。历史画面的“右侧”不能直接对应当前画面的“右侧”。</figcaption></figure>
-          <figure><a href="../InstanceRecognition/runtime/experiments/harness_window01_v3/evidence/0024_011.jpg"><img loading="lazy" src="../InstanceRecognition/runtime/experiments/harness_window01_v3/evidence/0024_011.jpg" alt="Object5历史代表只高亮衣柜的窄幅左侧布面M11"></a><figcaption><strong>Object5 · 0024:011</strong>默认代表只高亮衣柜的窄幅布面；完整 RGB 中仍有右侧布面，但它没有作为该 Object 的另一条目标证据自动展示。</figcaption></figure>
-          <figure><a href="../InstanceRecognition/runtime/experiments/harness_window01_v3/evidence/frame_0025.jpg"><img loading="lazy" src="../InstanceRecognition/runtime/experiments/harness_window01_v3/evidence/frame_0025.jpg" alt="当前第25号采样帧：右侧M08与相邻M10被分配给不同物体"></a><figcaption><strong>当前 seq 25 · M08 / M10</strong>M08 宽幅布面被分给 Object4；相邻的 M10 窄幅布面被分给 Object5。颜色是 mask 标记，不是真实材质色。</figcaption></figure>
-        </div>
+        <p>该次运行保存的 overlay 曾用于核对以下三点。原始实验目录已清理，图片不再可打开；当时记录的观察结论保留如下。实际请求还同时提供原始 RGB、bbox、类别、世界坐标 centroid/bounds，以及物体状态；不是仅凭这几张图推理。</p>
+        <ul>
+          <li><strong>Object4 · 0014:002</strong>：目标是最右侧 M02，不是中央衣柜。历史画面的“右侧”不能直接对应当前画面的“右侧”。</li>
+          <li><strong>Object5 · 0024:011</strong>：默认代表只高亮衣柜的窄幅布面；完整 RGB 中仍有右侧布面，但它没有作为该 Object 的另一条目标证据自动展示。</li>
+          <li><strong>当前 seq 25 · M08 / M10</strong>：M08 宽幅布面被分给 Object4；相邻的 M10 窄幅布面被分给 Object5。颜色是 mask 标记，不是真实材质色。</li>
+        </ul>        </div>
       </section>
       <section><h3>10.3 · 原因：哪些已证实，哪些属于分析</h3>
         <div class="table-wrap"><table><thead><tr><th>环节</th><th>已核对的事实</th><th>对错误的解释</th></tr></thead><tbody>
@@ -527,7 +526,7 @@
           <tr><td>0026:012</td><td>Object5 · 29 条历史观测</td><td>0.0041 m</td><td>99.86%</td></tr>
         </tbody></table></div>
         <p>本例的新观测与 Object5 既有表面高度重合，与 Object4 明显分离。几何可以作为反驳当前关联的强线索，再结合全帧外观核对。它不等于实例标注真值，也不能推广成“距离近就自动合并”的规则。</p>
-        <p><a href="diagnostics/object4-object5-window06.py">复算脚本</a> · <a href="diagnostics/object4-object5-window06.json">诊断结果 JSON</a>。运行：<code>python3 docs/diagnostics/object4-object5-window06.py</code>。</p>
+        <p>上表为本次排查时计算的诊断结果，其复算脚本与结果 JSON 已随 <code>docs/diagnostics/</code> 清理，不再可运行；数值保留作为当时的核对记录。</p>
       </section>
       <section><h3>10.5 · 对下一版的启示（建议，尚未实现）</h3>
         <ol>
@@ -538,10 +537,7 @@
         </ol>
         <p class="boundary">本轮只记录与分析：未改 prompt、未重跑 API、未更改已有归属或结果点云。后续如果确认两个 mask 都是衣柜的有效部件，可重新 assign 给 Object5 并重建受影响点云；若混入无关物体，才需要 repair。</p>
       </section>
-      <details><summary>原始记录与代码入口（工作目录相对路径）</summary><div class="case-details"><ul class="sources">
-        <li><a href="../InstanceRecognition/runtime/experiments/harness_window01_v3/calls/w0025_1790046175311965598_call00_tool00.json">最后窗口 propose_update：原始操作、理由与证据</a></li>
-        <li><a href="../InstanceRecognition/runtime/experiments/harness_window01_v3/calls/w0025_1790046175311965598_call01_tool00.json">最后窗口 commit_update：提交版本 6</a></li>
-        <li><a href="../InstanceRecognition/runtime/experiments/harness_window01_v3/versions/0005/state.json">版本 5 状态</a> · <a href="../InstanceRecognition/runtime/experiments/harness_window01_v3/versions/0006/state.json">版本 6 状态</a> · <a href="../InstanceRecognition/runtime/experiments/harness_window01_v3/observations.json">观测元数据</a></li>
+      <details><summary>代码入口（工作目录相对路径）；该轮实验目录已清理，原始日志不再可打开</summary><div class="case-details"><ul class="sources">
         <li><a href="../InstanceRecognition/src/harness/run.py">InstanceRecognition/src/harness/run.py:58</a> · 默认历史代表选择。</li>
         <li><a href="../InstanceRecognition/src/harness/tools.py">InstanceRecognition/src/harness/tools.py:33</a> · 代表列表；:50 几何工具。</li>
         <li><a href="../InstanceRecognition/src/harness/state.py">InstanceRecognition/src/harness/state.py:23</a> · 提案校验；:69 起归属写入。</li>
@@ -888,7 +884,7 @@
           <tr><td><strong>本轮选择：API 主动更新</strong></td><td><strong>每批新观测进入审阅；相关历史按需检索</strong></td><td><strong>关联已有身份、建立暂定身份、修正历史关系，或保留未决。</strong></td></tr>
         </tbody></table></div>
         <p>“主动”指模型可以提出程序未预设的疑点和关系修正。请求时机仍由程序安排；模型不会在两次 API 请求之间持续观察视频。自由发现问题与受约束地提交更新可以同时成立。</p>
-        <div class="record"><strong>当前可复用的基础：</strong><a href="../InstanceRecognition/runtime/experiments/incremental_objects_first30_v2/index.html">前 30 帧实验</a>已有 300 个 mask 观测、38 个候选、76 条待定观测和 10 条后续归属记录。这是本地关联基线，候选数不是真实物体数，待定数也不等于错误数。<a href="../ScanNet/objects/index.html">ScanNet 物体级 3D 真值浏览器</a>已可用于事后检查。以上均不代表本轮 API 更新方案已运行。</div>
+        <div class="record"><strong>当前可复用的基础：</strong>前 30 帧增量物体实验页面已清理已有 300 个 mask 观测、38 个候选、76 条待定观测和 10 条后续归属记录。这是本地关联基线，候选数不是真实物体数，待定数也不等于错误数。<a href="../ScanNet/objects/index.html">ScanNet 物体级 3D 真值浏览器</a>已可用于事后检查。以上均不代表本轮 API 更新方案已运行。</div>
       </section>
 
       <section id="round-05-framework" aria-labelledby="round-05-framework-title">
@@ -1107,7 +1103,7 @@
             <figcaption><strong>248 · 同名类别也会分成多个局部</strong>一个 <code>wooden cabinet</code> 提示返回 11 张 <code>cabinet</code> mask，多数落在门板等局部；电视为第 12 张独立 mask。</figcaption>
           </figure>
         </div>
-        <p class="note">以上为 <code>tmp/111.png、112.png、141.png、248.png</code> 于 2026-09-18 的独立副本；没有覆盖第二轮的同名历史图片。帧号、实例 ID、类别、提示词已对照当前正式页面的原始预测核对，记录在<a href="assets/scene-reconstruction/round-03/evidence.json">证据 JSON</a>。111、112、248 沿用原 GPT 批次；141 来自当日鞋类帧重跑批次。截图支持个例观察，尚无全场景类别稳定性或物体完整率的人工评测。</p>
+        <p class="note">以上图片保存于 <code>docs/assets/scene-reconstruction/round-03/</code>，为 2026-09-18 的独立副本；没有覆盖第二轮的同名历史图片。帧号、实例 ID、类别、提示词已对照当前正式页面的原始预测核对，记录在<a href="assets/scene-reconstruction/round-03/evidence.json">证据 JSON</a>。111、112、248 沿用原 GPT 批次；141 来自当日鞋类帧重跑批次。截图支持个例观察，尚无全场景类别稳定性或物体完整率的人工评测。</p>
         <div class="table-wrap">
           <table>
             <caption>代码与原始输出补充证据；文件名是抽样序号，不是源帧号</caption>
@@ -1199,7 +1195,7 @@
             <figcaption><strong>113.png · 马桶相关标签</strong><code>3 · potty</code><br>源帧 1263：名称变为 potty，mask 仍对应同一马桶的可见区域。</figcaption>
           </figure>
         </div>
-        <p class="note">配图于 2026-09-17 更新为 <code>tmp/111.png–113.png</code> 的独立副本，可点击放大。截图底部明确标出 sequence <code>111 / 112 / 113</code> 与源帧 <code>1241 / 1252 / 1263</code>，帧号、实例 ID 和类别均已与<a href="../InstanceRecognition/runtime/mask_pointclouds/scene0000_00/yoloe26_gt_raw/manifest.json">YOLOE 基线归档 manifest</a>核对。文件名对应抽样序号，不是原始视频帧号；类别前的 ID 仅在各帧内有效。以下分析按这次截图更新，不能再把旧截图中的“两张部件 mask”当作本组三帧的已知事实。</p>
+        <p class="note">配图于 2026-09-17 更新，保存于 <code>docs/assets/scene-reconstruction/round-02/</code>，可点击放大。截图底部明确标出 sequence <code>111 / 112 / 113</code> 与源帧 <code>1241 / 1252 / 1263</code>，帧号、实例 ID 和类别均已与<a href="../InstanceRecognition/runtime/mask_pointclouds/scene0000_00/yoloe26_gt_raw/manifest.json">YOLOE 基线归档 manifest</a>核对。文件名对应抽样序号，不是原始视频帧号；类别前的 ID 仅在各帧内有效。以下分析按这次截图更新，不能再把旧截图中的“两张部件 mask”当作本组三帧的已知事实。</p>
       </section>
 
       <section id="round-02-plan" aria-labelledby="round-02-plan-title">
@@ -1331,7 +1327,7 @@
         <div class="record">
           <strong>与现有实验的连接</strong>
           <p>当时恢复的 YOLOE26 + SAM3.1 反投影结果（2026-09-17 重跑）有 500 帧、6,790 个原始 mask 观测，没有跨帧融合和类别归并。它可以作为关联实验的输入，但“观测数量”不是“物体数量”。</p>
-          <p class="note">依据：<a href="../InstanceRecognition/runtime/mask_pointclouds/scene0000_00/amb3r_gt_raw/projection_report.json">投影报告</a> · <a href="../InstanceRecognition/runtime/mask_pointclouds/scene0000_00/amb3r_gt_raw/index.html">离线点云检查页</a></p>
+          <p class="note">依据：<a href="../InstanceRecognition/runtime/mask_pointclouds/scene0000_00/amb3r_gt_raw/projection_report.json">投影报告</a></p>
         </div>
       </section>
 

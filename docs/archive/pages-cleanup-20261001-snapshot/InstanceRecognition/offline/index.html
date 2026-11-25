@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>实例识别结果 · 离线浏览器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow"><span></span> OFFLINE RESULT ARCHIVE</p>
+        <h1>实例识别结果</h1>
+        <p class="lede">浏览已经完成的 YOLOE-26 Prompt-Free 检测与 SAM3.1 实例分割结果。页面完全离线，不会启动模型或网站服务。</p>
+      </div>
+      <div class="archive-summary" aria-label="结果规模">
+        <div><strong id="scene-count">—</strong><span>已处理场景</span></div>
+        <div><strong id="frame-count">—</strong><span>已处理帧</span></div>
+        <div><strong id="instance-count">—</strong><span>实例 masks</span></div>
+      </div>
+    </header>
+
+    <section class="navigator" aria-labelledby="navigator-title">
+      <div class="section-label">
+        <p>RESULT NAVIGATOR</p>
+        <h2 id="navigator-title">选择已处理帧</h2>
+      </div>
+      <div class="controls">
+        <label>
+          <span>场景</span>
+          <select id="scene-select"></select>
+        </label>
+        <label>
+          <span>原始帧编号</span>
+          <select id="frame-select"></select>
+        </label>
+        <div class="frame-stepper" aria-label="前后帧导航">
+          <button id="previous-frame" title="上一个已处理帧（←）">←</button>
+          <div><strong id="frame-position">—</strong><span>处理序列位置</span></div>
+          <button id="next-frame" title="下一个已处理帧（→）">→</button>
+        </div>
+      </div>
+      <div class="timeline-row">
+        <input id="frame-slider" type="range" min="0" max="1" value="0" aria-label="已处理帧滑块">
+        <span id="raw-frame-range">—</span>
+      </div>
+      <div id="nearby-frames" class="nearby-frames" aria-label="附近已处理帧"></div>
+    </section>
+
+    <section class="viewer-section" aria-labelledby="viewer-title">
+      <div class="section-heading">
+        <div>
+          <p>INPUT → DETECTION → MASK</p>
+          <h2 id="viewer-title">三视图对照</h2>
+        </div>
+        <div id="frame-badges" class="frame-badges"></div>
+      </div>
+      <div class="viewer-grid">
+        <article class="image-card">
+          <div class="card-heading"><span class="stage input">INPUT</span><div><h3>ScanNet RGB</h3><p>模型输入的原始彩色帧</p></div></div>
+          <button class="image-button" data-image="source" title="点击放大">
+            <img id="source-image" alt="ScanNet RGB 输入">
+          </button>
+        </article>
+        <article class="image-card">
+          <div class="card-heading"><span class="stage yoloe">01</span><div><h3>YOLOE-26</h3><p>Prompt-Free 类别、置信度与检测框</p></div></div>
+          <button class="image-button" data-image="yoloe" title="点击放大">
+            <img id="yoloe-image" alt="YOLOE-26 检测结果">
+          </button>
+        </article>
+        <article class="image-card featured">
+          <div class="card-heading sam-heading">
+            <span class="stage sam">02</span>
+            <div><h3>SAM3.1</h3><p id="sam-view-label">逐实例 mask 叠加结果</p></div>
+            <div class="view-toggle" role="group" aria-label="SAM3.1 视图">
+              <button id="show-overlay" class="active">叠加</button>
+              <button id="show-id-map">ID 图</button>
+            </div>
+          </div>
+          <button class="image-button" data-image="sam" title="点击放大">
+            <img id="sam-image" alt="SAM3.1 实例 mask 结果">
+          </button>
+        </article>
+      </div>
+    </section>
+
+    <section class="details" aria-labelledby="details-title">
+      <div class="section-heading details-heading">
+        <div>
+          <p>EPISODE SUMMARY</p>
+          <h2 id="details-title">整个 episode 识别汇总</h2>
+          <span id="episode-meta" class="episode-meta">—</span>
+        </div>
+        <div class="episode-filters">
+          <label class="confidence-filter">
+            <span>YOLOE 最低置信度</span>
+            <div><input id="confidence-threshold" type="range" min="0.25" max="0.95" step="0.05" value="0.50"><output id="confidence-value">0.50</output></div>
+          </label>
+          <label class="frame-count-filter">
+            <span>最少检出帧数</span>
+            <input id="minimum-frames" type="number" min="1" value="1">
+          </label>
+        </div>
+      </div>
+      <div class="episode-stats">
+        <div><strong id="episode-class-count">—</strong><span>保留类别</span></div>
+        <div><strong id="episode-detection-count">—</strong><span>检测实例</span></div>
+        <div><strong id="episode-detected-frames">—</strong><span>至少检出一项的帧</span></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>类别</th><th>检出帧数</th><th>帧占比</th><th>检测实例数</th><th>平均置信度</th><th>最高置信度</th><th>代表帧</th></tr></thead>
+          <tbody id="episode-table"></tbody>
+        </table>
+      </div>
+      <p class="boundary-note">“检出帧数”按一个类别在多少个已处理帧中至少出现一次计算，同一帧内重复实例只计一帧。置信度和跨帧频次只能帮助压低偶发噪声，仍不能证明类别语义正确；这些结果不是 ScanNet 人工真值。</p>
+    </section>
+  </main>
+
+  <dialog id="lightbox">
+    <button id="close-lightbox" aria-label="关闭">×</button>
+    <img id="lightbox-image" alt="放大结果">
+    <p id="lightbox-caption"></p>
+  </dialog>
+
+  <script src="data.js"></script>
+  <script src="episode_stats.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

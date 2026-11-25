@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>窗口25 · 新版 Overlay 真实调用结果</title>
+<style>
+:root{--bg:#f3f6fb;--ink:#172338;--muted:#64748b;--line:#dbe4f0;--card:#fff;--blue:#2563eb;--teal:#0f766e;--amber:#a16207;--red:#be123c;--navy:#0b1830;--shadow:0 12px 32px rgba(31,49,82,.09)}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.55} .page{max-width:1540px;margin:auto;padding:30px 26px 80px} .hero{background:linear-gradient(120deg,#122544,#1f4b85 55%,#0f766e);color:#fff;border-radius:24px;padding:34px 38px;box-shadow:var(--shadow);position:relative;overflow:hidden} .hero:after{content:"";position:absolute;width:360px;height:360px;border:1px solid rgba(255,255,255,.18);border-radius:50%;right:-80px;top:-170px} h1{margin:7px 0 12px;font-size:clamp(29px,4vw,48px);line-height:1.1;letter-spacing:-.035em} .hero p{max-width:1020px;margin:0;color:#dbe9ff} .chips{display:flex;gap:9px;flex-wrap:wrap;margin-top:21px} .chip{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.27);background:rgba(255,255,255,.11)} .section{margin-top:30px} .section-head{display:flex;justify-content:space-between;align-items:end;gap:16px;margin:34px 0 14px} h2{margin:0;font-size:26px;letter-spacing:-.02em} h3{margin:0 0 9px;font-size:18px} .section-head p{margin:0;color:var(--muted);font-size:14px;max-width:820px} .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:21px;box-shadow:var(--shadow);margin-top:14px} .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px} .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px} .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px} @media(max-width:1000px){.grid4,.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}} @media(max-width:620px){.grid4,.grid3{grid-template-columns:1fr}.page{padding:20px 12px 50px}.hero{padding:26px 22px}}
+.stat{padding:13px 14px;background:#f8fbff;border:1px solid #e3edf8;border-radius:12px} .stat span{display:block;font-size:11px;color:var(--muted);letter-spacing:.04em} .stat strong{display:block;font-size:16px;margin-top:3px;word-break:break-word} .callout{padding:14px 16px;border-left:4px solid var(--teal);border-radius:10px;background:#e9fbf7;color:#0f5149;margin:14px 0;font-size:14px} .callout.warn{border-color:#f59e0b;background:#fff8e7;color:#6b4d0a} .callout.red{border-color:#e11d48;background:#fff1f4;color:#881337} .label{font-size:11px;color:var(--muted);letter-spacing:.09em;text-transform:uppercase;font-weight:800;margin-bottom:7px} pre.json{margin:0;background:var(--navy);color:#dce7f9;border-radius:12px;padding:15px;overflow:auto;max-height:570px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word} pre.short{max-height:220px} code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace} .image-card{margin:0;border:1px solid var(--line);border-radius:15px;overflow:hidden;background:#f8fafc} .image-wrap{background:#07111d;display:flex;align-items:center;justify-content:center;min-height:180px} .image-wrap img{display:block;max-width:100%;height:auto;object-fit:contain} figcaption{padding:10px 12px;font-size:12px} figcaption strong{display:block;font-size:13px} figcaption span{display:block;color:var(--muted);word-break:break-all;margin-top:2px} .hero-image{max-height:760px;width:100%} .target-image{max-height:600px;width:100%} details{border-top:1px solid var(--line);padding-top:11px;margin-top:14px} summary{cursor:pointer;color:var(--blue);font-weight:700;font-size:13px} .table-wrap{overflow:auto} table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top} th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:#f8fafc} .key{font-family:ui-monospace,monospace;color:#0f766e} .tags{display:flex;gap:7px;flex-wrap:wrap} .tool{display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#e8eef8;color:#31527f;margin:2px 5px 2px 0} .tool.ok{background:#e8fbf4;color:#087658} .tool.bad{background:#fff0f2;color:#a11438} .timeline{display:grid;gap:10px} .timeline-row{display:grid;grid-template-columns:72px 1fr auto;gap:14px;align-items:start;border:1px solid var(--line);border-radius:13px;padding:12px 14px;background:#fbfdff} .timeline-row.failed{background:#fff9fa;border-color:#f3c6d0} .timeline-num{font:800 15px ui-monospace,monospace;color:#2563eb} .timeline-copy{font-size:14px} .status{font-size:12px;border-radius:999px;padding:4px 9px;white-space:nowrap;background:#e8fbf4;color:#087658} .status.failed{background:#fff0f2;color:#a11438} .mini{font-size:12px;color:var(--muted)} .obs-card{border:1px solid var(--line);border-radius:16px;padding:16px;background:#fbfdff} .obs-card.target{border:2px solid var(--teal);background:#f3fffc} .obs-head{display:flex;justify-content:space-between;gap:10px;align-items:start} .obs-id{font:800 22px ui-monospace,monospace} .pill{border-radius:999px;padding:4px 8px;font-size:11px;background:#dff8f2;color:#0f766e;border:1px solid #b8eade} .mini-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0} @media(max-width:650px){.mini-grid{grid-template-columns:repeat(2,minmax(0,1fr))}} .mini-grid>div{padding:8px;border:1px solid #e5edf5;border-radius:9px;background:#fff} .mini-grid span{display:block;color:var(--muted);font-size:10px} .mini-grid b{display:block;font-size:12px;margin-top:2px;word-break:break-word} .swatch{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.2);vertical-align:-1px;margin-right:4px} .foot{margin-top:40px;color:var(--muted);font-size:12px}
+</style></head><body><main class="page">
+<header class="hero"><div class="mini">真实运行记录 · 2026-09-28</div><h1>窗口 25 · 更换 Overlay 后的真实调用结果</h1><p>本页读取新版实验目录中的真实 Astra 调用产物，并使用同一批真实 mask/instance 数据按醒目 overlay 样式重绘当前帧图像，展示工具调用后的返回信息和最终提交过程。工具调用 JSON、模型结果和旧版 <code>M01/M05</code> 记录没有被改写。</p><div class="chips"><span class="chip">sequence 0120–0124</span><span class="chip">openai/gpt-6-astra</span><span class="chip">Responses API</span><span class="chip">non-streaming</span><span class="chip">reasoning effort: low</span><span class="chip">overlay: frame-local instance_id</span></div></header>
+
+<section class="section"><div class="section-head"><div><h2>运行核验</h2><p>这些字段来自新版实验配置和提交记录；它们说明页面展示的是一次实际执行，而不是静态 prototype。</p></div></div><div class="panel"><div class="grid4">
+<div class="stat"><span>实验目录</span><strong>harness_window25_v2_astra_20260928</strong></div><div class="stat"><span>窗口输入</span><strong>0120–0124</strong></div><div class="stat"><span>基准状态</span><strong>version 24 · cutoff 119</strong></div><div class="stat"><span>最终状态</span><strong>committed version 25 · cutoff 124</strong></div><div class="stat"><span>模型</span><strong>openai/gpt-6-astra</strong></div><div class="stat"><span>协议</span><strong>Responses · non-streaming</strong></div><div class="stat"><span>推理强度</span><strong>low</strong></div><div class="stat"><span>工具调用</span><strong>15 次</strong></div></div><div class="callout">新版核验要点：当前页面的 overlay 已恢复参考图中的醒目表现（顶部标题栏、半透明 mask、粗轮廓、黑底白字标签和引导线），标签内容使用 <code>instance_id</code> 的三位短编号；模型请求文本使用 <code>instance_id</code> 字段，源码兼容字段 <code>mask_id</code> 没有作为观测字段发送给 Agent。这里的图片是基于真实 mask 数据的可视化重绘，工具调用记录未修改。</div></div></section>
+
+<section class="section"><div class="section-head"><div><h2>01 · 窗口 25 第一帧的新版 Overlay</h2><p>这张图来自窗口 25 的真实 mask 数据，按新版醒目 overlay 格式重绘为 <code>frame_0120.jpg</code>。标号只使用当前帧的 instance_id，例如 <code>005</code>；重绘不会改动工具调用 JSON。</p></div><span class="pill">real masks · restyled overlay</span></div><div class="panel grid2"><figure class="image-card"><div class="image-wrap"><img class="hero-image" src="../InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/numbered_overlay_preview/evidence/frame_0120.jpg" alt="Window 25 first frame new overlay"></div><figcaption><strong>frame_0120.jpg · full RGB + instance-colored overlay</strong><span>../InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/numbered_overlay_preview/evidence/frame_0120.jpg</span></figcaption></figure><div><div class="label">新版图像表达规则</div><div class="table-wrap"><table><tr><th>项目</th><th>实际值</th></tr><tr><td>图像尺寸</td><td>1296 × 968</td></tr><tr><td>文字标号</td><td><code>001</code>、<code>002</code>、<code>003</code>…（当前帧 instance_id）</td></tr><tr><td>跨帧身份</td><td>不由颜色或图中数字编码；由文字观测 ID（如 <code>0120:005</code>）与 Agent 决策维护</td></tr><tr><td>mask_id</td><td>不进入 Agent-facing observation fields</td></tr><tr><td>叠加内容</td><td>顶部标题栏、半透明 mask、粗轮廓与 bbox、黑底白字短编号、彩色引导线</td></tr></table></div><div class="callout warn">注意：图中 <code>005</code> 对应的是观测 <code>0120:005</code>。它不是旧版的 <code>M05</code> 字段，也不能把短编号单独当作跨帧 Object ID。</div><figure class="image-card" style="margin-top:14px"><div class="image-wrap"><img class="target-image" src="../InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/numbered_overlay_preview/evidence/0120_005.jpg" alt="0120:005 new target overlay"></div><figcaption><strong>目标观测 0120:005 的新版 target overlay</strong><span>../InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/numbered_overlay_preview/evidence/0120_005.jpg</span></figcaption></figure></div></div></section>
+
+<section class="section"><div class="section-head"><div><h2>02 · inspect_object(Object54)</h2><p>这是模型第一次工具调用的完整结果：历史物体文字档案、代表观测元数据，以及一张带原始 SAM3 mask bbox 的历史 RGB 图。</p></div><span class="pill">call 00 · real return</span></div><div class="panel grid2"><div><div class="label">实际调用参数</div><pre class="json short">{&quot;object_id&quot;:&quot;Object54&quot;}</pre><div class="label" style="margin-top:16px">返回的 Object 摘要</div><div class="grid3"><div class="stat"><span>Object</span><strong>Object54</strong></div><div class="stat"><span>label</span><strong>wooden wardrobe</strong></div><div class="stat"><span>status</span><strong>provisional</strong></div><div class="stat"><span>观测数</span><strong>50</strong></div><div class="stat"><span>代表观测</span><strong>0111:001</strong></div><div class="stat"><span>代表 category_label</span><strong>cabinet</strong></div></div></div><div><figure class="image-card"><div class="image-wrap"><img class="target-image" src="../InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/evidence/history_bbox_a663eadfc0e8ee93ba0a.jpg" alt="Object54 historical representative RGB with bbox"></div><figcaption><strong>返回图片 · historical_rgb_bbox · 0111:001</strong><span>../InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/evidence/history_bbox_a663eadfc0e8ee93ba0a.jpg</span></figcaption></figure><div class="mini">这张图片是完整 RGB 上叠加代表观测的原始 2D bbox；它不是当前帧 overlay。</div></div></div><details><summary>展开 inspect_object(Object54) 的完整返回 JSON</summary><pre class="json">{
+  &quot;object&quot;: {
+    &quot;id&quot;: &quot;Object54&quot;,
+    &quot;object_label&quot;: &quot;wooden wardrobe&quot;,
+    &quot;created_at&quot;: 74,
+    &quot;status&quot;: &quot;provisional&quot;,
+    &quot;observation_count&quot;: 50,
+    &quot;observation_ids&quot;: [
+      &quot;0073:004&quot;,
+      &quot;0074:011&quot;,
+      &quot;0075:007&quot;,
+      &quot;0076:016&quot;,
+      &quot;0098:001&quot;,
+      &quot;0099:001&quot;,
+      &quot;0100:001&quot;,
+      &quot;0101:001&quot;,
+      &quot;0101:002&quot;,
+      &quot;0101:003&quot;,
+      &quot;0102:004&quot;,
+      &quot;0102:005&quot;,
+      &quot;0103:001&quot;,
+      &quot;0104:001&quot;,
+      &quot;0104:002&quot;,
+      &quot;0104:003&quot;,
+      &quot;0104:005&quot;,
+      &quot;0104:006&quot;,
+      &quot;0104:007&quot;,
+      &quot;0104:009&quot;,
+      &quot;0105:001&quot;,
+      &quot;0105:002&quot;,
+      &quot;0106:001&quot;,
+      &quot;0106:002&quot;,
+      &quot;0106:003&quot;,
+      &quot;0107:001&quot;,
+      &quot;0108:001&quot;,
+      &quot;0109:001&quot;,
+      &quot;0109:003&quot;,
+      &quot;0109:004&quot;,
+      &quot;0109:005&quot;,
+      &quot;0109:006&quot;,
+      &quot;0110:001&quot;,
+      &quot;0111:001&quot;,
+      &quot;0112:001&quot;,
+      &quot;0112:002&quot;,
+      &quot;0112:003&quot;,
+      &quot;0113:001&quot;,
+      &quot;0113:002&quot;,
+      &quot;0113:003&quot;,
+      &quot;0114:001&quot;,
+      &quot;0115:001&quot;,
+      &quot;0116:001&quot;,
+      &quot;0117:001&quot;,
+      &quot;0118:001&quot;,
+      &quot;0118:002&quot;,
+      &quot;0118:003&quot;,
+      &quot;0119:001&quot;,
+      &quot;0119:003&quot;,
+      &quot;0119:004&quot;
+    ],
+    &quot;representative_observation_id&quot;: &quot;0111:001&quot;
+  },
+  &quot;object_id&quot;: &quot;Object54&quot;,
+  &quot;observation&quot;: {
+    &quot;id&quot;: &quot;0111:001&quot;,
+    &quot;seq&quot;: 111,
+    &quot;source_frame_id&quot;: 1241,
+    &quot;category_label&quot;: &quot;cabinet&quot;,
+    &quot;bbox_xyxy&quot;: [
+      81,
+      29,
+      619,
+      960
+    ],
+    &quot;image_size_wh&quot;: [
+      1296,
+      968
+    ],
+    &quot;overlay_color_rgb&quot;: [
+      242,
+      61,
+      61
+    ],
+    &quot;instance_id&quot;: 1,
+    &quot;point_count&quot;: 68164,
+    &quot;centroid&quot;: [
+      7.287437438964844,
+      4.578368663787842,
+      1.4810582399368286
+    ],
+    &quot;bounds&quot;: [
+      [
+        7.145468711853027,
+        4.096768856048584,
+        0.535922110080719
+      ],
+      [
+        7.419832706451416,
+        5.086178302764893,
+        2.4161272048950195
+      ]
+    ]
+  },
+  &quot;observations&quot;: [
+    {
+      &quot;id&quot;: &quot;0111:001&quot;,
+      &quot;seq&quot;: 111,
+      &quot;source_frame_id&quot;: 1241,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [
+        81,
+        29,
+        619,
+        960
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        242,
+        61,
+        61
+      ],
+      &quot;instance_id&quot;: 1,
+      &quot;point_count&quot;: 68164,
+      &quot;centroid&quot;: [
+        7.287437438964844,
+        4.578368663787842,
+        1.4810582399368286
+      ],
+      &quot;bounds&quot;: [
+        [
+          7.145468711853027,
+          4.096768856048584,
+          0.535922110080719
+        ],
+        [
+          7.419832706451416,
+          5.086178302764893,
+          2.4161272048950195
+        ]
+      ]
+    }
+  ],
+  &quot;visual_images&quot;: [
+    {
+      &quot;observation_id&quot;: &quot;0111:001&quot;,
+      &quot;object_id&quot;: &quot;Object54&quot;,
+      &quot;kind&quot;: &quot;historical_rgb_bbox&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/evidence/history_bbox_a663eadfc0e8ee93ba0a.jpg&quot;
+    }
+  ],
+  &quot;reused_images&quot;: []
+}</pre></details></section>
+
+<section class="section"><div class="section-head"><div><h2>03 · inspect_observations（重点：0120:005）</h2><p>目标观测在 call 08 的一组批量检查中被实际查看。下面同时展示调用参数、返回元数据和工具返回的新版 target overlay。</p></div><span class="pill">call 08 · tool 01</span></div><div class="panel grid2"><div><div class="label">实际调用参数</div><pre class="json short">{&quot;ids&quot;:[&quot;0120:001&quot;,&quot;0120:003&quot;,&quot;0120:004&quot;,&quot;0120:005&quot;]}</pre><div class="label" style="margin-top:16px">工具返回策略</div><div class="callout">For each observation: original RGB, then target overlay; already supplied images are omitted</div><div class="label">0120:005 返回的结构化信息</div><div class="obs-card target"><div class="obs-head"><div><div class="mini">observation</div><div class="obs-id">0120:005</div></div><span class="pill">target overlay returned</span></div><div class="mini-grid"><div><span>instance_id</span><b>5 → 图中 005</b></div><div><span>category_label</span><b>cabinet</b></div><div><span>point_count</span><b>35868</b></div><div><span>bbox_xyxy</span><b>[405, 8, 806, 625]</b></div></div><div class="mini"><span class="swatch" style="background:rgb(61,242,212)"></span>overlay_color_rgb = [61, 242, 212]</div></div></div><div><figure class="image-card"><div class="image-wrap"><img class="target-image" src="../InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/numbered_overlay_preview/evidence/0120_005.jpg" alt="Target overlay for observation 0120:005"></div><figcaption><strong>工具返回的 target overlay · 0120:005</strong><span>../InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/numbered_overlay_preview/evidence/0120_005.jpg</span></figcaption></figure><div class="callout">对应关系：工具参数中的 <code>0120:005</code> → 返回元数据 <code>instance_id: 5</code> → 图中短标号 <code>005</code>。</div></div></div><details><summary>展开 inspect_observations 返回的完整 JSON</summary><pre class="json">{
+  &quot;image_order&quot;: &quot;For each observation: original RGB, then target overlay; already supplied images are omitted&quot;,
+  &quot;observations&quot;: [
+    {
+      &quot;id&quot;: &quot;0120:001&quot;,
+      &quot;seq&quot;: 120,
+      &quot;source_frame_id&quot;: 1341,
+      &quot;category_label&quot;: &quot;door&quot;,
+      &quot;bbox_xyxy&quot;: [
+        410,
+        19,
+        621,
+        624
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        242,
+        61,
+        61
+      ],
+      &quot;instance_id&quot;: 1,
+      &quot;point_count&quot;: 18588,
+      &quot;centroid&quot;: [
+        7.2009100914001465,
+        4.747012138366699,
+        0.9200165271759033
+      ],
+      &quot;bounds&quot;: [
+        [
+          7.131576061248779,
+          4.539440631866455,
+          0.21319927275180817
+        ],
+        [
+          7.278787136077881,
+          4.966951370239258,
+          1.5349462032318115
+        ]
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0120:003&quot;,
+      &quot;seq&quot;: 120,
+      &quot;source_frame_id&quot;: 1341,
+      &quot;category_label&quot;: &quot;door&quot;,
+      &quot;bbox_xyxy&quot;: [
+        619,
+        25,
+        807,
+        601
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        167,
+        242,
+        61
+      ],
+      &quot;instance_id&quot;: 3,
+      &quot;point_count&quot;: 16368,
+      &quot;centroid&quot;: [
+        7.335247039794922,
+        4.3403849601745605,
+        0.9140905737876892
+      ],
+      &quot;bounds&quot;: [
+        [
+          7.247245788574219,
+          4.136736869812012,
+          0.21771679818630219
+        ],
+        [
+          7.403318405151367,
+          4.539453029632568,
+          1.5220600366592407
+        ]
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0120:004&quot;,
+      &quot;seq&quot;: 120,
+      &quot;source_frame_id&quot;: 1341,
+      &quot;category_label&quot;: &quot;door&quot;,
+      &quot;bbox_xyxy&quot;: [
+        600,
+        7,
+        813,
+        26
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        242,
+        61,
+        220
+      ],
+      &quot;instance_id&quot;: 4,
+      &quot;point_count&quot;: 587,
+      &quot;centroid&quot;: [
+        7.355812072753906,
+        4.328638553619385,
+        1.5485644340515137
+      ],
+      &quot;bounds&quot;: [
+        [
+          7.27985143661499,
+          4.137557506561279,
+          1.5224686861038208
+        ],
+        [
+          7.409023761749268,
+          4.541856288909912,
+          1.5716142654418945
+        ]
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;0120:005&quot;,
+      &quot;seq&quot;: 120,
+      &quot;source_frame_id&quot;: 1341,
+      &quot;category_label&quot;: &quot;cabinet&quot;,
+      &quot;bbox_xyxy&quot;: [
+        405,
+        8,
+        806,
+        625
+      ],
+      &quot;image_size_wh&quot;: [
+        1296,
+        968
+      ],
+      &quot;overlay_color_rgb&quot;: [
+        61,
+        242,
+        212
+      ],
+      &quot;instance_id&quot;: 5,
+      &quot;point_count&quot;: 35868,
+      &quot;centroid&quot;: [
+        7.262135982513428,
+        4.562709331512451,
+        0.9189974665641785
+      ],
+      &quot;bounds&quot;: [
+        [
+          7.131576061248779,
+          4.139039039611816,
+          0.20692658424377441
+        ],
+        [
+          7.403238296508789,
+          5.023812770843506,
+          1.5638056993484497
+        ]
+      ]
+    }
+  ],
+  &quot;visual_images&quot;: [
+    {
+      &quot;observation_id&quot;: &quot;0120:005&quot;,
+      &quot;kind&quot;: &quot;target_overlay&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/evidence/0120_005.jpg&quot;
+    }
+  ],
+  &quot;reused_images&quot;: [
+    {
+      &quot;observation_id&quot;: &quot;0120:001&quot;,
+      &quot;kind&quot;: &quot;original_rgb&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/frames/scene0000_00/frame_001341.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0120:001&quot;,
+      &quot;kind&quot;: &quot;target_overlay&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/evidence/0120_001.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0120:003&quot;,
+      &quot;kind&quot;: &quot;original_rgb&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/frames/scene0000_00/frame_001341.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0120:003&quot;,
+      &quot;kind&quot;: &quot;target_overlay&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/evidence/0120_003.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0120:004&quot;,
+      &quot;kind&quot;: &quot;original_rgb&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/frames/scene0000_00/frame_001341.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0120:004&quot;,
+      &quot;kind&quot;: &quot;target_overlay&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928/evidence/0120_004.jpg&quot;
+    },
+    {
+      &quot;observation_id&quot;: &quot;0120:005&quot;,
+      &quot;kind&quot;: &quot;original_rgb&quot;,
+      &quot;image&quot;: &quot;/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/frames/scene0000_00/frame_001341.jpg&quot;
+    }
+  ]
+}</pre></details></section>
+
+<section class="section"><div class="section-head"><div><h2>04 · 全部真实工具调用时间线</h2><p>提案失败没有被隐藏；它们是这次真实 Agent 调试过程的一部分。成功的提案随后通过 commit_update 提交。</p></div></div><div class="panel timeline"><div class="timeline-row"><div class="timeline-num">call 00</div><div class="timeline-copy"><div>inspect_object(Object54)：请求历史代表观测与带原始 SAM3 bbox 的 RGB。</div><div class="tags"><span class="tool ok">inspect_object</span></div><div class="mini">文件：w0120_1790582860748212767_call00_tool00.json</div></div><span class="status">完成</span></div><div class="timeline-row"><div class="timeline-num">call 01</div><div class="timeline-copy"><div>inspect_observations：检查 0120:001–004。</div><div class="tags"><span class="tool ok">inspect_observations</span></div><div class="mini">文件：w0120_1790582860748212767_call01_tool00.json</div></div><span class="status">完成</span></div><div class="timeline-row"><div class="timeline-num">call 02</div><div class="timeline-copy"><div>并行检查：inspect_object(Object26) + 检查 0123:007/008、0124:001/002。</div><div class="tags"><span class="tool ok">inspect_object</span><span class="tool ok">inspect_observations</span></div><div class="mini">文件：w0120_1790582860748212767_call02_tool00.json, w0120_1790582860748212767_call02_tool01.json</div></div><span class="status">完成</span></div><div class="timeline-row failed"><div class="timeline-num">call 03</div><div class="timeline-copy"><div>propose_update 失败：缺少满足规则的 reason / accessible evidence IDs。</div><div class="tags"><span class="tool bad">propose_update · failed</span></div><div class="mini">文件：w0120_1790582860748212767_call03_tool00.json</div></div><span class="status failed">失败</span></div><div class="timeline-row failed"><div class="timeline-num">call 04</div><div class="timeline-copy"><div>propose_update 失败：再次因 evidence 约束失败。</div><div class="tags"><span class="tool bad">propose_update · failed</span></div><div class="mini">文件：w0120_1790582860748212767_call04_tool00.json</div></div><span class="status failed">失败</span></div><div class="timeline-row failed"><div class="timeline-num">call 05</div><div class="timeline-copy"><div>propose_update 失败：第三次提案仍被工具校验拒绝。</div><div class="tags"><span class="tool bad">propose_update · failed</span></div><div class="mini">文件：w0120_1790582860748212767_call05_tool00.json</div></div><span class="status failed">失败</span></div><div class="timeline-row"><div class="timeline-num">call 06</div><div class="timeline-copy"><div>inspect_observations：检查 0120:006–009。</div><div class="tags"><span class="tool ok">inspect_observations</span></div><div class="mini">文件：w0120_1790582860748212767_call06_tool00.json</div></div><span class="status">完成</span></div><div class="timeline-row"><div class="timeline-num">call 07</div><div class="timeline-copy"><div>inspect_observations：检查 0124:012–014、0121:008。</div><div class="tags"><span class="tool ok">inspect_observations</span></div><div class="mini">文件：w0120_1790582860748212767_call07_tool00.json</div></div><span class="status">完成</span></div><div class="timeline-row"><div class="timeline-num">call 08</div><div class="timeline-copy"><div>批量检查四组观测，其中一组包含目标 0120:005。</div><div class="tags"><span class="tool ok">inspect_observations</span><span class="tool ok">inspect_observations</span><span class="tool ok">inspect_observations</span><span class="tool ok">inspect_observations</span></div><div class="mini">文件：w0120_1790582860748212767_call08_tool00.json, w0120_1790582860748212767_call08_tool01.json, w0120_1790582860748212767_call08_tool02.json, w0120_1790582860748212767_call08_tool03.json</div></div><span class="status">完成</span></div><div class="timeline-row"><div class="timeline-num">call 09</div><div class="timeline-copy"><div>propose_update 成功：生成可提交 proposal。</div><div class="tags"><span class="tool ok">propose_update</span></div><div class="mini">文件：w0120_1790582860748212767_call09_tool00.json</div></div><span class="status">完成</span></div><div class="timeline-row"><div class="timeline-num">call 10</div><div class="timeline-copy"><div>commit_update 成功：提交为 version 25，cutoff 124。</div><div class="tags"><span class="tool ok">commit_update</span></div><div class="mini">文件：w0120_1790582860748212767_call10_tool00.json</div></div><span class="status">完成</span></div></div></section>
+
+<section class="section"><div class="section-head"><div><h2>05 · 新旧标号字段核验</h2><p>这一段只做字段事实核对，不把旧版运行记录混入新版结果。</p></div></div><div class="panel"><div class="grid3"><div class="stat"><span>新版 overlay 文本</span><strong>frame-local instance_id</strong></div><div class="stat"><span>新版图像实例</span><strong>005（不是 M05）</strong></div><div class="stat"><span>新版 observation key</span><strong>0120:005</strong></div></div><div class="table-wrap" style="margin-top:16px"><table><tr><th>核验项</th><th>新版真实记录</th><th>说明</th></tr><tr><td><span class="key">instance_id</span></td><td>存在于请求中的观测记录；0120:005 的值为 5</td><td>用于把图中短标号 005 对回当前帧观测 ID</td></tr><tr><td><span class="key">mask_id</span></td><td>未作为 Agent-facing observation field 发送</td><td>源码中仍可能作为本地兼容/审计字段保留，不能据此把新版结果称为 M05</td></tr><tr><td>overlay 图片</td><td>边框、彩色 mask、短数字标签</td><td>窗口 25 第一帧和 inspect_observations 的 target overlay 都来自新版实验目录的真实 mask 数据，并按醒目样式重绘</td></tr><tr><td>历史图片</td><td>inspect_object 返回 historical_rgb_bbox</td><td>历史代表图是原始 RGB + 原始 SAM3 mask bbox，不是新版当前帧 overlay</td></tr></table></div><div class="callout">结论：本页展示的 <code>frame_0120.jpg</code>、<code>0120_005.jpg</code> 使用同一次新版实验的真实 mask/instance 数据，并按参考图样式重绘；工具返回 JSON 仍是同一次真实调用记录，可以检查图像标号与工具返回信息的对应关系。</div></div></section>
+
+<div class="foot">数据来源：/home/seer/wzt/Reconstruction/InstanceRecognition/runtime/experiments/harness_window25_v2_astra_20260928 · 旧版实验目录 harness-v2-gpt6-sol-500frames-20260924 保持不变。本页是查看页，不会重新调用模型或修改实验结果。</div>
+</main></body></html>

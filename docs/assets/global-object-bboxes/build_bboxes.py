@@ -10,6 +10,12 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT = Path(__file__).resolve().parent
+# NOTE (2026-10-13): this run directory was cleaned up with the rest of the
+# non-retained experiments, so this script can no longer be re-run as written.
+# Its output (bboxes.json / data.js) is retained and still cited by the design
+# discussion page. To rebuild the boxes, point RUN at a harness experiment whose
+# versions/0006 and states/0005.npz still exist, and check the state assertions
+# in main() (they pin version 6 / cutoff 29).
 RUN = ROOT / 'InstanceRecognition/runtime/experiments/harness_window01_v3'
 
 # Share fitting rules with the persistent Harness publisher.
@@ -18,6 +24,12 @@ sys.path.insert(0, str(ROOT / 'InstanceRecognition'))
 from src.visualization.object_bboxes import export_version_objects, oriented_bounds, sha
 
 def main():
+    if not (RUN / 'versions/0006/state.json').is_file():
+        raise SystemExit(
+            f'Source run is not available: {RUN}\n'
+            'This export was derived from harness_window01_v3, which has been cleaned up.\n'
+            'Point RUN at a surviving harness experiment (needs versions/0006 and '
+            'states/0005.npz) or restore the run before rebuilding bboxes.json.')
     version_dir = RUN / 'versions/0006'
     state_path = version_dir / 'state.json'
     state = json.loads(state_path.read_text())

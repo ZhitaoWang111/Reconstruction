@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raw Mask to 3D 检查</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">YOLOE-26 + SAM3.1 / AMB3R GT-corrected</p>
+        <h1>原始 2D Mask 反投影检查</h1>
+        <p id="status" class="status">等待加载 manifest...</p>
+      </div>
+      <div class="controls">
+        <button id="prevFrame" type="button" title="上一帧">‹</button>
+        <label for="frameSelect">帧</label>
+        <select id="frameSelect"></select>
+        <button id="nextFrame" type="button" title="下一帧">›</button>
+        <input id="frameSlider" type="range" min="0" max="0" value="0">
+      </div>
+    </header>
+
+    <section class="workspace">
+      <aside class="leftPane">
+        <div class="panel">
+          <div class="panelHeader">
+            <h2>2D 对齐</h2>
+            <div class="segmented" role="group" aria-label="2D mode">
+              <button id="modeRgb" class="active" type="button">RGB</button>
+              <button id="modeAllMasks" type="button">全部 mask</button>
+              <button id="modeSelectedMasks" type="button">逐个 mask</button>
+            </div>
+          </div>
+          <div class="imageViewport">
+            <canvas id="imageCanvas" width="518" height="392"></canvas>
+            <div id="maskLabels" class="maskLabels" aria-live="polite"></div>
+          </div>
+          <p id="frameMeta" class="meta"></p>
+          <p id="frameDownloads" class="meta"></p>
+        </div>
+        <div class="panel instancePanel">
+          <div class="panelHeader">
+            <h2>本帧原始实例</h2>
+            <span id="instanceSummary" class="meta"></span>
+          </div>
+          <p class="selectionHint">点击类别显示对应 mask，可多选；再次点击取消。</p>
+          <div id="instanceList" class="instanceList" role="group" aria-label="逐个选择本帧实例"></div>
+        </div>
+      </aside>
+
+      <section class="rightPane">
+        <div class="panel cloudPanel">
+          <div class="panelHeader">
+            <h2>3D 点云</h2>
+            <div class="toolbar">
+              <label><input id="showBackground" type="checkbox" checked> 灰色原 PLY</label>
+              <label><input id="colorMode" type="checkbox" checked> 实例色</label>
+              <button id="resetView" type="button">重置视角</button>
+            </div>
+          </div>
+          <canvas id="cloudCanvas"></canvas>
+          <p class="meta">ID 仅帧内有效；没有跨帧合并、没有类别归并、没有新增置信度阈值。紫色表示同一 3D 点来自多个 mask。</p>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="manifest.js"></script>
+  <script src="viewer.js"></script>
+</body>
+</html>

@@ -8,8 +8,9 @@
 | 目录 | 内容 |
 | --- | --- |
 | `InstanceRecognition/src/` | YOLOE-26 + SAM3.1 推理、采样、模型服务、mask 到点云的映射 |
-| `InstanceRecognition/web/` | 在线网页、离线浏览器生成器、点云查看器模板 |
-| `InstanceRecognition/offline/` | 离线结果浏览器代码；`data.js` 为未提交的生成数据 |
+| `InstanceRecognition/src/web/` | 在线网页的 Flask 后端与离线浏览器生成器 |
+| `InstanceRecognition/src/web/frontend/` | 全部手写网页源码：Flask 页面、点云查看器、方法对比与 harness 结果／记录页模板 |
+| `InstanceRecognition/runtime/offline/` | 离线结果浏览器页面；`data.js` 为未提交的生成数据 |
 | `InstanceRecognition/tests/` | 单元测试与浏览器检查 |
 | `Video2PointCloud/src/` | AMB3R、DA3、MapAnything 的运行、评估和可视化封装 |
 | `ScanNet/` | 数据介绍网页与示例资源生成脚本 |
@@ -51,7 +52,7 @@ WeDetect 的 4 个本地新增复现文件不在上游提交里，单独保存�
 - [方案讨论](docs/scene-reconstruction-discussions.html)
 
 网页源码保留原有资源相对路径。未恢复资源时，数据展示页的图片、点云和离线索引不可用；
-纯文字记录可直接阅读。可恢复 `InstanceRecognition/offline/data.js`，
+纯文字记录可直接阅读。可恢复 `InstanceRecognition/runtime/offline/data.js`，
 也可在恢复推理结果后按模块说明重新生成它。
 
 ## 实验边界

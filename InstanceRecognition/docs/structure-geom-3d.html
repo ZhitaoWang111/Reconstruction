@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>观测抬到三维 · 地面与墙面 · struct_v4_win5</title>
+<style>
+  :root{
+    color-scheme:light;
+    --ink:#16191d; --ink-2:#454c55; --ink-3:#6b7480;
+    --line:#dfe3e8; --line-2:#eef1f4; --bg:#fbfcfd; --card:#ffffff; --surface:#fcfcfb;
+    --accent:#0f766e; --accent-soft:#e6f4f1;
+    --c-wall:#2a78d6; --c-floor:#1baf7a; --c-door:#e34948; --c-window:#eda100;
+    --c-none:#d6dade; --c-rej:#8b9097; --c-bg:#cfd2d6; --c-gt:#c2410c; --c-ext:#16191d; --c-int:#6250d6;
+    --p1:#2a78d6; --p2:#eb6834; --p3:#1baf7a; --p4:#eda100; --p5:#e87ba4; --p6:#008300; --p7:#6250d6; --p8:#e34948;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1500px; margin:0 auto; padding:28px 28px 100px}
+  h1{font-size:24px; line-height:1.35; margin:0 0 6px}
+  h2{font-size:18px; margin:40px 0 10px}
+  p{margin:8px 0}
+  .lead{color:var(--ink-2); max-width:980px}
+  code{font-family:var(--mono); font-size:.9em; background:var(--line-2); padding:1px 5px; border-radius:4px}
+  .small{font-size:13px; color:var(--ink-3)}
+  .bar{display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center; margin:18px 0 10px; font-size:13.5px}
+  .bar .grp{display:flex; align-items:center; gap:6px}
+  .bar .grp > span{color:var(--ink-3)}
+  .seg{display:inline-flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; background:var(--card)}
+  .seg button{border:0; background:none; padding:4px 11px; font:inherit; color:var(--ink-2); cursor:pointer}
+  .seg button + button{border-left:1px solid var(--line)}
+  .seg button.on{background:var(--accent-soft); color:var(--accent); font-weight:600}
+  label.chk{display:inline-flex; align-items:center; gap:5px; cursor:pointer; color:var(--ink-2)}
+  label.chk input{accent-color:var(--accent)}
+  .stage{display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:14px}
+  @media (max-width:1050px){ .stage{grid-template-columns:minmax(0,1fr)} }
+  .view{position:relative; height:74vh; min-height:520px; max-height:860px; background:var(--surface); border:1px solid var(--line); border-radius:10px; overflow:hidden}
+  .view canvas{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab}
+  .view canvas.drag{cursor:grabbing}
+  #svg{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+  #tags{position:absolute; inset:0; pointer-events:none}
+  .tag{position:absolute; transform:translate(-50%,-50%); white-space:nowrap; font-size:12px; line-height:1.3; color:var(--ink);
+    background:rgba(255,255,255,.92); border:1px solid var(--line); border-radius:5px; padding:1px 6px; display:flex; align-items:center; gap:5px}
+  .tag.sel{border-color:var(--ink); font-weight:600}
+  .chip{display:inline-block; width:9px; height:9px; border-radius:2px; flex:none}
+  .legend{position:absolute; left:10px; bottom:10px; background:rgba(255,255,255,.94); border:1px solid var(--line); border-radius:8px;
+    padding:8px 11px; font-size:12.5px; line-height:1.75; color:var(--ink-2)}
+  .legend div{display:flex; align-items:center; gap:7px}
+  .legend .num{margin-left:auto; padding-left:14px; font-family:var(--mono); font-size:11.5px; color:var(--ink-3)}
+  .hint{position:absolute; right:10px; bottom:10px; font-size:12px; color:var(--ink-3); background:rgba(255,255,255,.9); border-radius:6px; padding:3px 8px}
+  #tip,#tip2d{position:absolute; display:none; pointer-events:none; background:var(--ink); color:#fff; font-size:12.5px; line-height:1.5; padding:5px 9px; border-radius:6px; max-width:320px; z-index:5}
+  #tip b,#tip2d b{font-weight:600}
+  .view2d{height:78vh; max-height:900px}
+  .view2d canvas{cursor:grab}
+  .coord{position:absolute; right:10px; top:10px; font-family:var(--mono); font-size:12px; color:var(--ink-3); background:rgba(255,255,255,.9); border-radius:6px; padding:2px 8px}
+  .bar select{font:inherit; font-size:13px; padding:2px 6px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink-2)}
+  #err{position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:#b91c1c; padding:30px; text-align:center}
+  .side{border:1px solid var(--line); border-radius:10px; background:var(--card); height:74vh; min-height:520px; max-height:860px; overflow:auto; font-size:13.5px}
+  .side h3{font-size:12px; letter-spacing:.08em; color:var(--ink-3); margin:0; padding:12px 14px 5px; font-weight:600}
+  .row{display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; align-items:center; padding:5px 14px; cursor:pointer; border-left:3px solid transparent}
+  .row:hover{background:var(--line-2)}
+  .row.on{background:var(--accent-soft); border-left-color:var(--accent)}
+  .row .k{font-family:var(--mono); font-size:12px; color:var(--ink-3); min-width:26px}
+  .row .v{font-family:var(--mono); font-size:12px; color:var(--ink-2); text-align:right}
+  .row .sub{display:block; font-size:11.5px; color:var(--ink-3); line-height:1.35}
+  .side .clear{margin:10px 14px 14px; font:inherit; font-size:12.5px; padding:4px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink-2); cursor:pointer}
+  table{border-collapse:collapse; width:100%; font-size:13.5px; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  th,td{padding:7px 10px; border-bottom:1px solid var(--line-2); text-align:left; vertical-align:top}
+  th{font-size:12px; color:var(--ink-3); font-weight:600; background:#f6f8fa; white-space:nowrap}
+  td.n,th.n{text-align:right; font-family:var(--mono); font-size:12.5px; white-space:nowrap}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:var(--line-2)}
+  tbody tr.on{background:var(--accent-soft)}
+  .scroll{overflow-x:auto}
+  .note{border-left:3px solid var(--line); padding:2px 0 2px 14px; color:var(--ink-2); margin:12px 0; max-width:980px}
+  ul{margin:8px 0; padding-left:22px; max-width:980px}
+  li{margin:3px 0}
+  .allnone{display:inline-flex; gap:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; margin-right:4px}
+  .allnone button{border:0; background:var(--card, #fff); color:var(--ink-2); font:inherit; font-size:13px; padding:3px 10px; cursor:pointer}
+  .allnone button + button{border-left:1px solid var(--line)}
+  .allnone button:hover{background:var(--line-2, #eef1f4); color:var(--ink)}
+  label.chk[title]{text-decoration:underline dotted var(--ink-3); text-underline-offset:3px; cursor:help}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>把观测抬到三维，然后定地面、找墙面（v3）</h1>
+  <p class="lead">数据是 <code>struct_v4_win5</code> 这一轮 2D 分割留下的 91 个 mask：墙 45、地面 38、门 5、窗 3，共 303 万个带法向和颜色的点。这一页只做三件事：把 mask 像素抬到三维；用一个平面定出地面和竖直方向；在水平法向的墙点上按“墙是竖直平面”逐个取出墙面。没有给 mask 归墙面，没有补全，没有求墙角。</p>
+  <p class="small">坐标是交付坐标系 <code>amb3r_floor</code>（<code>docs/amb3r-floor-frame.md</code>）：z 朝上，z = 0 是地面，原点在第一帧相机脚下。单位米。墙不和 x、y 轴平行，视角按房间自己的主方向摆。GT 只在“对照”开关打开时显示，不参与任何计算。</p>
+  <p class="small">数据由 <code>python -m pagegen.build_structure_geom</code> 生成，读 <code>artifacts/structure/&lt;run&gt;/</code>（<code>src.structure</code> 的输出）和墙体交接文件。</p>
+
+  <div class="bar">
+    <div class="grp"><span>视角</span>
+      <div class="seg" id="views">
+        <button data-view="iso" class="on">斜视</button><button data-view="top">俯视</button>
+        <button data-view="s">看南墙</button><button data-view="e">看东墙</button><button data-view="n">看北墙</button><button data-view="w">看西墙</button><button data-view="bath">卫生间</button>
+      </div>
+    </div>
+    <div class="grp"><span>上色</span>
+      <div class="seg" id="modes"><button data-mode="0" class="on">按类别</button><button data-mode="1">按墙面</button><button data-mode="2">扫描原色</button></div>
+    </div>
+    <span class="allnone" data-bar="v"><button type="button" data-all="1">全选</button><button type="button" data-all="0">全不选</button></span>
+    <label class="chk"><input type="checkbox" id="vBg" checked>场景点云（背景）</label>
+    <label class="chk"><input type="checkbox" id="vKept" checked>保留墙面上的点</label>
+    <label class="chk"><input type="checkbox" id="vFloor" checked>地面</label>
+    <label class="chk"><input type="checkbox" id="vDoorWin" checked>门、窗</label>
+    <label class="chk" title="2D 分割标成墙、抬到三维后，却没有被分进任何墙面平面的点：法向不够水平、离拟合平面太远，或所在的一小块凑不够面积。多数是家具侧面、踢脚线、墙角的碎片。"><input type="checkbox" id="vFree" checked>未归属的墙点</label>
+    <label class="chk" title="凑成了平面、但支持面积不够（< 0.4 m²）或只有一帧看到，没有留下的墙面。"><input type="checkbox" id="vRej" checked>丢弃的平面</label>
+    <label class="chk"><input type="checkbox" id="vRect" checked>拟合的墙面矩形</label>
+    <label class="chk" title="射线切口：一条墙线上某一整列从下到上都被射线穿过、又没有实体的地方，说明那里是空的，墙线在这里断开（红色虚线）。开口：墙面上被射线穿过、左右上都有实墙围住的区域（黑色虚线框）。"><input type="checkbox" id="vCut" checked>射线切口和开口</label>
+    <label class="chk"><input type="checkbox" id="vClose">封闭后的墙体（层高 2.8 m）</label>
+    <label class="chk"><input type="checkbox" id="vThick" checked>墙体画出厚度</label>
+    <label class="chk"><input type="checkbox" id="vGtPts">GT 墙点（对照）</label>
+    <label class="chk"><input type="checkbox" id="vCam" checked>相机位置</label>
+    <label class="chk"><input type="checkbox" id="vTags" checked>文字标注</label>
+  </div>
+
+  <div class="stage">
+    <div class="view" id="view">
+      <canvas id="gl"></canvas>
+      <svg id="svg"></svg>
+      <div id="tags"></div>
+      <div class="legend" id="legend"></div>
+      <div class="hint">左键拖动旋转 · 右键或 Shift 拖动平移 · 滚轮缩放 · 悬停看这一点的来源 · 点墙面选中</div>
+      <div id="tip"></div>
+      <div id="err"></div>
+    </div>
+    <div class="side" id="side"></div>
+  </div>
+
+  <h2>俯视 2D</h2>
+  <p class="lead">同一批数据从正上方看。背景是整个场景的点云按高度切一段后投到地面上，按每个格子里叠了多少点画深浅：竖直的表面（墙、柜子侧面）在俯视下叠得最多，所以颜色最深；地面和桌面只有一层，几乎看不见。提取出的墙面画成线段，短刻度指向墙面朝向房间的一侧。</p>
+  <div class="bar">
+    <div class="grp"><span>背景高度</span>
+      <select id="zband">
+        <option value="0.10,2.60" selected>0.1 – 2.6 m（去掉地面）</option>
+        <option value="1.00,2.20">1.0 – 2.2 m（家具上方）</option>
+        <option value="0.30,1.00">0.3 – 1.0 m（家具高度）</option>
+        <option value="-0.20,3.00">全部高度</option>
+      </select>
+    </div>
+    <span class="allnone" data-bar="b"><button type="button" data-all="1">全选</button><button type="button" data-all="0">全不选</button></span>
+    <label class="chk"><input type="checkbox" id="bBg" checked>场景点云（背景）</label>
+    <label class="chk" title="保留墙面上的点按墙面上色；未归属的墙点（没进任何平面）画浅灰。"><input type="checkbox" id="bWallPts" checked>墙点（按墙面上色）</label>
+    <label class="chk"><input type="checkbox" id="bDoorWin">门、窗点</label>
+    <label class="chk"><input type="checkbox" id="bWalls" checked>墙面</label>
+    <label class="chk" title="凑成了平面、但支持面积不够（< 0.4 m²）或只有一帧看到，没有留下的墙面。"><input type="checkbox" id="bRej" checked>丢弃的平面</label>
+    <label class="chk" title="射线切口：墙线上一整列被射线穿透、没有实体的位置，墙线在此断开（红色虚线）。开口：墙上被射线穿过且四周有墙的洞（黑色虚线框）。"><input type="checkbox" id="bCut" checked>射线切口和开口</label>
+    <label class="chk"><input type="checkbox" id="bClose" checked>封闭后的墙体</label>
+    <label class="chk"><input type="checkbox" id="bThick" checked>墙体厚度</label>
+    <label class="chk"><input type="checkbox" id="bGtPts">GT 墙点（对照）</label>
+    <label class="chk"><input type="checkbox" id="bTags" checked>文字标注</label>
+    <button class="seg" id="fit2d" style="padding:3px 11px; font:inherit; font-size:13px; color:var(--ink-2); cursor:pointer">回到全图</button>
+  </div>
+  <div class="view view2d" id="view2d">
+    <canvas id="c2d"></canvas>
+    <div class="legend" id="legend2d" style="top:10px; bottom:auto"></div>
+    <div class="coord" id="coord2d"></div>
+    <div class="hint">左键拖动平移 · 滚轮缩放 · 悬停墙面看数字 · 点击选中（和 3D 联动）</div>
+    <div id="tip2d"></div>
+  </div>
+
+  <h2>统一层高和四周封闭</h2>
+  <p class="lead">这一节全是在观测到的墙面上做的<b>推断</b>，每段墙都标明是观测到的还是补上的。上面两个窗口里打开“封闭后的墙体”就能看到结果。</p>
+  <div id="closeBox"></div>
+  <div class="scroll"><table id="tClose"></table></div>
+  <h3 style="font-size:16px; margin:26px 0 6px">墙体厚度</h3>
+  <p class="lead">厚度用<b>假定值</b>：外墙 30 cm、内墙 15 cm，加在看到的那一面背后，房间内表面不动（改厚度不会改变房间大小）。外墙在四个角斜接，外侧边线交在外角上；内墙之间斜接，内墙碰到外墙时停在外墙的房间一侧墙面上。墙体占地直接取自交接文件，和交给下游的一致。2D 和 3D 窗口里的“墙体厚度”开关控制显示。</p>
+  <div class="scroll"><table id="tThick"></table></div>
+  <ul class="small" id="thickNotes"></ul>
+
+  <h2>地面和竖直方向</h2>
+  <p class="lead">竖直方向和 z = 0 由交付坐标系定好（它就是用这些地面 mask 拟合出来的）。这里再量一次：地面点拟合的平面和 z 轴差 <b id="ftilt"></b>，离 z = 0 <b id="fz"></b>。</p>
+  <div id="floorBox"></div>
+
+  <h2>墙面</h2>
+  <p class="lead">mask 只说明哪里看到了墙，不说明两块墙之间是什么。这一版把<b>整个场景</b>用上：全部 100 帧每个像素都是一条从相机到表面的射线（<span id="nRays"></span> 条），射线经过的地方是空的。于是一条墙线上的每个位置有三种状态：射线<b>停在</b>平面上（有实体：墙，或靠墙的东西）；射线<b>穿过</b>平面（没有东西）；两者都没有（没看到）。</p>
+  <ul>
+    <li><b>局部平面</b>：每个 mask 的墙点按自身法向分簇后各自拟合竖直平面（转角 mask 自动拆成两个面）。</li>
+    <li><b>墙线</b>：朝向相差 12° 以内、位置相差 30 cm 以内的局部平面连成一条，不看它们沿墙隔多远。</li>
+    <li><b>射线切开</b>：墙线上从下到上都被射线穿过、又没有任何实体的位置，把墙线切断。只在下半部被穿过、上方有实体封住的，是同一面墙上的开口。</li>
+    <li>支持面积不到 0.40 m² 或只有一帧支持的平面丢弃。</li>
+  </ul>
+  <p class="small">“沿墙空多长算断开”“隔多远还能合并”这两个长度不再需要。剩下的 30 cm 是同一表面在不同帧里的深度误差，把它从 15 cm 改到 70 cm，得到的都是 7 个墙面，对应的 GT 墙面不变。</p>
+  <div class="scroll"><table id="tWalls"></table></div>
+  <ul class="small" id="wallNotes"></ul>
+
+  <h2>被丢弃的平面</h2>
+  <div class="scroll"><table id="tRej"></table></div>
+
+  <h2>还没解决的</h2>
+  <ul id="open"></ul>
+</div>
+
+<script src="assets/structure-geom/data.js"></script>
+<script>
+"use strict";
+(function () {
+  const D = window.GEOM, $ = (id) => document.getElementById(id);
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const f1 = (x) => x.toFixed(1), f2 = (x) => x.toFixed(2), pct = (x) => Math.round(x * 100) + "%";
+  const CATS = ["wall", "floor", "door", "window"], ZH = { wall: "墙", floor: "地面", door: "门", window: "窗" };
+  const COLOR = { wall: css("--c-wall"), floor: css("--c-floor"), door: css("--c-door"), window: css("--c-window") };
+  const PLANECOL = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => css("--p" + i));
+  const WALLS = D.walls, KEPT = WALLS.filter((w) => w.kind === "kept"), REJ = WALLS.filter((w) => w.kind === "rejected");
+  const planeColor = (i) => (i < 0 ? css("--c-none") : i < KEPT.length ? PLANECOL[i % PLANECOL.length] : css("--c-rej"));
+
+  // ---------- decode
+  function bytes(b64) { const s = atob(b64), a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  const n = D.n, q = new Uint16Array(bytes(D.pos).buffer), pos = new Float32Array(n * 3);
+  for (let i = 0; i < n * 3; i++) { const k = i % 3; pos[i] = D.lo[k] + q[i] / 65535 * (D.hi[k] - D.lo[k]); }
+  const rgb = bytes(D.rgb), cat = new Uint16Array(bytes(D.cat).buffer), plane = new Uint16Array(bytes(D.plane).buffer);
+  const frame = new Uint16Array(bytes(D.frame).buffer), mask = new Uint16Array(bytes(D.mask).buffer);
+  const meta = new Uint16Array(n * 3), pickMeta = new Uint8Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const pl = plane[i] === 65535 ? -1 : plane[i];
+    meta[3 * i] = cat[i]; meta[3 * i + 1] = pl + 1; meta[3 * i + 2] = mask[i] + 1;
+    pickMeta[3 * i] = pl + 1; pickMeta[3 * i + 1] = cat[i]; pickMeta[3 * i + 2] = mask[i] + 1;
+  }
+  const maskInfo = D.masks;
+  const B = D.bg, nb = B.n, bq = new Uint16Array(bytes(B.pos).buffer), bpos = new Float32Array(nb * 3);
+  for (let i = 0; i < nb * 3; i++) { const k = i % 3; bpos[i] = B.lo[k] + bq[i] / 65535 * (B.hi[k] - B.lo[k]); }
+  const brgb = bytes(B.rgb);
+  // GT wall points: the annotated mesh's wall faces sampled by area - what tools.structure.gt_eval measures against
+  const GP = D.gt_points || { n: 0 }, ngt = GP.n, gtpos = new Float32Array(ngt * 3);
+  if (ngt) { const gq = new Uint16Array(bytes(GP.pos).buffer); for (let i = 0; i < ngt * 3; i++) { const k = i % 3; gtpos[i] = GP.lo[k] + gq[i] / 65535 * (GP.hi[k] - GP.lo[k]); } }
+  const CL = D.closed;
+
+  // ---------- state
+  const S = { az: -2.25, el: 0.72, dist: 12.2, target: [0, 0.3, 1.0], mode: 0, sel: null, rect: true, tags: true, gt: false, cut: true,
+    cam: true, bg: true, gtPts: false, close: false, thick: true, vis: { kept: true, floor: true, doorwin: true, free: true, rej: true } };
+  // views follow the room: its main axis and the centre of the closed rectangle (the frame's +x is the first camera's heading)
+  const AX = D.closed ? D.closed.axis_deg * Math.PI / 180 : 0;
+  const RC = D.closed ? [0, 1].map((i) => D.closed.rectangle.corners.reduce((s, c) => s + c[i], 0) / 4) : [0, 0];
+  const RW = D.closed ? D.closed.rectangle.width_m / 2 : 3.2, RD = D.closed ? D.closed.rectangle.depth_m / 2 : 3.2;
+  const at = (s, t, z) => [RC[0] + s * Math.cos(AX) - t * Math.sin(AX), RC[1] + s * Math.sin(AX) + t * Math.cos(AX), z];
+  const BATH = (() => {                                  // the interior walls' middle: the bathroom
+    const f = D.closed ? D.closed.final.filter((x) => x.role === "interior") : [];
+    if (!f.length) return at(0, 0, 1.1);
+    const p = f.flatMap((x) => x.pieces.flatMap((q) => [q.p0, q.p1]));
+    return [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length, 1.1];
+  })();
+  const VIEWS = {
+    iso: { az: AX - 2.25, el: 0.72, dist: 12.2, target: at(0, 0, 1.0) },
+    top: { az: AX - Math.PI / 2, el: 1.5607, dist: 12.8, target: at(0, 0, 0.6) },
+    s: { az: AX + Math.PI / 2, el: 0.16, dist: 8.0, target: at(0, -RD, 1.2) },
+    e: { az: AX + Math.PI, el: 0.16, dist: 8.0, target: at(RW, 0, 1.2) },
+    n: { az: AX - Math.PI / 2, el: 0.16, dist: 8.0, target: at(0, RD, 1.2) },
+    w: { az: AX, el: 0.16, dist: 8.0, target: at(-RW, 0, 1.2) },
+    bath: { az: Math.atan2(BATH[1] - RC[1], BATH[0] - RC[0]) + 0.3, el: 0.42, dist: 5.2, target: BATH },
+  };
+  Object.assign(S, JSON.parse(JSON.stringify(VIEWS.iso)));
+
+  // ---------- WebGL
+  const canvas = $("gl"), gl = canvas.getContext("webgl2", { antialias: true });
+  if (!gl) { $("err").style.display = "flex"; $("err").textContent = "这个浏览器不支持 WebGL2，3D 视图无法显示。下面的表格仍然可以看。"; }
+  const VS = `#version 300 es
+    in vec3 aPos; in vec3 aRgb; in vec3 aMeta;
+    uniform mat4 uMVP; uniform float uSize; uniform vec4 uVis; uniform float uShowKept; uniform float uKept; uniform float uSelPlane;
+    out vec3 vWorld; out vec3 vRgb; flat out vec3 vMeta;
+    void main(){
+      int c=int(aMeta.x+0.5); int pl=int(aMeta.y+0.5)-1; int nk=int(uKept+0.5);
+      bool hide = (c==1 && uVis.x<0.5) || ((c==2||c==3) && uVis.y<0.5)
+               || (c==0 && pl<0 && uVis.z<0.5) || (c==0 && pl>=nk && uVis.w<0.5)
+               || (c==0 && pl>=0 && pl<nk && uShowKept<0.5);
+      gl_Position = hide ? vec4(2.0,2.0,2.0,1.0) : uMVP*vec4(aPos,1.0);
+      gl_PointSize = uSize;
+      vWorld=aPos; vRgb=aRgb; vMeta=aMeta;
+    }`;
+  const FS = `#version 300 es
+    precision highp float;
+    in vec3 vWorld; in vec3 vRgb; flat in vec3 vMeta;
+    uniform vec3 uPal[4]; uniform vec3 uPlane[10]; uniform vec3 uNone; uniform vec3 uRej; uniform vec3 uSurface;
+    uniform int uMode; uniform float uSelPlane; uniform float uPick; uniform float uKept;
+    out vec4 o;
+    void main(){
+      if(uPick>0.5){ o=vec4(vMeta.x, vMeta.y, vMeta.z, 1.0); return; }
+      int c=int(vMeta.x+0.5); int pl=int(vMeta.y+0.5)-1; int nk=int(uKept+0.5);
+      vec3 col;
+      if(uMode==0){
+        col = uPal[c];
+        if(c==0 && pl<0) col = uNone;
+        if(c==0 && pl>=nk) col = uRej;
+      } else if(uMode==1){
+        if(c!=0) col = (c==1 ? vec3(0.90,0.91,0.90) : uPal[c]);
+        else col = pl<0 ? uNone : (pl<nk ? uPlane[min(pl,7)] : uRej);
+      } else col = vRgb;
+      if(uSelPlane>=0.0 && float(pl)!=uSelPlane) col = mix(col, uSurface, 0.78);
+      o=vec4(col,1.0);
+    }`;
+  // background: every pixel of every frame, drawn light grey (or in its own colour in the RGB mode),
+  // pushed a hair back in depth so the observation points win where the two coincide
+  const BVS = `#version 300 es
+    in vec3 aPos; in vec3 aRgb; uniform mat4 uMVP; uniform float uSize; out vec3 vRgb;
+    void main(){ gl_Position=uMVP*vec4(aPos,1.0); gl_Position.z += 0.002*gl_Position.w; gl_PointSize=uSize; vRgb=aRgb; }`;
+  const BFS = `#version 300 es
+    precision highp float; in vec3 vRgb; uniform int uRgb; uniform vec3 uGrey; out vec4 o;
+    void main(){ o=vec4(uRgb==1 ? vRgb : uGrey, 1.0); }`;
+  let bprog, BU = {}, bvao, gvao;
+  let prog, U = {}, fbo, fboTex, fboDepth, fboSize = [0, 0], metaLoc, metaBuf, pickBuf;
+  function useMeta(b) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.vertexAttribPointer(metaLoc, 3, gl.UNSIGNED_SHORT, false, 0, 0); }
+  function shader(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+  function initGL() {
+    prog = gl.createProgram(); gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    for (const k of ["uMVP", "uSize", "uVis", "uShowKept", "uKept", "uSelPlane", "uPal", "uPlane", "uNone", "uRej", "uSurface", "uMode", "uPick"]) U[k] = gl.getUniformLocation(prog, k);
+    const attr = (name, data, size, type, norm) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      const l = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, type, norm, 0, 0); };
+    attr("aPos", pos, 3, gl.FLOAT, false); attr("aRgb", rgb, 3, gl.UNSIGNED_BYTE, true);
+    metaLoc = gl.getAttribLocation(prog, "aMeta");
+    metaBuf = gl.createBuffer(); pickBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, metaBuf); gl.bufferData(gl.ARRAY_BUFFER, meta, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, pickBuf); gl.bufferData(gl.ARRAY_BUFFER, pickMeta, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(metaLoc); useMeta(metaBuf);
+    gl.uniform3fv(U.uPal, new Float32Array(CATS.map((c) => hex(COLOR[c])).flat()));
+    gl.uniform3fv(U.uPlane, new Float32Array(PLANECOL.concat([css("--c-rej"), css("--c-rej")]).map(hex).flat()));
+    gl.uniform3fv(U.uNone, new Float32Array(hex(css("--c-none"))));
+    gl.uniform3fv(U.uRej, new Float32Array(hex(css("--c-rej"))));
+    gl.uniform3fv(U.uSurface, new Float32Array(hex(css("--surface"))));
+    gl.uniform1f(U.uKept, KEPT.length);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+    fbo = gl.createFramebuffer(); fboTex = gl.createTexture(); fboDepth = gl.createRenderbuffer();
+    bprog = gl.createProgram(); gl.attachShader(bprog, shader(gl.VERTEX_SHADER, BVS)); gl.attachShader(bprog, shader(gl.FRAGMENT_SHADER, BFS)); gl.linkProgram(bprog);
+    if (!gl.getProgramParameter(bprog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(bprog));
+    for (const k of ["uMVP", "uSize", "uRgb", "uGrey"]) BU[k] = gl.getUniformLocation(bprog, k);
+    bvao = gl.createVertexArray(); gl.bindVertexArray(bvao);
+    const battr = (name, data, size, type, norm) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      const l = gl.getAttribLocation(bprog, name); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, type, norm, 0, 0); };
+    battr("aPos", bpos, 3, gl.FLOAT, false); battr("aRgb", brgb, 3, gl.UNSIGNED_BYTE, true);
+    gvao = gl.createVertexArray(); gl.bindVertexArray(gvao);
+    battr("aPos", gtpos, 3, gl.FLOAT, false); battr("aRgb", new Uint8Array(ngt * 3), 3, gl.UNSIGNED_BYTE, true);
+    gl.bindVertexArray(null); gl.useProgram(prog);
+  }
+  // per-plane colour goes through a switch of uniform array lookups: WebGL2 allows dynamic indexing of uniform arrays
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+
+  // ---------- camera maths (column-major)
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = (a) => { const l = Math.hypot(...a) || 1; return a.map((x) => x / l); };
+  function eye() { const c = Math.cos(S.el); return [S.target[0] + S.dist * c * Math.cos(S.az), S.target[1] + S.dist * c * Math.sin(S.az), S.target[2] + S.dist * Math.sin(S.el)]; }
+  function basis() { const e = eye(), f = norm(sub(S.target, e)); let r = cross(f, [0, 0, 1]); if (Math.hypot(...r) < 1e-4) r = [-Math.sin(S.az), Math.cos(S.az), 0]; r = norm(r); return { e, f, r, u: cross(r, f) }; }
+  let MVP = new Float32Array(16);
+  function updateMVP(aspect) {
+    const { e, f, r, u } = basis(), near = 0.05, far = 80, t = 1 / Math.tan(0.5 * 38 * Math.PI / 180);
+    const V = [r[0], u[0], -f[0], 0, r[1], u[1], -f[1], 0, r[2], u[2], -f[2], 0, -dot(r, e), -dot(u, e), dot(f, e), 1];
+    const P = [t / aspect, 0, 0, 0, 0, t, 0, 0, 0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far), 0];
+    for (let c = 0; c < 4; c++) for (let rr = 0; rr < 4; rr++) { let s = 0; for (let k = 0; k < 4; k++) s += P[k * 4 + rr] * V[c * 4 + k]; MVP[c * 4 + rr] = s; }
+    return e;
+  }
+  function project(p) {
+    const x = MVP[0] * p[0] + MVP[4] * p[1] + MVP[8] * p[2] + MVP[12], y = MVP[1] * p[0] + MVP[5] * p[1] + MVP[9] * p[2] + MVP[13], w = MVP[3] * p[0] + MVP[7] * p[1] + MVP[11] * p[2] + MVP[15];
+    if (w <= 0.02) return null;
+    return [(x / w * 0.5 + 0.5) * canvas.clientWidth, (1 - (y / w * 0.5 + 0.5)) * canvas.clientHeight];
+  }
+
+  // ---------- draw
+  let dirty = true;
+  function resize() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(2, Math.floor(canvas.clientWidth * dpr)), h = Math.max(2, Math.floor(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    return [w, h];
+  }
+  function setCommon(mode) {
+    gl.uniformMatrix4fv(U.uMVP, false, MVP);
+    gl.uniform1f(U.uSize, 2.6 * Math.min(2, window.devicePixelRatio || 1));
+    gl.uniform1i(U.uMode, mode); gl.uniform1f(U.uPick, 0);
+    const sel = S.sel === null ? -1 : S.sel;
+    gl.uniform1f(U.uSelPlane, mode === 3 ? -1 : sel);
+  }
+  function draw() {
+    dirty = false;
+    if (!gl) return;
+    const [w, h] = resize();
+    const e = updateMVP(w / h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, w, h);
+    const bg = hex(css("--surface")); gl.clearColor(bg[0], bg[1], bg[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    const v = S.vis;
+    gl.uniform4f(U.uVis, v.floor ? 1 : 0, v.doorwin ? 1 : 0, v.free ? 1 : 0, v.rej ? 1 : 0);
+    gl.uniform1f(U.uShowKept, v.kept ? 1 : 0);
+    setCommon(S.mode);
+    gl.drawArrays(gl.POINTS, 0, n);
+    if (S.bg) {
+      gl.useProgram(bprog); gl.bindVertexArray(bvao);
+      gl.uniformMatrix4fv(BU.uMVP, false, MVP); gl.uniform1f(BU.uSize, 2.0 * Math.min(2, window.devicePixelRatio || 1));
+      gl.uniform1i(BU.uRgb, S.mode === 2 ? 1 : 0); gl.uniform3fv(BU.uGrey, new Float32Array(hex(css("--c-bg"))));
+      gl.drawArrays(gl.POINTS, 0, nb);
+      gl.bindVertexArray(null); gl.useProgram(prog);
+    }
+    if (S.gtPts && ngt) {                       // GT wall points, same point program, one colour, not pushed back
+      gl.useProgram(bprog); gl.bindVertexArray(gvao);
+      gl.uniformMatrix4fv(BU.uMVP, false, MVP); gl.uniform1f(BU.uSize, 2.4 * Math.min(2, window.devicePixelRatio || 1));
+      gl.uniform1i(BU.uRgb, 0); gl.uniform3fv(BU.uGrey, new Float32Array(hex(css("--c-gt"))));
+      gl.drawArrays(gl.POINTS, 0, ngt);
+      gl.bindVertexArray(null); gl.useProgram(prog);
+    }
+    overlay();
+  }
+  function pick(cx, cy) {
+    if (!gl) return null;
+    const [w, h] = resize();
+    if (fboSize[0] !== w || fboSize[1] !== h) {
+      gl.bindTexture(gl.TEXTURE_2D, fboTex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, fboDepth); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, fboDepth);
+      fboSize = [w, h];
+    }
+    const x = Math.floor(cx * w / canvas.clientWidth), y = h - 1 - Math.floor(cy * h / canvas.clientHeight), r = 4;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, w, h);
+    gl.enable(gl.SCISSOR_TEST); gl.scissor(Math.max(0, x - r), Math.max(0, y - r), 2 * r + 1, 2 * r + 1);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    const v = S.vis;
+    gl.uniform4f(U.uVis, v.floor ? 1 : 0, v.doorwin ? 1 : 0, v.free ? 1 : 0, v.rej ? 1 : 0);
+    gl.uniform1f(U.uShowKept, v.kept ? 1 : 0);
+    setCommon(3); gl.uniform1f(U.uPick, 1); useMeta(pickBuf);
+    gl.drawArrays(gl.POINTS, 0, n);
+    useMeta(metaBuf);
+    const px = new Uint8Array(4 * (2 * r + 1) * (2 * r + 1)); gl.readPixels(Math.max(0, x - r), Math.max(0, y - r), 2 * r + 1, 2 * r + 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.disable(gl.SCISSOR_TEST); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    for (let i = 0; i < px.length; i += 4) if (px[i + 3]) return { plane: px[i] - 1, cat: px[i + 1], mask: px[i + 2] - 1 };
+    return null;
+  }
+
+  // ---------- overlay
+  const svg = $("svg"), tags = $("tags");
+  function poly(corners) { const p = corners.map(project); return p.some((x) => !x) ? null : p; }
+  function overlay() {
+    let out = "", html = "";
+    const list = [], e = eye();
+    const away = (nrm, c) => dot(nrm, sub(e, c)) < 0;
+    const tag = (p, text, color, cls, rank) => { const s = project(p); if (s) list.push({ s, text, color, cls: cls || "", rank }); };
+    const mid = (r) => { const u = r.along, t = (r.a[0] + r.a[1]) / 2; return [r.point[0] + t * u[0], r.point[1] + t * u[1], (r.z[0] + r.z[1]) / 2]; };
+    for (const r of WALLS) {
+      const i = WALLS.indexOf(r), on = S.sel === i, back = away(r.normal.concat(0), mid(r));
+      if (S.rect) {
+        const p = poly(r.corners);
+        const col = r.kind === "kept" ? (S.mode === 1 ? planeColor(i) : css("--ink")) : css("--c-rej");
+        if (p) out += `<polygon points="${p.map((x) => x.map((q) => q.toFixed(1)).join(",")).join(" ")}" fill="${on ? "rgba(15,118,110,0.08)" : "none"}" stroke="${col}" stroke-opacity="${on ? 1 : r.kind === "kept" ? 0.85 : 0.7}" stroke-width="${on ? 2.6 : 1.6}" ${r.kind === "rejected" ? 'stroke-dasharray="5 4"' : ""}/>`;
+      }
+      if (S.tags && !(S.sel !== null && !on)) tag(mid(r), on ? `${r.id} · ${r.gt ? "离 GT 墙点 " + (r.gt.offset_cm > 0 ? "+" : "") + f1(r.gt.offset_cm) + " cm" : "附近没有 GT 墙点"} · ${f2(r.length_m)} × ${f2(r.z[1] - r.z[0])} m` : r.id,
+        r.kind === "kept" ? (S.mode === 1 ? planeColor(i) : COLOR.wall) : css("--c-rej"), on ? "sel" : "", on ? 0 : 2);
+    }
+    if (S.cut) {
+      for (const c of D.cuts) {
+        const a = project([c.p0[0], c.p0[1], 1.2]), b = project([c.p1[0], c.p1[1], 1.2]); if (!a || !b) continue;
+        out += `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${css("--c-door")}" stroke-width="3" stroke-dasharray="2 5" stroke-linecap="round"/>`;
+        if (S.tags && S.sel === null) tag([(c.p0[0] + c.p1[0]) / 2, (c.p0[1] + c.p1[1]) / 2, 1.2], `射线穿过 ${f2(c.length_m)} m`, null, "", 3);
+      }
+      for (const r of WALLS) for (const o of (r.openings || [])) {
+        const p = poly(o.corners); if (!p) continue;
+        out += `<polygon points="${p.map((x) => x.map((q) => q.toFixed(1)).join(",")).join(" ")}" fill="rgba(22,25,29,0.07)" stroke="${css("--ink")}" stroke-width="2" stroke-dasharray="7 5"/>`;
+        if (S.tags) tag([(o.corners[0][0] + o.corners[2][0]) / 2, (o.corners[0][1] + o.corners[2][1]) / 2, (o.z[0] + o.z[1]) / 2], `开口 ${f2(o.width_m)} × ${f2(o.height_m)} m`, null, "", 1);
+      }
+    }
+    if (S.close && CL) {
+      const H = CL.storey.height_m, faces = [];
+      const colOf = (f) => f.role === "exterior" ? css("--c-ext") : css("--c-int");
+      const rgba = (f, a) => f.role === "exterior" ? `rgba(22,25,29,${a})` : `rgba(98,80,214,${a})`;
+      const push = (pts, f, kind, part) => { const d = pts.reduce((acc, q) => acc + Math.hypot(...sub(q, e)), 0) / pts.length; faces.push({ pts, f, kind, part, d }); };
+      for (const f of CL.final) {
+        // the room-side face, piece by piece: observed solid, inferred dashed
+        for (const pc of f.pieces) push([[...pc.p0, 0], [...pc.p1, 0], [...pc.p1, H], [...pc.p0, H]], f, pc.kind, "face");
+        if (S.thick && f.footprint) {
+          const q = f.footprint, top = q.map((c) => [c[0], c[1], H]);
+          push(top, f, "assumed", "top");
+          push([[...q[2], 0], [...q[3], 0], [...q[3], H], [...q[2], H]], f, "assumed", "back");
+          push([[...q[1], 0], [...q[2], 0], [...q[2], H], [...q[1], H]], f, "assumed", "end");
+          push([[...q[3], 0], [...q[0], 0], [...q[0], H], [...q[3], H]], f, "assumed", "end");
+        }
+      }
+      faces.sort((p, q) => q.d - p.d);
+      for (const F of faces) {
+        const q = poly(F.pts); if (!q) continue;
+        const f = F.f, pts = q.map((x) => x.map((v) => v.toFixed(1)).join(",")).join(" ");
+        if (F.part === "face") out += `<polygon points="${pts}" fill="${F.kind === "observed" ? rgba(f, 0.10) : rgba(f, 0.035)}" stroke="${colOf(f)}" stroke-opacity="${F.kind === "observed" ? 0.9 : 0.55}" stroke-width="${F.kind === "observed" ? 1.6 : 1.2}" ${F.kind === "inferred" ? 'stroke-dasharray="6 4"' : ""}/>`;
+        else if (F.part === "top") out += `<polygon points="${pts}" fill="${rgba(f, 0.42)}" stroke="${colOf(f)}" stroke-width="1"/>`;
+        else out += `<polygon points="${pts}" fill="${rgba(f, 0.06)}" stroke="${colOf(f)}" stroke-opacity="0.35" stroke-width="0.8"/>`;
+      }
+      if (!S.thick) {
+        const ring = CL.rectangle.corners.map((c) => project([c[0], c[1], H]));
+        if (ring.every(Boolean)) out += `<polygon points="${ring.map((x) => x.map((v) => v.toFixed(1)).join(",")).join(" ")}" fill="none" stroke="${css("--c-ext")}" stroke-width="1.2" stroke-dasharray="3 4" stroke-opacity="0.6"/>`;
+      }
+      if (S.tags) for (const f of CL.final) {
+        if (f.role !== "exterior" && !S.thick) continue;
+        const q = f.footprint || [f.pieces[0].p0, f.pieces[f.pieces.length - 1].p1, f.pieces[f.pieces.length - 1].p1, f.pieces[0].p0];
+        const m = [(q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4, (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4, H + 0.12];
+        tag(m, S.thick && f.thickness_m ? `${f.id} · ${Math.round(f.thickness_m * 100)} cm` : f.id, null, "", 4);
+      }
+    }
+    if (S.cam) for (const c of D.cams) { const s = project(c.p); if (s) out += `<circle cx="${s[0].toFixed(1)}" cy="${s[1].toFixed(1)}" r="2.6" fill="#fff" stroke="${css("--ink-3")}" stroke-width="1.2"/>`; }
+    const placed = [], W = canvas.clientWidth, H = canvas.clientHeight;
+    const width = (t) => { let w = 14; for (const ch of t) w += ch.charCodeAt(0) > 255 ? 12.5 : 7; return w; };
+    list.sort((a, b) => a.rank - b.rank);
+    for (const t of list) {
+      const w = width(t.text) + (t.color ? 14 : 0), h = 20;
+      for (const dy of [0, 21, -21, 42, -42]) {
+        const x = t.s[0], y = t.s[1] + dy;
+        if (x < 0 || x > W || y < 8 || y > H - 8) continue;
+        if (placed.some((b) => Math.abs(b.x - x) < (b.w + w) / 2 + 3 && Math.abs(b.y - y) < h)) continue;
+        placed.push({ x, y, w });
+        html += `<div class="tag ${t.cls}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px">${t.color ? `<span class="chip" style="background:${t.color}"></span>` : ""}${t.text}</div>`;
+        break;
+      }
+    }
+    svg.innerHTML = out; tags.innerHTML = html;
+  }
+
+  // ---------- camera moves
+  let anim = null;
+  function flyTo(v) {
+    const from = { az: S.az, el: S.el, dist: S.dist, target: S.target.slice() }, t0 = performance.now();
+    let daz = v.az - from.az; daz = Math.atan2(Math.sin(daz), Math.cos(daz));
+    anim = () => {
+      const t = Math.min(1, (performance.now() - t0) / 450), k = t * t * (3 - 2 * t);
+      S.az = from.az + daz * k; S.el = from.el + (v.el - from.el) * k; S.dist = from.dist + (v.dist - from.dist) * k;
+      S.target = from.target.map((x, i) => x + (v.target[i] - x) * k);
+      dirty = true; if (t >= 1) anim = null;
+    };
+  }
+  function select(i, fly) {
+    S.sel = S.sel === i ? null : i;
+    if (S.sel !== null && fly !== false) {
+      const r = WALLS[i], u = r.along, t = (r.a[0] + r.a[1]) / 2, m = mid(r);
+      flyTo({ az: Math.atan2(r.normal[1], r.normal[0]) + 0.35, el: 0.26, dist: Math.max(3.6, r.length_m * 1.15), target: [m[0], m[1], 1.2] });
+    }
+    document.querySelectorAll("[data-kind]").forEach((x) => x.classList.toggle("on", S.sel !== null && x.dataset.kind === "wall" && +x.dataset.key === S.sel));
+    if (fly !== false) document.querySelectorAll("#views button").forEach((b) => b.classList.remove("on"));
+    dirty = true; dirty2d = true;
+  }
+
+  // ---------- 2D top view
+  // canvas 2D: background as a density image (points per pixel in the chosen height band),
+  // observation points painted over it, then walls and marks as vectors
+  const c2 = $("c2d"), x2 = c2.getContext("2d");
+  const T2 = { k: 1, ox: 0, oy: 0, band: [0.10, 2.60], close: true, thick: true, bg: true, wallPts: true, doorwin: false, walls: true, rej: true, cut: true, gt: false, gtPts: false, tags: true };
+  let dirty2d = true, hover2d = null;
+  let grid2d = null;
+  function bgGrid() {
+    const key = T2.band.join(",");
+    if (grid2d && grid2d.key === key) return grid2d;
+    const cell = B.voxel_m, x0 = B.lo[0], y0 = B.lo[1], nx = Math.ceil((B.hi[0] - x0) / cell) + 1, ny = Math.ceil((B.hi[1] - y0) / cell) + 1;
+    const cnt = new Uint16Array(nx * ny);
+    for (let i = 0; i < nb; i++) {
+      const z = bpos[3 * i + 2]; if (z < T2.band[0] || z > T2.band[1]) continue;
+      const gx = Math.floor((bpos[3 * i] - x0) / cell), gy = Math.floor((bpos[3 * i + 1] - y0) / cell);
+      cnt[gy * nx + gx]++;
+    }
+    return (grid2d = { key, cell, x0, y0, nx, ny, cnt });
+  }
+  function fit2d() {
+    const w = c2.clientWidth, h = c2.clientHeight, x0 = Math.min(D.lo[0], B.lo[0]), x1 = Math.max(D.hi[0], B.hi[0]), y0 = Math.min(D.lo[1], B.lo[1]), y1 = Math.max(D.hi[1], B.hi[1]);
+    T2.k = Math.min((w - 60) / (x1 - x0), (h - 60) / (y1 - y0)); T2.ox = (x0 + x1) / 2; T2.oy = (y0 + y1) / 2; dirty2d = true;
+  }
+  const toS = (x, y) => [c2.clientWidth / 2 + (x - T2.ox) * T2.k, c2.clientHeight / 2 - (y - T2.oy) * T2.k];
+  const toW = (sx, sy) => [T2.ox + (sx - c2.clientWidth / 2) / T2.k, T2.oy - (sy - c2.clientHeight / 2) / T2.k];
+  const ends = (r) => [[r.point[0] + r.a[0] * r.along[0], r.point[1] + r.a[0] * r.along[1]], [r.point[0] + r.a[1] * r.along[0], r.point[1] + r.a[1] * r.along[1]]];
+  function draw2d() {
+    dirty2d = false;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), W = Math.max(2, Math.floor(c2.clientWidth * dpr)), H = Math.max(2, Math.floor(c2.clientHeight * dpr));
+    if (c2.width !== W || c2.height !== H) { c2.width = W; c2.height = H; }
+    const img = x2.createImageData(W, H), px = img.data, sf = hex(css("--surface")).map((v) => Math.round(v * 255));
+    for (let i = 0; i < W * H; i++) { px[4 * i] = sf[0]; px[4 * i + 1] = sf[1]; px[4 * i + 2] = sf[2]; px[4 * i + 3] = 255; }
+    const kx = T2.k * dpr, cx = W / 2, cy = H / 2;
+    // a point covers about its voxel on screen, at least one pixel
+    const rad = (vox) => Math.min(6, Math.max(0, Math.floor(vox * kx / 2)));
+    if (T2.bg) {
+      // counts per 4 cm floor cell: a vertical surface stacks tens of points in one cell, a flat
+      // one (floor, bed, desk top) one or two, so the count separates them
+      const g = bgGrid(), ink = hex(css("--ink-2")).map((v) => v * 255);
+      for (let gy = 0; gy < g.ny; gy++) for (let gx = 0; gx < g.nx; gx++) {
+        const c = g.cnt[gy * g.nx + gx]; if (!c) continue;
+        const t = c <= 2 ? 0.10 : Math.min(0.85, 0.10 + 0.75 * Math.pow(Math.min(1, (c - 2) / 30), 0.8));
+        // cell edges from the grid itself, so neighbouring cells share an edge and leave no seam
+        const X0 = Math.round(cx + (g.x0 + gx * g.cell - T2.ox) * kx), X1 = Math.max(X0 + 1, Math.round(cx + (g.x0 + (gx + 1) * g.cell - T2.ox) * kx));
+        const Y1 = Math.round(cy - (g.y0 + gy * g.cell - T2.oy) * kx), Y0 = Math.min(Y1 - 1, Math.round(cy - (g.y0 + (gy + 1) * g.cell - T2.oy) * kx));
+        const col = [0, 1, 2].map((k) => sf[k] + (ink[k] - sf[k]) * t);
+        for (let Y = Math.max(0, Y0); Y < Math.min(H, Y1); Y++) for (let X = Math.max(0, X0); X < Math.min(W, X1); X++) {
+          const q = 4 * (Y * W + X); px[q] = col[0]; px[q + 1] = col[1]; px[q + 2] = col[2];
+        }
+      }
+    }
+    if (T2.gtPts && ngt) {
+      const gc = hex(css("--c-gt")).map((v) => Math.round(v * 255)), r = rad(GP.voxel_m);
+      for (let i = 0; i < ngt; i++) {
+        const z = gtpos[3 * i + 2]; if (z < T2.band[0] || z > T2.band[1]) continue;
+        const sx = Math.floor(cx + (gtpos[3 * i] - T2.ox) * kx), sy = Math.floor(cy - (gtpos[3 * i + 1] - T2.oy) * kx);
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const X = sx + dx, Y = sy + dy; if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+          const j = 4 * (Y * W + X); px[j] = gc[0]; px[j + 1] = gc[1]; px[j + 2] = gc[2];
+        }
+      }
+    }
+    if (T2.wallPts || T2.doorwin) {
+      const pc = PLANECOL.map((h) => hex(h).map((v) => Math.round(v * 255))), none = hex(css("--c-none")).map((v) => Math.round(v * 255)),
+        rej = hex(css("--c-rej")).map((v) => Math.round(v * 255)), dw = [hex(COLOR.door), hex(COLOR.window)].map((c) => c.map((v) => Math.round(v * 255)));
+      const r = rad(0.02);
+      for (let i = 0; i < n; i++) {
+        const c = cat[i]; let col;
+        if (c === 0 && T2.wallPts) {
+          const pl = plane[i] === 65535 ? -1 : plane[i];
+          if (pl >= KEPT.length && !T2.rej) continue;
+          col = pl < 0 ? none : pl < KEPT.length ? pc[pl % pc.length] : rej;
+          if (S.sel !== null && pl !== S.sel) col = col.map((v, k) => Math.round(v + (sf[k] - v) * 0.75));
+        } else if ((c === 2 || c === 3) && T2.doorwin) col = dw[c - 2];
+        else continue;
+        const sx = Math.floor(cx + (pos[3 * i] - T2.ox) * kx), sy = Math.floor(cy - (pos[3 * i + 1] - T2.oy) * kx);
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const X = sx + dx, Y = sy + dy; if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+          const j = 4 * (Y * W + X); px[j] = col[0]; px[j + 1] = col[1]; px[j + 2] = col[2];
+        }
+      }
+    }
+    x2.putImageData(img, 0, 0);
+    x2.save(); x2.scale(dpr, dpr);
+    const line = (a, b, color, width, dash) => { const p = toS(...a), q = toS(...b); x2.beginPath(); x2.setLineDash(dash || []); x2.strokeStyle = color; x2.lineWidth = width; x2.lineCap = "round"; x2.moveTo(...p); x2.lineTo(...q); x2.stroke(); x2.setLineDash([]); };
+    const labels = [];
+    if (T2.walls) WALLS.forEach((r, i) => {
+      if (r.kind === "rejected" && !T2.rej) return;
+      const [a, b] = ends(r), on = S.sel === i, hov = hover2d === i, kept = r.kind === "kept";
+      const col = kept ? planeColor(i) : css("--c-rej"), dim = S.sel !== null && !on;
+      x2.globalAlpha = dim ? 0.3 : 1;
+      if (on || hov) line(a, b, css("--ink"), kept ? 7 : 5);
+      line(a, b, col, kept ? 4 : 2.5, kept ? null : [5, 4]);
+      // facing tick at the middle, pointing into the room
+      const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], tk = 0.16;
+      line(m, [m[0] + r.normal[0] * tk, m[1] + r.normal[1] * tk], col, kept ? 2.5 : 1.5);
+      x2.globalAlpha = 1;
+      if (T2.tags && (!dim || hov)) labels.push({ s: toS(m[0] + r.normal[0] * 0.34, m[1] + r.normal[1] * 0.34), t: r.id, c: col, rank: on ? 0 : kept ? 1 : 2, bold: on });
+    });
+    if (T2.cut) {
+      for (const c of D.cuts) line(c.p0, c.p1, css("--c-door"), 3, [2, 5]);
+      for (const r of WALLS) for (const o of (r.openings || [])) {
+        const a = o.corners[0], b = o.corners[1];
+        line(a, b, css("--surface"), 6); line(a, b, css("--ink"), 2, [4, 3]);
+        if (T2.tags) { const m = toS((a[0] + b[0]) / 2 - r.normal[0] * 0.32, (a[1] + b[1]) / 2 - r.normal[1] * 0.32); labels.push({ s: m, t: `开口 ${f2(o.width_m)} m`, c: null, rank: 1 }); }
+      }
+    }
+    if (T2.close && CL) {
+      if (T2.thick) for (const f of CL.final) if (f.footprint) {
+        const q = f.footprint.map((c) => toS(c[0], c[1]));
+        x2.beginPath(); q.forEach((p, k) => (k ? x2.lineTo(...p) : x2.moveTo(...p))); x2.closePath();
+        x2.fillStyle = f.role === "exterior" ? "rgba(22,25,29,0.30)" : "rgba(98,80,214,0.32)"; x2.fill();
+        x2.strokeStyle = f.role === "exterior" ? css("--c-ext") : css("--c-int"); x2.lineWidth = 0.8; x2.globalAlpha = 0.6; x2.stroke(); x2.globalAlpha = 1;
+      }
+      for (const f of CL.final) for (const pc of f.pieces) {
+        const col = f.role === "exterior" ? css("--c-ext") : css("--c-int");
+        if (pc.kind === "observed") line(pc.p0, pc.p1, col, 2.2);
+        else line(pc.p0, pc.p1, col, 2.2, [7, 5]);
+      }
+      if (T2.thick) for (const f of CL.final) for (const h of (f.thickness_hint || [])) {
+        // the evidence, drawn where it was measured
+        const pl = h.kind === "two_faces" ? WALLS.find((w) => w.id === h.other_plane) : null;
+        if (pl) { const [a, b] = ends(pl); line(a, b, css("--c-door"), 2, [2, 3]); }
+        if (T2.tags) {
+          const a = f.pieces[0].p0, b = f.pieces[f.pieces.length - 1].p1, nb = f.normal_to_back, t = f.thickness_m;
+          const m = [(a[0] + b[0]) / 2 + nb[0] * (t + 0.35), (a[1] + b[1]) / 2 + nb[1] * (t + 0.35)];
+          labels.push({ s: toS(...m), t: h.kind === "two_faces" ? `另一面 ${f1(h.gap_cm)} cm（${h.frames.length} 帧）` : `门扇凹进 ${h.recess_cm[0]}–${h.recess_cm[1]} cm`, c: css("--c-door"), rank: 2 });
+        }
+      }
+      if (T2.tags) for (const f of CL.final) {
+        const a = f.pieces[0].p0, b = f.pieces[f.pieces.length - 1].p1, n = f.normal;
+        if (f.role === "exterior") labels.push({ s: toS((a[0] + b[0]) / 2 - n[0] * 0.30, (a[1] + b[1]) / 2 - n[1] * 0.30), t: `${f.id} ${f2(f.length_m)} m${T2.thick ? " · 厚 " + Math.round(f.thickness_m * 100) + " cm" : ""}`, c: null, rank: 2 });
+        else if (T2.thick) labels.push({ s: toS((a[0] + b[0]) / 2 + n[0] * 0.30, (a[1] + b[1]) / 2 + n[1] * 0.30), t: `厚 ${Math.round(f.thickness_m * 100)} cm`, c: css("--c-int"), rank: 2 });
+      }
+    }
+    if (T2.gtPts && T2.thick && D.gt_gaps) for (const gp of D.gt_gaps) {
+      const a = gp.p0, b = gp.p1; line(a, b, css("--ink-3"), 3);
+      if (T2.tags) labels.push({ s: toS((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 0.22), t: `GT ${f1(gp.cm)} cm`, c: css("--ink-3"), rank: 3 });
+    }
+    // labels: rank order, skip one that would overlap one already placed
+    x2.font = "12px -apple-system,'Segoe UI','PingFang SC','Noto Sans CJK SC',sans-serif"; x2.textBaseline = "middle";
+    const placed = [];
+    for (const l of labels.sort((p, q) => p.rank - q.rank)) {
+      x2.font = (l.bold ? "600 " : "") + "12px -apple-system,'Segoe UI','PingFang SC','Noto Sans CJK SC',sans-serif";
+      const w = x2.measureText(l.t).width + (l.c ? 22 : 12), h = 19, x = l.s[0] - w / 2, y = l.s[1] - h / 2;
+      if (placed.some((b) => x < b.x + b.w + 2 && b.x < x + w + 2 && y < b.y + b.h + 2 && b.y < y + h + 2)) continue;
+      placed.push({ x, y, w, h });
+      x2.fillStyle = "rgba(255,255,255,0.92)"; x2.strokeStyle = l.bold ? css("--ink") : css("--line"); x2.lineWidth = 1;
+      x2.beginPath(); x2.roundRect(x, y, w, h, 5); x2.fill(); x2.stroke();
+      if (l.c) { x2.fillStyle = l.c; x2.fillRect(x + 6, y + 5, 9, 9); }
+      x2.fillStyle = css("--ink"); x2.fillText(l.t, x + (l.c ? 19 : 6), y + h / 2 + 0.5);
+    }
+    // scale bar and north
+    const m1 = T2.k, bx = 16, by = c2.clientHeight - 18;
+    x2.fillStyle = css("--ink-2"); x2.fillRect(bx, by, m1, 3); x2.fillRect(bx, by - 4, 1.5, 7); x2.fillRect(bx + m1 - 1.5, by - 4, 1.5, 7);
+    x2.font = "12px sans-serif"; x2.fillText("1 m", bx + m1 + 6, by + 2);
+    x2.fillText("↑ 北（+y）", c2.clientWidth - 92, 46);
+    x2.restore();
+    buildLegend2d();
+  }
+  function buildLegend2d() {
+    let h = "";
+    if (T2.bg) h += `<div><span class="chip" style="background:linear-gradient(90deg,${css("--line")},${css("--ink-2")})"></span>场景点云 z ${f1(T2.band[0])}–${f1(T2.band[1])} m<span class="num">竖直面深</span></div>`;
+    if (T2.walls || T2.wallPts) h += KEPT.map((r) => `<div><span class="chip" style="background:${planeColor(WALLS.indexOf(r))}"></span>${r.id}</div>`).join("");
+    if (T2.rej && (T2.walls || T2.wallPts)) h += `<div><span class="chip" style="background:${css("--c-rej")}"></span>丢弃的平面</div>`;
+    if (T2.wallPts) h += `<div><span class="chip" style="background:${css("--c-none")}"></span>不属于任何平面的墙点</div>`;
+    if (T2.close && CL && T2.thick) h += `<div><span class="chip" style="background:rgba(22,25,29,0.30)"></span>外墙厚 ${Math.round(CL.thickness.exterior_m * 100)} cm（假定）</div><div><span class="chip" style="background:rgba(98,80,214,0.32)"></span>内墙厚 ${Math.round(CL.thickness.interior_m * 100)} cm（假定）</div><div><svg width="22" height="10" style="flex:none"><line x1="1" y1="5" x2="21" y2="5" stroke="${css("--c-door")}" stroke-width="2" stroke-dasharray="2 3"/></svg>厚度线索：墙另一面的观测</div>`;
+    if (T2.close && CL) h += `<div><svg width="22" height="10" style="flex:none"><line x1="1" y1="5" x2="21" y2="5" stroke="${css("--c-ext")}" stroke-width="2.2"/></svg>外墙，观测到的</div><div><svg width="22" height="10" style="flex:none"><line x1="1" y1="5" x2="21" y2="5" stroke="${css("--c-ext")}" stroke-width="2.2" stroke-dasharray="7 5"/></svg>外墙，推断补上的</div><div><svg width="22" height="10" style="flex:none"><line x1="1" y1="5" x2="21" y2="5" stroke="${css("--c-int")}" stroke-width="2.2"/></svg>内墙</div>`;
+    if (T2.cut) h += `<div><svg width="22" height="10" style="flex:none"><line x1="1" y1="5" x2="21" y2="5" stroke="${css("--c-door")}" stroke-width="3" stroke-dasharray="2 5" stroke-linecap="round"/></svg>射线穿过，墙线在此切断</div><div><svg width="22" height="10" style="flex:none"><line x1="1" y1="5" x2="21" y2="5" stroke="${css("--ink")}" stroke-width="2" stroke-dasharray="4 3"/></svg>墙面上的开口</div>`;
+    if (T2.gtPts) h += `<div><span class="chip" style="background:${css("--c-gt")}"></span>GT 墙点（z ${f1(T2.band[0])}–${f1(T2.band[1])} m）</div>`;
+    if (T2.gtPts && T2.thick && D.gt_gaps) h += `<div><svg width="22" height="10" style="flex:none"><line x1="1" y1="5" x2="21" y2="5" stroke="${css("--ink-3")}" stroke-width="3"/></svg>GT 网格上量到的厚度</div>`;
+    $("legend2d").innerHTML = h;
+  }
+  function nearestWall(sx, sy) {
+    let best = null, bd = 9;
+    WALLS.forEach((r, i) => {
+      if (!T2.walls || (r.kind === "rejected" && !T2.rej)) return;
+      const [a, b] = ends(r).map((p) => toS(...p)), dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((sx - a[0]) * dx + (sy - a[1]) * dy) / L)), d = Math.hypot(sx - a[0] - t * dx, sy - a[1] - t * dy);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  }
+  function bind2d() {
+    const chk = (id, key) => $(id).addEventListener("change", (e) => { T2[key] = e.target.checked; dirty2d = true; });
+    chk("bBg", "bg"); chk("bWallPts", "wallPts"); chk("bDoorWin", "doorwin"); chk("bWalls", "walls"); chk("bRej", "rej");
+    chk("bCut", "cut"); chk("bClose", "close"); chk("bThick", "thick"); chk("bGtPts", "gtPts"); chk("bTags", "tags");
+    $("zband").addEventListener("change", (e) => { T2.band = e.target.value.split(",").map(Number); dirty2d = true; });
+    $("fit2d").addEventListener("click", fit2d);
+    let drag = null, moved = false;
+    c2.addEventListener("mousedown", (e) => { drag = { x: e.clientX, y: e.clientY }; moved = false; c2.style.cursor = "grabbing"; $("tip2d").style.display = "none"; });
+    window.addEventListener("mouseup", () => { drag = null; c2.style.cursor = ""; });
+    window.addEventListener("mousemove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+      if (Math.abs(dx) + Math.abs(dy) > 1) moved = true;
+      T2.ox -= dx / T2.k; T2.oy += dy / T2.k; dirty2d = true;
+    });
+    c2.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const r = c2.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, [wx, wy] = toW(sx, sy);
+      T2.k = Math.max(20, Math.min(2000, T2.k * Math.exp(-e.deltaY * 0.0015)));
+      T2.ox = wx - (sx - c2.clientWidth / 2) / T2.k; T2.oy = wy + (sy - c2.clientHeight / 2) / T2.k; dirty2d = true;
+    }, { passive: false });
+    c2.addEventListener("mousemove", (e) => {
+      if (drag) return;
+      const r = c2.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, [wx, wy] = toW(sx, sy);
+      $("coord2d").textContent = `x ${wx.toFixed(2)}  y ${wy.toFixed(2)} m`;
+      const i = nearestWall(sx, sy), tip = $("tip2d");
+      if (i !== hover2d) { hover2d = i; dirty2d = true; }
+      if (i === null) { tip.style.display = "none"; c2.style.cursor = ""; return; }
+      c2.style.cursor = "pointer";
+      const w = WALLS[i], ops = (w.openings || []).map((o) => `开口 ${f2(o.width_m)} × ${f2(o.height_m)} m`).join("，");
+      tip.innerHTML = `<b>${w.id}</b>${w.kind === "rejected" ? "（丢弃：" + w.why + "）" : ""} · 朝向 ${w.heading_deg > 0 ? "+" : ""}${f1(w.heading_deg)}°<br>长 ${f2(w.length_m)} m · 高 ${f2(w.z[0])} – ${f2(w.z[1])} m · 支持 ${f2(w.area_m2)} m²<br>${w.frames.length} 帧 · ${w.masks.length} 个 mask · 残差 ${f1(w.rms_cm)} cm${ops ? "<br>" + ops : ""}${w.gt ? `<br>离 GT 墙点 ${(w.gt.offset_cm > 0 ? "+" : "") + f1(w.gt.offset_cm)} cm（正数：比 GT 靠房间里）` : ""}`;
+      tip.style.display = "block";
+      tip.style.left = Math.min(sx + 14, c2.clientWidth - tip.offsetWidth - 6) + "px"; tip.style.top = Math.max(6, sy - tip.offsetHeight - 10) + "px";
+    });
+    c2.addEventListener("mouseleave", () => { $("tip2d").style.display = "none"; $("coord2d").textContent = ""; if (hover2d !== null) { hover2d = null; dirty2d = true; } });
+    c2.addEventListener("click", (e) => {
+      if (moved) return;
+      const r = c2.getBoundingClientRect(), i = nearestWall(e.clientX - r.left, e.clientY - r.top);
+      if (i !== null) select(i, false); else if (S.sel !== null) select(S.sel, false);
+    });
+    window.addEventListener("resize", () => { dirty2d = true; });
+  }
+
+  // ---------- side, legend, tables
+  function buildSide() {
+    let h = `<h3>墙面（保留 ${KEPT.length} 个）</h3>`;
+    for (const r of KEPT) { const i = WALLS.indexOf(r);
+      h += `<div class="row" data-kind="wall" data-key="${i}"><span class="chip" style="background:${S.mode === 1 ? planeColor(i) : COLOR.wall}"></span><span>${r.id}<span class="sub">朝向 ${r.heading_deg > 0 ? "+" : ""}${f1(r.heading_deg)}° · ${r.frames.length} 帧 · ${r.masks.length} 个 mask${r.gt ? " · 离 GT 墙点 " + (r.gt.offset_cm > 0 ? "+" : "") + f1(r.gt.offset_cm) + " cm" : " · 附近无 GT 墙点"}</span></span><span class="v">${f2(r.area_m2)} m²</span></div>`; }
+    h += `<h3>丢弃（${REJ.length} 个）</h3>`;
+    for (const r of REJ) { const i = WALLS.indexOf(r);
+      h += `<div class="row" data-kind="wall" data-key="${i}"><span class="chip" style="background:${css("--c-rej")}"></span><span>${r.id}<span class="sub">${r.why} · 帧 ${r.frames.join("、")}</span></span><span class="v">${f2(r.area_m2)} m²</span></div>`; }
+    h += `<h3>逐帧观测</h3><div class="small" style="padding:0 14px 12px">共 ${maskInfo.length} 个 mask：` +
+      CATS.map((c) => `${ZH[c]} ${maskInfo.filter((m) => m.label === c).length}`).join(" · ") + `。悬停任意一点可以看到它来自哪个 mask 和哪一帧。</div>`;
+    h += '<button class="clear" id="clear">取消选中</button>';
+    $("side").innerHTML = h;
+  }
+  function buildLegend() {
+    let rows;
+    if (S.mode === 1) rows = KEPT.map((r) => [planeColor(WALLS.indexOf(r)), r.id]);
+    else if (S.mode === 2) rows = [];
+    else { rows = CATS.map((c) => [COLOR[c], c === "wall" ? "墙（保留墙面上的点）" : ZH[c]]); rows.push([css("--c-rej"), "被丢弃的平面上的点"]); }
+    if (S.mode === 1) rows.push([css("--c-floor"), "地面（浅灰）"], [css("--c-none"), "不属于任何平面的墙点"]);
+    else if (S.mode !== 2) rows.push([css("--c-none"), "不属于任何平面的墙点"]);
+    const gtRow = S.gtPts ? `<div><span class="chip" style="background:${css("--c-gt")}"></span>GT 墙点：标注网格里的墙面片按面积撒点（${(ngt / 1e4).toFixed(1)} 万点，${Math.round(GP.voxel_m * 100)} cm 抽稀），评估就拿它比</div>` : "";
+    const bgRow = S.bg ? `<div><span class="chip" style="background:${S.mode === 2 ? "linear-gradient(90deg,#8a6a4a,#c9b9a3,#6d7f8f)" : css("--c-bg")}"></span>场景点云（全部 ${B.frames} 帧，${(nb / 1e4).toFixed(1)} 万点）</div>` : "";
+    const closeRow = S.close && CL ? `<div><svg width="22" height="10" style="flex:none"><rect x="1" y="1" width="20" height="8" fill="rgba(22,25,29,0.42)" stroke="${css("--c-ext")}" stroke-width="1.5"/></svg>外墙${S.thick ? " " + Math.round(CL.thickness.exterior_m * 100) + " cm" : ""}（虚线为推断）</div><div><svg width="22" height="10" style="flex:none"><rect x="1" y="1" width="20" height="8" fill="rgba(98,80,214,0.42)" stroke="${css("--c-int")}" stroke-width="1.5"/></svg>内墙${S.thick ? " " + Math.round(CL.thickness.interior_m * 100) + " cm" : ""}</div>` : "";
+    const extra = gtRow + bgRow + closeRow + `<div><svg width="22" height="10" style="flex:none"><line x1="1" y1="5" x2="21" y2="5" stroke="${css("--c-door")}" stroke-width="3" stroke-dasharray="2 5" stroke-linecap="round"/></svg>射线穿过，墙线在此切断</div><div><svg width="22" height="10" style="flex:none"><rect x="1" y="1" width="20" height="8" fill="none" stroke="${css("--ink")}" stroke-dasharray="4 3" stroke-width="1.5"/></svg>墙面上的开口</div>`;
+    $("legend").innerHTML = rows.map(([c, t]) => `<div><span class="chip" style="background:${c}"></span>${t}</div>`).join("") + extra;
+  }
+  function buildTables() {
+    $("ftilt").textContent = f2(D.floor.tilt_deg) + "°";
+    $("fz").textContent = f1(D.floor.plane_z_m * 100) + " cm";
+    $("nRays").textContent = (D.scene_rays / 1e4).toFixed(0) + " 万";
+    if (CL) {
+      const r = CL.rectangle, wd = (x) => CL.walls.find((w) => w.id === x) || {};
+      const ext = CL.walls.filter((w) => w.role === "exterior"), int = CL.walls.filter((w) => w.role === "interior");
+      $("closeBox").innerHTML = `<ol>
+        <li><b>看到的空间</b>：每条射线从相机到它打到的表面（停在表面前 10 cm）这一段是空的。在 0.2 – 2.2 m 高度上按 5 cm 格子统计，共 ${f1(CL.seen.cells.length * CL.seen.cell_m ** 2)} m²。</li>
+        <li><b>分内外墙</b>：外墙背后是房子外面，任何一帧都看不到；内墙背后是另一个房间，会从门洞看进去。看墙背后 0.15 – 0.8 m 的条带有多少被看到：
+          ${CL.walls.map((w) => `${w.id} ${pct(w.behind_seen)}`).join("、")}。超过一半算内墙，于是外墙是 ${ext.map((w) => w.id).join("、")}，内墙是 ${int.map((w) => w.id).join("、")}。两组之间没有接近一半的。</li>
+        <li><b>主方向</b>：墙面朝向按面积加权、按 90° 取平均，得 ${(CL.axis_deg > 0 ? "+" : "") + f2(CL.axis_deg)}°。偏离不到 10° 的墙绕自己中点转到主方向上：${CL.walls.map((w) => w.axis === null ? `${w.id} 不转（偏 ${f1(Math.abs(((w.heading_deg - CL.axis_deg) % 90 + 135) % 90 - 45))}°）` : `${w.id} ${(w.snap_deg > 0 ? "+" : "") + f1(w.snap_deg)}°`).join("、")}。</li>
+        <li><b>长方形</b>：四条边各自放在朝那个方向的外墙上（墙点在主方向上的中位数）。结果 ${f2(r.width_m)} × ${f2(r.depth_m)} m = ${f1(r.area_m2)} m²。检查：看到的空间只有 ${f2(r.seen_outside_m2)} m²（${(r.seen_outside_share * 100).toFixed(1)}%）落在长方形外面；长方形里 ${pct(r.inside_seen_share)} 被看到为空，最大一块没看到的是 ${f2(r.largest_unseen_inside_m2)} m²（被家具挡住的地方）。如果房间是 L 形，这块会大到和一个角一样大。</li>
+        <li><b>内墙延伸</b>：每面内墙从两端沿自身方向延长，碰到最近的墙线（长方形的边或另一面内墙）就停，最多延长 1.5 m；如果射线穿过要补的那一段，就不延长。这个场景里内墙本来就几乎碰在一起，延长量都不到 15 cm。</li>
+        <li><b>层高</b>：${f2(CL.storey.height_m)} m，<b>假定值</b>。相机高 1.2 – 1.5 m，大多数帧画面上沿是水平的，高于 2.5 m 的点全部来自画面最上面 10% 的行，没有一帧看到墙和天花板的交线。看到的墙点最高 ${f2(CL.storey.observed_wall_top_m)} m，只能说明墙不低于它。</li>
+      </ol>`;
+      // a GT thickness belongs to the wall it was measured on: its first end lies on that wall's line
+      const gtGap = (f) => (D.gt_gaps || []).filter((gp) => f.walls.some((id) => { const w = WALLS.find((x) => x.id === id); if (!w) return false;
+        const d = (gp.p0[0] - w.point[0]) * w.normal[0] + (gp.p0[1] - w.point[1]) * w.normal[1], a = (gp.p0[0] - w.point[0]) * w.along[0] + (gp.p0[1] - w.point[1]) * w.along[1];
+        return Math.abs(d) < 0.3 && a > w.a[0] - 0.2 && a < w.a[1] + 0.2 && gp.door === f.thickness_hint.some((h) => h.kind === "door_recess"); }));
+      $("tThick").innerHTML = "<thead><tr><th>墙</th><th class='n'>用的厚度</th><th>数据里的线索（只作参考，不覆盖假定值）</th><th>GT 量到的（对照）</th></tr></thead><tbody>"
+        + CL.final.map((f) => `<tr><td><b>${f.id}</b></td><td class="n">${Math.round(f.thickness_m * 100)} cm <span class="small">假定</span></td><td>${(f.thickness_hint || []).length ? f.thickness_hint.map((h) => h.kind === "two_faces"
+            ? `墙另一面 ${h.other_plane} 在背后 ${f1(h.gap_cm)} cm（四分位 ${h.iqr_cm[0]}–${h.iqr_cm[1]}，两面夹角 ${f1(h.angle_deg)}°），另一面只来自 ${h.frames.length} 帧（${h.frames.join("、")}）`
+            : `门扇比墙面凹进 ${h.recess_cm[0]}–${h.recess_cm[1]} cm（中位 ${f1(h.median_cm)}，${h.masks.length} 个门 mask），墙至少这么厚`).join("<br>") : "<span class='small'>无：墙背后从没被看到</span>"}</td><td>${gtGap(f).map((gp) => `${gp.name} ${f1(gp.cm)} cm`).join("<br>") || "<span class='small'>—</span>"}</td></tr>`).join("") + "</tbody>";
+      $("thickNotes").innerHTML = `
+        <li>能量厚度的地方只有两处：卫生间隔墙的另一面（丢弃表里只有第 4023 帧支持的两块，从门洞看进去），和东墙上门扇凹进去的深度。都比 GT 小：隔墙两面间距 6.0 / 5.9 cm 对 GT 10.2 / 11.2 cm，门扇凹进中位 7.4 cm 对 GT 11.0 cm。</li>
+        <li>所以线索只记录，不用：同一面墙在不同帧里的位置能漂 20 多厘米，两面来自不同帧时，这个漂移比厚度本身还大。</li>
+        <li>外墙背后是房子外面，没有任何一帧看到过，厚度完全没有观测依据。30 cm 是常见外墙厚度。</li>`;
+      $("tClose").innerHTML = "<thead><tr><th>墙</th><th>来自</th><th class='n'>总长</th><th class='n'>观测到的</th><th class='n'>推断补上的</th><th>各段（沿墙依次）</th></tr></thead><tbody>"
+        + CL.final.map((f) => `<tr><td><b>${f.id}</b></td><td>${f.role === "exterior" ? "外墙：" + (f.walls.length ? f.walls.join("、") : "无，位置取自看到的空间") : "内墙：" + f.walls.join("、")}</td><td class="n">${f2(f.length_m)} m</td><td class="n">${f2(f.length_m - f.inferred_m)} m</td><td class="n">${f2(f.inferred_m)} m</td><td>${f.pieces.map((p) => `${p.kind === "observed" ? "观测" : "<i>推断</i>"} ${f2(p.length_m)}`).join(" · ")}</td></tr>`).join("")
+        + "</tbody>";
+    }
+    $("floorBox").innerHTML = `<ul>
+      <li>RANSAC 之后重拟合的平面，${D.floor.points.toLocaleString()} 个地面点（${D.floor.masks} 个 mask、${D.floor.frames} 帧）：残差中位数 ${f1(D.floor.residual_median_cm)} cm，p90 ${f1(D.floor.residual_p90_cm)} cm，${pct(D.floor.within_3cm)} 在 3 cm 内。</li>
+      <li>按 3 cm 体素计的面积约 ${f1(D.floor.area_m2)} m²。</li>
+      <li>交付坐标系就是用这些地面点定的，所以这里的平面和 z 轴只差 ${f2(D.floor.tilt_deg)}°、离 z = 0 ${f1(D.floor.plane_z_m * 100)} cm；用别的 run 的地面定坐标系时，这一行会显出差别。</li></ul>`;
+    const head = "<thead><tr><th>墙面</th><th class='n'>朝向</th><th class='n'>沿墙长度</th><th class='n'>高度 z</th><th class='n'>支持面积</th><th class='n'>帧</th><th class='n'>mask</th><th class='n'>平面残差</th><th class='n'>场景看到 / 其中实体</th><th class='n'>附近的 GT 墙</th><th class='n'>离 GT 墙点</th></tr></thead><tbody>";
+    const row = (r) => { const i = WALLS.indexOf(r);
+      return `<tr data-kind="wall" data-key="${i}"><td><span class="chip" style="background:${S.mode === 1 ? planeColor(i) : COLOR.wall}"></span> <b>${r.id}</b></td><td class="n">${r.heading_deg > 0 ? "+" : ""}${f1(r.heading_deg)}°</td><td class="n">${f2(r.length_m)} m</td><td class="n">${f2(r.z[0])} – ${f2(r.z[1])} m</td><td class="n">${f2(r.area_m2)} m²</td><td class="n">${r.frames.length}</td><td class="n">${r.masks.length}</td><td class="n">${f1(r.rms_cm)} cm</td><td class="n">${r.seen_share === undefined ? "—" : pct(r.seen_share) + " / " + pct(r.solid_share)}</td><td class="n">${r.gt ? f2(r.gt.gt_m2) + " m²" : "—"}</td><td class="n">${r.gt ? (r.gt.offset_cm > 0 ? "+" : "") + f1(r.gt.offset_cm) + " cm" : "—"}</td></tr>`; };
+    $("tWalls").innerHTML = head + KEPT.map(row).join("") + "</tbody>";
+    $("tRej").innerHTML = head + REJ.map(row).join("") + "</tbody>";
+    $("wallNotes").innerHTML = `
+      <li><b>朝向</b>是平面法向在俯视图里的角度：+93° 是南墙（W1），−93° 是北墙，±180° 是东墙。</li>
+      <li><b>附近的 GT 墙 / 离 GT 墙点</b>：取平面范围内、前后 40 cm 的 GT 墙点（标注网格里的墙面片按面积撒点），量它们到平面的距离中位数，正数表示我们的平面比 GT 靠房间里。整轮抬升都有几厘米到十几厘米的内缩，所以这列不是校准后的误差。</li>
+      <li><b>场景看到 / 其中实体</b>：墙面矩形按 10 cm 格子划分，有射线停在上面或穿过去的格子占多少，以及其中有实体的占多少。两者之差就是被射线穿过的部分（开口）。没看到的格子是被家具挡住或没拍到的。</li>
+      <li><b>离 GT 墙点</b>：平面前后 40 cm、平面范围内的 GT 墙点到平面的距离中位数。7 面保留的墙都有 GT 墙点对得上；卫生间隔墙内侧（只有第 4023 帧从门洞看到）的两块在丢弃表里，也对得上 GT。</li>`;
+    const ops = WALLS.flatMap((r) => (r.openings || []).map((o) => ({ r, o })));
+    $("open").innerHTML = `
+      <li><b>开口</b>：${ops.length ? ops.map(({ r, o }) => `${r.id} 上有一处 ${f2(o.width_m)} × ${f2(o.height_m)} m、离地 ${f2(o.z[0])} – ${f2(o.z[1])} m 的区域被 ${o.rays.toLocaleString()} 条射线穿过${o.closed_above ? "，上方有实体封住" : ""}`).join("；") : "没有"}。GT 里对应的是卫生间门洞（从门框推算 0.63 × 1.95 m）。这是射线检验顺带得到的，没有用任何 door 标签。</li>
+      <li><b>切口 ${D.cuts.length} 处</b>（图里的红色虚线）：共 ${D.cuts.reduce((a, c) => a + c.rays, 0).toLocaleString()} 条射线穿过，长度 ${D.cuts.map((c) => f2(c.length_m)).join(" / ")} m。都在把几小块朝向相近、恰好共线的墙点连起来的长墙线上：穿过房间中部的那一段被射线看穿，于是断开。切开后的小段都不够一面墙，没有留下平面。哪几块碰巧共线和墙线怎么分组有关，所以切口的条数和位置会随坐标系或参数变；它们都不在保留的墙上。</li>
+      <li><b>西墙只有 1.44 m</b>：W7 是窗帘右侧露出来的一段。GT 西墙长 6.25 m，其余在窗帘后面，没有墙 mask；场景只看到这面矩形的 ${pct((WALLS.find((r) => r.id === "W7") || {}).seen_share || 0)}。</li>
+      <li><b>位置整体偏内</b>：${KEPT.map((r) => r.gt ? r.gt.offset_cm : null).filter((x) => x !== null).map((x) => (x > 0 ? "+" : "") + f1(x)).join(" / ")} cm，是抬升本身的误差，这一步只校正了竖直方向。</li>
+      <li><b>未归属的墙点 ${pct(D.unassigned / D.horizontal)}</b>：墙角折返、窗套、门套这些窄条。第 4 步按 mask 归墙面时它们跟着所在的 mask 一起判断。</li>
+      <li><b>射线检验只能否定，不能肯定</b>：射线穿过说明那里不是墙；射线停在平面上只说明那里有东西，可能是墙，也可能是贴墙的柜子。所以 5476 的柜子侧面不是靠它排除的，仍然是靠“只有一帧支持”。</li>`;
+  }
+
+  // ---------- events
+  function bind() {
+    document.querySelectorAll("#views button").forEach((b) => b.addEventListener("click", () => { flyTo(VIEWS[b.dataset.view]); document.querySelectorAll("#views button").forEach((x) => x.classList.toggle("on", x === b)); }));
+    document.querySelectorAll("#modes button").forEach((b) => b.addEventListener("click", () => { S.mode = +b.dataset.mode; document.querySelectorAll("#modes button").forEach((x) => x.classList.toggle("on", x === b)); buildLegend(); buildTables(); buildSide(); dirty = true; }));
+    const chk = (id, fn) => $(id).addEventListener("change", (e) => { fn(e.target.checked); dirty = true; });
+    chk("vKept", (v) => S.vis.kept = v); chk("vFloor", (v) => S.vis.floor = v); chk("vDoorWin", (v) => S.vis.doorwin = v); chk("vFree", (v) => S.vis.free = v); chk("vRej", (v) => S.vis.rej = v);
+    chk("vRect", (v) => S.rect = v); chk("vTags", (v) => S.tags = v); chk("vGtPts", (v) => { S.gtPts = v; buildLegend(); }); chk("vClose", (v) => { S.close = v; buildLegend(); }); chk("vThick", (v) => { S.thick = v; buildLegend(); }); chk("vCut", (v) => S.cut = v); chk("vBg", (v) => { S.bg = v; buildLegend(); }); chk("vCam", (v) => S.cam = v);
+    document.addEventListener("click", (e) => {
+      const n = e.target.closest("[data-kind]"); if (n) select(+n.dataset.key, n.tagName !== "TR");
+      if (e.target.id === "clear") select(null, false);
+    });
+    let drag = null, moved = false;
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    canvas.addEventListener("mousedown", (e) => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; moved = false; canvas.classList.add("drag"); $("tip").style.display = "none"; });
+    window.addEventListener("mouseup", () => { drag = null; canvas.classList.remove("drag"); });
+    window.addEventListener("mousemove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+      if (Math.abs(dx) + Math.abs(dy) > 1) moved = true;
+      if (drag.pan) { const { r, u } = basis(), k = S.dist * 0.0016; S.target = S.target.map((v, i) => v - r[i] * dx * k + u[i] * dy * k); }
+      else { S.az -= dx * 0.006; S.el = Math.max(-0.2, Math.min(1.5607, S.el + dy * 0.006)); }
+      document.querySelectorAll("#views button").forEach((b) => b.classList.remove("on"));
+      dirty = true;
+    });
+    canvas.addEventListener("wheel", (e) => { e.preventDefault(); S.dist = Math.max(1.0, Math.min(40, S.dist * Math.exp(e.deltaY * 0.0012))); dirty = true; }, { passive: false });
+    let pending = null;
+    const describe = (hit) => {
+      if (!hit) return null;
+      const m = maskInfo[hit.mask];
+      let s = `<b>${CATS[hit.cat] ? ZH[CATS[hit.cat]] : "墙"}</b>`;
+      if (m) s += ` · mask ${m.mask} · 帧 ${m.frame}<br><span style="opacity:.75">${m.plan_id} ${m.label}：${m.where}</span>`;
+      if (hit.plane >= 0) { const r = WALLS[hit.plane]; s += `<br>墙面 <b>${r.id}</b>${r.kind === "rejected" ? "（已丢弃）" : ""}${r.gt ? " · 离 GT 墙点 " + (r.gt.offset_cm > 0 ? "+" : "") + f1(r.gt.offset_cm) + " cm" : ""}`; }
+      else if (hit.cat === 0) s += `<br>不属于任何墙面`;
+      return s;
+    };
+    canvas.addEventListener("mousemove", (e) => {
+      if (drag || !gl) return;
+      const r = canvas.getBoundingClientRect(); pending = [e.clientX - r.left, e.clientY - r.top];
+      requestAnimationFrame(() => {
+        if (!pending || drag) return;
+        const [x, y] = pending; pending = null;
+        const text = describe(pick(x, y)), tip = $("tip");
+        if (!text) { tip.style.display = "none"; return; }
+        tip.innerHTML = text; tip.style.display = "block";
+        tip.style.left = Math.min(x + 14, canvas.clientWidth - tip.offsetWidth - 6) + "px"; tip.style.top = Math.max(6, y - tip.offsetHeight - 10) + "px";
+      });
+    });
+    canvas.addEventListener("mouseleave", () => { pending = null; $("tip").style.display = "none"; });
+    canvas.addEventListener("click", (e) => {
+      if (moved || !gl) return;
+      const r = canvas.getBoundingClientRect(), hit = pick(e.clientX - r.left, e.clientY - r.top);
+      if (hit && hit.plane >= 0) select(hit.plane, false);
+    });
+    window.addEventListener("resize", () => { dirty = true; });
+  }
+  // #view=top&mode=1&sel=0&gt=1&rej=0
+  function fromHash() {
+    const p = new URLSearchParams(location.hash.slice(1));
+    if (p.has("mode")) { S.mode = +p.get("mode"); document.querySelectorAll("#modes button").forEach((x) => x.classList.toggle("on", +x.dataset.mode === S.mode)); }
+    const set = (id, key, fn) => { if (p.has(key)) { const v = p.get(key) !== "0"; $(id).checked = v; fn(v); } };
+    set("vKept", "kept", (v) => S.vis.kept = v); set("vFloor", "floor", (v) => S.vis.floor = v); set("vDoorWin", "doorwin", (v) => S.vis.doorwin = v); set("vFree", "free", (v) => S.vis.free = v);
+    set("vRej", "rej", (v) => S.vis.rej = v); set("vRect", "rect", (v) => S.rect = v); set("vTags", "tags", (v) => S.tags = v);
+    set("vGtPts", "gtpts", (v) => S.gtPts = v); set("vClose", "close", (v) => S.close = v); set("vThick", "thick", (v) => S.thick = v); set("vCut", "cut", (v) => S.cut = v); set("vBg", "bg", (v) => S.bg = v); set("vCam", "cam", (v) => S.cam = v);
+    if (p.has("view") && VIEWS[p.get("view")]) { Object.assign(S, JSON.parse(JSON.stringify(VIEWS[p.get("view")]))); document.querySelectorAll("#views button").forEach((x) => x.classList.toggle("on", x.dataset.view === p.get("view"))); }
+    if (p.has("sel")) S.sel = +p.get("sel");
+    for (const k of ["az", "el", "dist"]) if (p.has(k)) S[k] = +p.get(k);
+  }
+
+  // 全选 / 全不选: tick every box of that bar and fire its own change handler, so state stays in one place
+  document.querySelectorAll(".allnone").forEach((g) => g.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-all]"); if (!b) return;
+    const on = b.dataset.all === "1";
+    g.parentElement.querySelectorAll('input[type="checkbox"]').forEach((c) => {
+      if (c.checked !== on) { c.checked = on; c.dispatchEvent(new Event("change")); }
+    });
+  }));
+  buildSide(); buildLegend(); buildTables();
+  try { if (gl) initGL(); } catch (err) { $("err").style.display = "flex"; $("err").textContent = "3D 视图初始化失败：" + err.message; }
+  bind(); fromHash(); buildLegend(); buildSide(); bind2d(); fit2d();
+  (function loop() { if (anim) anim(); if (dirty) draw(); if (dirty2d) draw2d(); requestAnimationFrame(loop); })();
+})();
+</script>
+</body>
+</html>
